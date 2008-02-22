@@ -1,0 +1,4 @@
+# Different schemes to test all types
+ad:JCMT/aaa
+file:bbb.sdf
+ccc.sdf
