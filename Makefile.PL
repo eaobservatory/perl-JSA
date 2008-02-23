@@ -30,6 +30,7 @@ WriteMakefile(
                                     'Test::More' => 0,
                                     'Test::Command' => 0,
                                     'Astro::FITS::Header' => 3,
+                                    'Astro::FITS::HdrTrans' => 1.0,
                                    },
               EXE_FILES => [qw/
                                 dpRetrieve jsawrapdr
