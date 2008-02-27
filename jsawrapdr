@@ -87,6 +87,21 @@ Supercedes -outdir.
 
 =back
 
+=head1 QUESTIONS
+
+These questions relate mainly to non-CADC usage:
+
+- If a file lacks a PRODUCT and is an NDF it is currently assumed to be raw.
+  Should the wrapper check filename convention? Should it check provenance?
+
+- If a FITS file does not match the CADC naming convention should it still
+  be processed by picard? Currently they are skipped.
+
+- If an NDF does have a PRODUCT header but non-standard filename is that okay?
+  Note that dpCapture only looks for standard filenames and the ndf2fits
+  routine will not process unrecognized filenames.
+
+
 =cut
 
 use strict;
@@ -99,13 +114,13 @@ use File::Temp;
 use Carp;
 use Astro::FITS::Header;
 use Astro::FITS::Header::NDF;
-#use Astro::FITS::Header::CFITSIO;
+use Astro::FITS::Header::CFITSIO;
 use Astro::FITS::HdrTrans;
 
 use JSA::Starlink qw/ check_star_env run_star_command /;
 use JSA::Command qw/ run_command /;
-use JSA::Convert qw/ convert_to_fits /;
-use JSA::Files qw/ compare_file_lists scan_dir /;
+use JSA::Convert qw/ convert_to_fits convert_to_ndf /;
+use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 
 # All products that should be exported.
 our @PRODUCTS = qw/ cube /;
@@ -219,15 +234,6 @@ log_message("Processing the following files:\n". join("\n",@files)."\n");
 # whether that is okay. Read all the FITS headers and then decide whether
 # they are all raw or all processed.
 
-# FITS headers, indexed by filename
-my %FITS = read_headers( @files );
-if (keys %FITS == 0) {
-  die "Could not open any of the supplied files to read headers: ".join(", ",@files);
-} elsif (keys %FITS != @files) {
-  log_warning("Some files could not be read. Continuing with those that can\n");
-  @files = keys %FITS;
-}
-
 # Now count NDF vs FITS
 my $nfits = 0;
 my $nsdf = 0;
@@ -243,6 +249,15 @@ if ( ($nfits != @files) && ($nsdf != @files) ) {
   # mixed NDF and FITS
   die "There are $nfits FITS files and $nsdf NDFs out of ".@files.
     " files and this is a bit confusing";
+}
+
+# FITS headers, indexed by filename
+my %FITS = read_headers( @files );
+if (keys %FITS == 0) {
+  die "Could not open any of the supplied files to read headers: ".join(", ",@files);
+} elsif (keys %FITS != @files) {
+  log_warning("Some files could not be read. Continuing with those that can\n");
+  @files = keys %FITS;
 }
 
 # Decide on ORAC-DR vs PICARD
@@ -277,6 +292,8 @@ if (!$useoracdr) {
       log_warning( "Processing different products in a single run may be incorrect. (".
                    join(",",keys %products).")\n");
     }
+  } elsif ($nproduct == 0) {
+    die "None of the input files contained PRODUCT FITS headers";
 
   } else {
     die "There are $nproduct headers in ".@files.
@@ -286,22 +303,44 @@ if (!$useoracdr) {
 
 # Now need to determine the ORAC_INSTRUMENT from the supplied headers
 my $oracinst;
-my %instruments;
-for my $f (keys %FITS) {
-  my $oa = get_orac_instrument( $FITS{$f} );
-  die "Unable to determine ORAC_INSTRUMENT for file '$f'\n"
-    unless defined $oa;
-  $instruments{$oa}++;
-}
-if (keys %instruments > 1) {
-  die "Can not process files from multiple instruments (".join(",",keys %instruments).")\n";
-} else {
-  # get the single instrument
-  ($oracinst) = keys %instruments;
+if ($useoracdr) {
+  my %instruments;
+  for my $f (keys %FITS) {
+    my $oa = get_orac_instrument( $FITS{$f} );
+    die "Unable to determine ORAC_INSTRUMENT for file '$f'\n"
+      unless defined $oa;
+    $instruments{$oa}++;
+  }
+  if (keys %instruments > 1) {
+    die "Can not process files from multiple instruments (".join(",",keys %instruments).")\n";
+  } else {
+    # get the single instrument
+    ($oracinst) = keys %instruments;
+  }
 }
 
 # Convert FITS files into NDF and update name supplied to DR
-
+# We could do this before we read the FITS headers but it is more efficient to
+# delay conversion in case some other error condition is hit first. Conversion
+# will take a non-trivial amount of time
+if ($nfits > 0) {
+  my @new;
+  for my $f (@files) {
+    if (looks_like_cadcfile( $f )) {
+      my $out = convert_to_ndf( $f );
+      if ($out) {
+        push(@new, $out );
+      }
+    } else {
+      log_warning( "File $f does not use the CADC naming convention. Skipping.\n");
+    }
+  }
+  if (@new) {
+    @files = @new;
+  } else {
+    die "No files left to process after conversion to NDF";
+  }
+}
 
 # We now have to write these files to a text file
 # suitable for orac-dr to read with the -file option
@@ -333,20 +372,27 @@ if ($useoracdr) {
                "-file", "$tmpfile",
                "-recsuffix", "CADC",
                "-batch" );
+
+  # The recipe comes at the end and is optional
+  push(@drcommand, $drparameters) if defined $drparameters;
+
 } else {
   # We are going to need a ^file option in picard
   log_message( "Using PICARD\n" );
+
+  # PICARD needs a recipe name so we need to abort if we do not have one
+  die "Processing reduced data requires the use of the -parameters option\n"
+    unless (defined $drparameters && $drparameters =~ /[A-Z]/);
+
+  # Picard only uses a recipe name from drparameters
   @drcommand = ( $^X,
                File::Spec->catfile($ENV{ORAC_DIR},"bin","picard"),
                "-log","f",
+               $drparameters,
                @files
              );
 
-  # PICARD needs a recipe name so we need to abort if we do not have one
-  die "Processing reduced data requires the use of the -parameters option\n";
-
 }
-push(@drcommand, $drparameters) if defined $drparameters;
 
 # Run the DR command.
 # We need to decide whether a partial execution of the DR should result in
@@ -381,7 +427,7 @@ for my $f (sort keys %drhdrs) {
       my $outfile = convert_to_fits( $f );
 
       # Now need to fix up PRODUCT names in extensions
-
+      update_fits_product( $outfile );
     }
   }
 }
@@ -536,7 +582,7 @@ sub set_wcs_attribs {
   my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "wcsattrib" ),
                "NDF=$infile",
                "MODE=MSet",
-               "SETTING='System(3)=FREQ,System(1)=FK5'",
+               "SETTING='System(3)=FREQ,StdOfRest=BARY,System(1)=FK5'",
              );
 
   run_star_command( @args );
