@@ -94,6 +94,9 @@ if ($outdir) {
   $outdir = File::Spec->curdir;
 }
 
+# absolute output directory name for error messages
+my $absdir = File::Spec->rel2abs($outdir);
+
 # open the file and read all the lines
 my $file = shift(@ARGV);
 open (my $fh, "<", $file)
@@ -127,7 +130,7 @@ for my $line (@lines) {
         }
       }
       if (!$same) {
-        die "Unable to retrieve file '$fullpath' because a file named '$file' already exists in the retrieve directory ($outdir) and it is different";
+        die "Unable to retrieve file '$fullpath' because a file named '$file' already exists in the retrieve directory ($absdir) and it is different";
       }
 
       # we know they are the same file
@@ -135,7 +138,7 @@ for my $line (@lines) {
         # remove the link and remake it
         if (unlink $file) {
           symlink $fullpath, $file
-            || die "Could not make soft link to '$file' in retrieve directory\n";
+            || die "Could not make soft link to '$file' in retrieve directory ($absdir)\n";
           print STDERR "Re-making soft link for '$file'\n"
             if $debug;
         }
@@ -145,14 +148,14 @@ for my $line (@lines) {
         my $atime = time;
         my $mtime = $atime;
         utime($atime, $mtime, $file)
-          or die "Error touching file '$file' in cwd";
+          or die "Error touching file '$file' in current directory ($absdir)";
         print STDERR "Touching pre-existing file '$file'\n"
           if $debug;
       }
     } else {
       # make a soft link
       symlink $fullpath, $file
-        || print STDERR "Could not make soft link to '$file' in current directory\n";
+        || print STDERR "Could not make soft link to '$file' in current directory ($absdir)\n";
       print STDERR "Making new soft link for file '$file'\n";
     }
         
