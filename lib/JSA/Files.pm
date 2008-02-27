@@ -24,8 +24,12 @@ use warnings;
 use File::Spec;
 use warnings::register;
 
+use JSA::Error;
+
 use Exporter 'import';
-our @EXPORT_OK = qw( uri_to_file file_to_uri );
+our @EXPORT_OK = qw( uri_to_file file_to_uri drfilename_to_cadc
+                     cadc_to_drfilename looks_like_drfile looks_like_cadcfile
+                     compare_file_lists scan_dir );
 
 
 # List of support product types as found in ASN_TYPE FITS header
@@ -187,7 +191,7 @@ sub dissect_drfile {
 
     return ($isgroup, $prefix,$utdate,$obsnum,$subsys,$product,$prodcount);
   } else {
-    croak "DR file '$original' looked okay but failed pattern match";
+    JSA::Error::FatalError->throw( "DR file '$original' looked okay but failed pattern match" );
   }
   return ();
 }
@@ -244,7 +248,7 @@ sub dissect_cadcfile {
 
     return ($prefix,$utdate,$obsnum,$subsys,$product,$prodcount,$type,$version);
   } else {
-    croak "CADC file '$cadcfile' looked okay but failed pattern match";
+    JSA::Error::FatalError->throw("CADC file '$cadcfile' looked okay but failed pattern match");
   } 
   return ();
 }
@@ -292,18 +296,18 @@ sub drfilename_to_cadc {
   if ($isgroup) {
     # we will need a type
     if (!defined $type) {
-      croak "Must supply a association type for group products\n";
+      JSA::Error::BadArgs->throw( "Must supply a association type for group products" );
     } elsif (exists $PRODUCT_TYPES{$type}) {
       $type = $PRODUCT_TYPES{$type};
     } elsif (exists $FILE_ABBREV_TO_PROD_TYPE{$type}) {
       # type is okay
     } else {
-      croak "drfilename_to_cadc: Unrecognized association type '$type' given";
+      JSA::Error::BadArgs->throw( "drfilename_to_cadc: Unrecognized association type '$type' given" );
     }
 
     # Should not get a type of "obs"
     if ($type eq 'obs') {
-      croak "This is a group observation but it is tagged as an 'obs' product";
+      JSA::Error::BadArgs->throw( "This is a group observation but it is tagged as an 'obs' product" );
     }
 
   } else {
@@ -367,6 +371,71 @@ sub cadc_to_drfilename {
 
   return sprintf( '%s%08d_%05d_%02d_%s'.$p.'.sdf',
                   @parts[0..4],(defined $parts[5] ? $parts[5] : () ) );
+}
+
+=item B<scan_dir>
+
+Scan the current directory looking for files matching a particular
+pattern. It runs stat() files or lstat() on links and return the output of stat
+as a reference to an array in a hash indexed by filename. The hash is
+suitably configured to be used by compare_file_lists().
+
+  %files = scan_dir( qr/\.(sdf|fits)$/ );
+
+If no pattern is supplied the default is to scan for FITs and
+SDF suffix filenames.
+
+ %files = scan_dir();
+
+=cut
+
+sub scan_dir {
+  my $pattern = shift;
+  $pattern = qr/\.(sdf|fits)$/ unless defined $pattern;
+  
+  opendir(my $dh, File::Spec->curdir)
+    or croak "Could not open data directory to scan it: $!";
+
+  my %files;
+  while (defined( my $file = readdir($dh) ) ) {
+
+    if ($file =~ $pattern) {
+      if (-l $file) {
+        $files{$file} = [ lstat($file) ];
+      } else {
+        $files{$file} = [ stat($file) ];
+      }
+    }
+  }
+  
+  closedir($dh) or croak "Could not close data directory after scan: $!";
+  return %files;
+}
+
+=item B<compare_file_lists>
+
+Compare the scan done by C<scan_dir> before with the scan after and return anything that
+is newer than before or is not present in the old scan.
+
+  @new = compare_file_lists(\%old, \%new);
+
+=cut
+
+sub compare_file_lists {
+  my $original = shift;
+  my $after = shift;
+
+  my @files;
+  for my $current (keys %$after) {
+    if (!exists $original->{$current}) {
+      # must be a new file since it did not exist before
+      push(@files, $current);
+    } elsif ( $original->{$current}->[9] < $after->{$current}->[9]) {
+      # modified since the original scan
+      push(@files, $current);
+    }
+  }
+  return @files;
 }
 
 =back

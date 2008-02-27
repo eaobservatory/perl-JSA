@@ -102,6 +102,15 @@ use Astro::FITS::Header::NDF;
 #use Astro::FITS::Header::CFITSIO;
 use Astro::FITS::HdrTrans;
 
+use JSA::Starlink qw/ check_star_env run_star_command /;
+use JSA::Command qw/ run_command /;
+use JSA::Convert qw/ convert_to_fits /;
+use JSA::Files qw/ compare_file_lists scan_dir /;
+
+# All products that should be exported.
+our @PRODUCTS = qw/ cube /;
+our %PRODS = map { $_ => undef } @PRODUCTS;
+
 # Options
 my ($help, $man, $version, $log, $persist, $id, $drparameters, $inputs, $outdir, $debug,
    $tmpdir);
@@ -129,10 +138,7 @@ if ($version) {
 }
 
 # We require that STARLINK_DIR and ORAC_DIR are set
-die "Do not know where the Starlink software is installed. Please set \$STARLINK_DIR."
-  unless (exists $ENV{STARLINK_DIR} && -d $ENV{STARLINK_DIR});
-die "Do not know where the ORAC-DR infrastructure is located. Please set \$ORAC_DIR."
-  unless (exists $ENV{ORAC_DIR} && -d $ENV{ORAC_DIR});
+check_star_env( "ORAC" );
 
 # Check recipe parameters
 if (defined $drparameters) {
@@ -193,9 +199,8 @@ my %existing_files = scan_dir();
 # For testing we ask this perl to run it since we know it is perl
 # For CADC we rely on path.
 
-system($^X, "-Mblib=$curdir", File::Spec->catfile($curdir,"dpRetrieve"),
-       "-id", $id, "-debug", $inputs)
-  && die "Could not execute dpRetrieve: $?";
+run_command($^X, "-Mblib=$curdir", File::Spec->catfile($curdir,"dpRetrieve"),
+            "-id", $id, "-debug", $inputs);
 
 # Now scan the directory again
 my %post_retrieve = scan_dir();
@@ -313,17 +318,17 @@ if (!exists $ENV{ORAC_PERL5LIB}) {
   $ENV{ORAC_PERL5LIB} = File::Spec->catdir( $ENV{ORAC_DIR}, "lib", "perl5" );
 }
 
-my @command;
+my @drcommand;
 if ($useoracdr) {
   log_message( "Using ORAC-DR\n" );
 
   # Instrument
   $ENV{ORAC_INSTRUMENT} = $oracinst;
 
-  @command = ( $^X,
+  @drcommand = ( $^X,
                File::Spec->catfile($ENV{ORAC_DIR},"bin","oracdr"),
                "-nodisplay",
-               "-log","f",
+               "-log","fs",
                "-loop","file",
                "-file", "$tmpfile",
                "-recsuffix", "CADC",
@@ -331,7 +336,7 @@ if ($useoracdr) {
 } else {
   # We are going to need a ^file option in picard
   log_message( "Using PICARD\n" );
-  @command = ( $^X,
+  @drcommand = ( $^X,
                File::Spec->catfile($ENV{ORAC_DIR},"bin","picard"),
                "-log","f",
                @files
@@ -341,21 +346,56 @@ if ($useoracdr) {
   die "Processing reduced data requires the use of the -parameters option\n";
 
 }
-push(@command, $drparameters) if defined $drparameters;
+push(@drcommand, $drparameters) if defined $drparameters;
 
-# Run the command
-system(@command) 
-  && die "Error running pipeline: $!";
+# Run the DR command.
+# We need to decide whether a partial execution of the DR should result in
+# file ingestion.
+
+run_command(@drcommand);
 
 # Process NDF data products and convert them into FITS
 #  - Need to filter provenance
 #  - Run NDF2FITS
 
+# scan the directory again
+my %post_process = scan_dir();
+my @drfiles = compare_file_lists( \%post_retrieve, \%post_process );
+
+# Now look for all files that have product headers that are okay
+my %drhdrs = read_headers( @drfiles );
+
+for my $f (sort keys %drhdrs) {
+  my $obstype = $drhdrs{$f}->value( "OBS_TYPE" );
+  if (defined $obstype && $obstype =~ /science/i) {
+    print "Analyzing file headers for DR product in $f\n";
+    my $prod = $drhdrs{$f}->value( "PRODUCT" );
+    if (defined $prod && exists $PRODS{$prod}) {
+      # is exportable so first fix up provenance
+
+      # Modify the WCS attributes so that we generate the correct
+      # FITS headers regardless of how the pipeline was configured.
+      set_wcs_attribs( $f );
+
+      # then convert to fits
+      my $outfile = convert_to_fits( $f );
+
+      # Now need to fix up PRODUCT names in extensions
+
+    }
+  }
+}
+
 # Call dpRetrieve with the correct arguments
+
+run_command($^X, "-Mblib=$curdir", File::Spec->catfile($curdir,"dpCapture"),
+       "-id", $id, "-debug");
 
 exit;
 
-# Simply logging routine
+#############################################################################################
+
+# Simple logging routine
 
 sub log_message {
   my $message = shift;
@@ -367,53 +407,6 @@ sub log_warning {
   log_message( $_[0] );
 }
 
-# scan the current directory looking for .sdf or .fits files.
-# stat() files or lstat() links and return the output of stat
-# as a reference to an array in a hash indexed by filename.
-
-# %files = scan_dir();
-
-sub scan_dir {
-  
-  opendir(my $dh, File::Spec->curdir)
-    or croak "Could not open data directory to scan it: $!";
-
-  my %files;
-  while (defined( my $file = readdir($dh) ) ) {
-
-    if ($file =~ /\.(sdf|fits)$/) {
-      if (-l $file) {
-        $files{$file} = [ lstat($file) ];
-      } else {
-        $files{$file} = [ stat($file) ];
-      }
-    }
-  }
-  
-  closedir($dh) or croak "Could not close data directory after scan: $!";
-  return %files;
-}
-
-# compare the scan before with the scan after and return anything that
-# is newer or new
-# my @new = compare_file_lists(\%old, \%new);
-
-sub compare_file_lists {
-  my $original = shift;
-  my $after = shift;
-
-  my @files;
-  for my $current (keys %$after) {
-    if (!exists $original->{$current}) {
-      # must be a new file since it did not exist before
-      push(@files, $current);
-    } elsif ( $original->{$current}->[9] < $after->{$current}->[9]) {
-      # modified since the original scan
-      push(@files, $current);
-    }
-  }
-  return @files;
-}
 
 # Read FITS headers from list of files that can either be NDF or FITS.
 # Probably could be a useful helper routine in Astro::FITS::Header
@@ -449,7 +442,7 @@ sub get_header_value {
   my $nhits = 0;
   my %values;
   for my $h (@hdrs) {
-    my $value = $h->value("PRODUCT");
+    my $value = $h->value($key);
     if (defined $value) {
       $values{$value}++;
       $nhits++;
@@ -493,6 +486,63 @@ sub get_orac_instrument {
 
   return $oa;
 }
+
+# Routine updates the EXTENSION FITS Headers of the .fits file to store modified
+# product headers. Product is derived by adding _EXTNAME
+
+sub update_fits_product {
+  my $file = shift;
+
+  my $status = 0;
+  my $ifits = Astro::FITS::CFITSIO::open_file( $file, Astro::FITS::CFITSIO::READWRITE(), $status );
+
+  $ifits->get_num_hdus( my $numhdus, $status );
+
+  # we only have to modify extensions
+  if ($numhdus > 1) {
+    # Read PRODUCT from PRIMARY header
+    $ifits->read_key( Astro::FITS::CFITSIO::TSTRING(), "PRODUCT", my $prodref, my $pcomment, $status );
+    for my $i (2..$numhdus) {
+      last if $status != 0;
+      $ifits->movabs_hdu( $i, my $hdutype, $status );
+      next unless $hdutype == Astro::FITS::CFITSIO::IMAGE_HDU();
+
+      # Get the EXTNAME
+      $ifits->read_key( Astro::FITS::CFITSIO::TSTRING(), "EXTNAME", my $extname, undef, $status );
+      if ($status != 0) {
+        $status = 0;
+        next;
+      }
+
+      # Need thing after last dot
+      $extname = (split(/\./,$extname))[-1];
+
+      # set the new value for use PRODUCT (lower case version of extension)
+      my $newprod = $prodref . lc("_$extname");
+
+      $ifits->update_key( Astro::FITS::CFITSIO::TSTRING(), "PRODUCT", $newprod, undef, $status );
+      $status = 0;
+    }
+  }
+
+  $ifits->close_file( $status );
+  
+}
+
+sub set_wcs_attribs {
+  my $infile = shift;
+  check_star_env( "KAPPA", "wcsattrib" );
+
+  my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "wcsattrib" ),
+               "NDF=$infile",
+               "MODE=MSet",
+               "SETTING='System(3)=FREQ,System(1)=FK5'",
+             );
+
+  run_star_command( @args );
+  return;
+}
+
 
 =head1 NOTES
 
