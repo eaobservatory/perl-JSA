@@ -192,10 +192,6 @@ passed to the constructor.
 
 Method was called with incorrect arguments.
 
-=item B<JSA::Error::BadFITSHeader>
-
-A missing or unsupported value in a FITS header.
-
 =item B<JSA::Error::BadEnv>
 
 Something is wrong with the environment.
@@ -203,6 +199,14 @@ Something is wrong with the environment.
 =item B<JSA::Error::BadExec>
 
 Something went wrong executing a shell command.
+
+=item B<JSA::Error::BadFile>
+
+File name does not match support format.
+
+=item B<JSA::Error::BadFITSHeader>
+
+A missing or unsupported value in a FITS header.
 
 =item B<JSA::Error::Conversion>
 
@@ -222,6 +226,10 @@ Used when we have no choice but to abort but using a non-standard
 reason. It's constructor takes two arguments. The first is a text
 value, the second is a numeric value, C<JSA__FATAL>. These values are
 what will be returned by the overload methods.
+
+=item B<JSA::Error::Starlink>
+
+An internal Starlink error.
 
 =back
 
@@ -283,6 +291,9 @@ use base qw/ JSA::Error /;
 package JSA::Error::BadExec;
 use base qw/ JSA::Error /;
 
+package JSA::Error::BadFile;
+use base qw/ JSA::Error /;
+
 package JSA::Error::BadFITSHeader;
 use base qw/ JSA::Error /;
 
@@ -296,6 +307,9 @@ package JSA::Error::DirectoryNotFound;
 use base qw/ JSA::Error /;
 
 package JSA::Error::FatalError;
+use base qw/ JSA::Error /;
+
+package JSA::Error::Starlink;
 use base qw/ JSA::Error /;
 
 1;
