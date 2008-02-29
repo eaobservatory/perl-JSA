@@ -108,10 +108,13 @@ a data file produced by the DR pipeline.
 
 The file suffix must be ".sdf".
 
+Directory information is stripped prior to the check.
+
 =cut
 
 sub looks_like_drfile {
   my $filename = shift;
+  $filename = _strip_path( $filename );
 
   # The pattern matches are not full proof if a UT date has the year
   # 3000 in it for example
@@ -135,12 +138,14 @@ See if the supplied file looks like it uses the CADC naming convention.
 
   $iscadc = looks_like_cadcfile( $file );
 
-The file suffix must be ".fits".
+The file suffix must be ".fits". Directory information is stripped
+before testing the file for compliance.
 
 =cut
 
 sub looks_like_cadcfile {
   my $filename = shift;
+  $filename = _strip_path( $filename );
 
   # These pattern matches are not bulletproof
   if ($filename =~ /^jcmth\d{8}_\d{5}_\d{2}_\w+_[a-z]{3}_\d{3}\.fits/) {
@@ -172,6 +177,7 @@ sub dissect_drfile {
   my $drfile = shift;
   my $original = $drfile;
   return () unless looks_like_drfile( $drfile );
+  $drfile = _strip_path( $drfile );
 
   my $isgroup = ($drfile =~ s/^g//);
   my ($prefix, $utdate,$obsnum,$subsys,$product,$prodcount);
@@ -222,6 +228,7 @@ in the supplied filename.
 sub dissect_cadcfile {
   my $cadcfile = shift;
   return () unless looks_like_cadcfile( $cadcfile );
+  $cadcfile = _strip_path( $cadcfile );
 
   my ($prefix, $utdate, $obsnum, $subsys, $product, $prodcount,
       $type, $version);
@@ -279,17 +286,25 @@ The name conversion is attempted even if the supplied name does not
 look like a DR product. The file is not opened to check that there
 are PRODUCT and ASN_TYPE headers.
 
+If a directory path is included in the supplied name it will
+be included in the returned name.
+
 =cut
 
 sub drfilename_to_cadc {
   my $drname = shift;
   my %defaults = ( ASN_TYPE => undef, VERSION => 0 );
   my %args = (%defaults, @_);
+
+  # Get the directory name
+  my ($dir, $filepart) = _strip_path( $drname );
   
   # Split file into components. If this returns empty then we know
   # it did not look like a drfile so no need to call looks_like_drfile
   my ($isgroup, $prefix, $utdate, $obsnum, $subsys, $product, $prodcount)
     = dissect_drfile( $drname );
+  print "Filepart=$filepart\n";
+  print "UT = $utdate\n";
   return () if !defined $utdate;
 
   my $type = $args{ASN_TYPE};
@@ -334,10 +349,16 @@ sub drfilename_to_cadc {
   # for SCUBA-2 850/450 without breaking ACSIS 2digit.
 
   # Now form the new filename
-  return sprintf('%s%s%08d_%05d_%02d_%s'.$p.'_%s_%03d.%s',
-                 "jcmt", $prefix, $utdate, $obsnum, $subsys,
-                 $product, (defined $prodcount ? $prodcount : () ),
-                 $type, $args{VERSION}, "fits");
+  my $new = sprintf('%s%s%08d_%05d_%02d_%s'.$p.'_%s_%03d.%s',
+                    "jcmt", $prefix, $utdate, $obsnum, $subsys,
+                    $product, (defined $prodcount ? $prodcount : () ),
+                    $type, $args{VERSION}, "fits");
+
+  # prepend directory if needed
+  if ($dir) {
+    $new = File::Spec->catfile( $dir, $new );
+  }
+  return $new;
 }
 
 =item B<cadc_to_drfilename>
@@ -351,10 +372,16 @@ the content of the YYYYMMMDD ut date.
 
 Undef is returned if the file does not look like a CADC filename .
 
+If a directory path is included in the supplied name it will
+be included in the returned name.
+
 =cut
 
 sub cadc_to_drfilename {
   my $cadcfile = shift;
+
+  # Get the directory name
+  my ($dir, $filepart) = _strip_path( $cadcfile );
 
   # split into parts. Will fail if name does not look like CADC name
   my @parts = dissect_cadcfile( $cadcfile );
@@ -369,8 +396,14 @@ sub cadc_to_drfilename {
   # product formatting
   my $p = ( defined $parts[5] ? "%03d" : "" );
 
-  return sprintf( '%s%08d_%05d_%02d_%s'.$p.'.sdf',
-                  @parts[0..4],(defined $parts[5] ? $parts[5] : () ) );
+  my $new = sprintf( '%s%08d_%05d_%02d_%s'.$p.'.sdf',
+                     @parts[0..4],(defined $parts[5] ? $parts[5] : () ) );
+
+  # prepend directory if needed
+  if ($dir) {
+    $new = File::Spec->catfile( $dir, $new );
+  }
+  return $new;
 }
 
 =item B<scan_dir>
@@ -439,6 +472,40 @@ sub compare_file_lists {
 }
 
 =back
+
+=begin PRIVATE
+
+=head1 INTERNAL ROUTINES
+
+=over 4
+
+=item B<_strip_path>
+
+Given a filename that may include a directory path, split the
+name into the path and the base filename.
+
+In scalar context returns just the base filename. In list context
+returns the directory and file information.
+
+  ($dir, $file) = _strip_path( $path );
+  $file  = _strip_path( $path );
+
+=cut
+
+sub _strip_path {
+  my $path = shift;
+
+  my ($vol, $dir, $file) = File::Spec->splitpath( $path );
+  if (wantarray()) {
+    return ($dir, $file);
+  } else {
+    return $file;
+  }
+}
+
+=back
+
+=end PRIVATE
 
 =head1 AUTHORS
 
