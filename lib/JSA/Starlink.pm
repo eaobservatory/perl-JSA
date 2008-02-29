@@ -7,7 +7,7 @@ JSA::Starlink - Helper functions to support the Starlink environment.
 =head1 SYNOPSIS
 
   use JSA::Starlink;
-  check__star_env( "CONVERT", "ndf2fits" );
+  check_star_env( "CONVERT", "ndf2fits" );
 
 =head1 DESCRIPTION
 
@@ -24,11 +24,17 @@ use warnings::register;
 
 use Proc::SafeExec;
 
+# Need NDG support in NDF
+use NDF 1.47;
+use Astro::FITS::Header::NDF;
+
 use JSA::Error qw/ :try /;
+use JSA::Files qw/ looks_like_drfile looks_like_cadcfile drfilename_to_cadc /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ check_star_env
                      run_star_command
+                     prov_update_parent_path
                    /;
 
 =head1 FUNCTIONS
@@ -91,6 +97,9 @@ Run a Starlink command using the supplied arguments.
 The command should include the full path to the command.
 Throws C<JSA::Error::BadExec> if the command fails.
 
+Note that C<JSA::Command> provides the C<run_command> function
+for running non-Starlink commands.
+
 =cut
 
 sub run_star_command {
@@ -98,6 +107,8 @@ sub run_star_command {
 
   # Make sure we get an exit status
   local $ENV{ADAM_EXIT} = 1;
+
+  # Note that errors are written to STDOUT not STDERR.
 
   my $conv = Proc::SafeExec->new( { exec => \@args,
                                     stdout => "new"
@@ -109,6 +120,116 @@ sub run_star_command {
   throw JSA::Error::BadExec( "Error running command $args[0] - status = $exstat" )
     if $exstat != 0;
   return 1;
+}
+
+=item C<prov_update_parent_path>
+
+Rename the provenance entries in the supplied file to match the
+CADC filenaming convention rather than the CADC naming scheme.
+
+  update_parent_prov( $file );
+
+Note that this command only works if the parent file actually
+exists, since in many cases the ASN_TYPE header is required
+to determine the CADC filename. "Obs" products can be special
+cased (and are special-cased in the drfilename_to_cadc routine).
+
+Only the immediate parents are processed.
+
+=cut
+
+sub prov_update_parent_path {
+  my $file = shift;
+
+  # first see if this is a valid NDF
+  looks_like_drfile($file)
+    or JSA::Error::BadFile->throw( "File '$file' does not look like it came from the DR");
+
+  # Starlink status
+  my $status = &NDF::SAI__OK;
+
+  # open the file
+  err_begin($status);
+  ndf_begin();
+  ndf_open( &NDF::DAT__ROOT, $file, "UPDATE","OLD",my $indf, my $place,$status );
+
+  # Get the 0th provenance entry
+  ndg_gtprv( $indf, 0, my $provloc, $status );
+
+  # get the parent indices
+  dat_there( $provloc, "PARENTS", my $haspar, $status);
+
+  if ($haspar) {
+    cmp_size( $provloc, 'PARENTS',my $size, $status );
+    my @parind;
+    cmp_getvi( $provloc, 'PARENTS', $size, @parind, my $el, $status );
+
+    # now go through the parents
+    if ($status == &NDF::SAI__OK) {
+      for my $i (@parind) {
+        ndg_gtprv( $indf, $i, my $provloc, $status );
+
+        # Find Parents locator
+        dat_find( $provloc, "PATH", my $pathloc, $status );
+
+        # Ask its length
+        dat_clen( $pathloc, my $pathlen, $status);
+
+        # get the PATH
+        dat_get0c( $pathloc, my $path, $status );
+
+        # proceed if status is good and the path does not already
+        # look correct
+        if ($status == &NDF::SAI__OK && !looks_like_cadcfile($path)) {
+
+          # The path stored in the file lacks the .sdf
+          $path .= ".sdf" unless $path =~ /\.sdf$/;
+
+          # We need ASN_TYPE header from this parent file
+          my $hdr = Astro::FITS::Header::NDF->new(File => $path);
+          my $asntype = $hdr->value("ASN_TYPE");
+
+          # if we do not have a value we need to hope it's an
+          # "obs" product
+          my $cadc = drfilename_to_cadc( $path,
+                                         (defined $asntype ?
+                                          (ASN_TYPE => $asntype) : ()));
+
+          if (defined $cadc) {
+            # may need to resize
+            if (length($cadc) > $pathlen) {
+              # erases and create
+              dat_annul($pathloc, $status);
+              dat_erase($provloc, "PATH", $status);
+              dat_new0c($provloc, "PATH", length($cadc), $status );
+              dat_find( $provloc, "PATH", $pathloc, $status );
+            }
+
+            # modify the value in the HDS structure
+            dat_put0c( $pathloc, $cadc, $status );
+
+            # put it back in the file
+            ndg_mdprv( $indf, $i, $provloc, $status );
+          }
+        }
+
+      }
+    }
+  } # no parents
+
+  # close the ndf and free locators
+  dat_annul( $provloc, $status );
+  ndf_annul( $indf, $status);
+  ndf_end( $status );
+
+  if ($status != &NDF::SAI__OK) {
+    my @errs = err_flush_to_string( $status );
+    err_end($status);
+    JSA::Error::Starlink->throw( join("\n",@errs) );
+  }
+  err_end($status);
+
+  return;
 }
 
 =back
