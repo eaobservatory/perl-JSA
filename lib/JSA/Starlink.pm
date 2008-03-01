@@ -28,6 +28,7 @@ use Proc::SafeExec;
 use NDF 1.47;
 use Astro::FITS::Header::NDF;
 
+use JSA::Command qw/ run_command /;
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ looks_like_drfile looks_like_cadcfile drfilename_to_cadc /;
 
@@ -109,17 +110,23 @@ sub run_star_command {
   local $ENV{ADAM_EXIT} = 1;
 
   # Note that errors are written to STDOUT not STDERR.
+  my ($stdout, $stderr, $exstat) =  run_command( {nothrow => 1}, @args );
 
-  my $conv = Proc::SafeExec->new( { exec => \@args,
-                                    stdout => "new"
-                                  } );
+  # strip error messages from stdout and place in stderr
+  my (@out, @errors);
+  @errors = @$stderr if @$stderr;
+  for my $l (@$stdout) {
+    if ($l =~ /^\s*\!/) {
+      push(@errors, $l);
+    } else {
+      push(@out, $l);
+    }
+  }
 
-  $conv->wait;
-
-  my $exstat = $conv->exit_status >> 8;
-  throw JSA::Error::BadExec( "Error running command $args[0] - status = $exstat" )
+  throw JSA::Error::BadExec( "Error running Starlink command $args[0] - status = $exstat.".(@errors ? " Errors:\n". join("\n",@errors) : "")."\n" )
     if $exstat != 0;
-  return 1;
+
+  return (\@out, \@errors, $exstat);
 }
 
 =item C<prov_update_parent_path>
