@@ -303,8 +303,6 @@ sub drfilename_to_cadc {
   # it did not look like a drfile so no need to call looks_like_drfile
   my ($isgroup, $prefix, $utdate, $obsnum, $subsys, $product, $prodcount)
     = dissect_drfile( $drname );
-  print "Filepart=$filepart\n";
-  print "UT = $utdate\n";
   return () if !defined $utdate;
 
   my $type = $args{ASN_TYPE};
