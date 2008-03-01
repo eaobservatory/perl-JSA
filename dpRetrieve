@@ -1,4 +1,8 @@
-#!perl
+#!/usr/local/perl-5.8/bin/perl
+
+eval 'exec perl  -S $0 ${1+"$@"}'
+    if 0; # not running under some shell
+
 
 =head1 NAME
 
@@ -64,6 +68,11 @@ use File::Spec;
 use Carp;
 use URI;
 
+# Work out where we are so that we can run from a build directory
+# and still find the JSA classes
+use FindBin;
+use lib $FindBin::RealBin."/lib";
+
 use JSA::Files qw/ uri_to_file /;
 
 # Options
@@ -99,6 +108,7 @@ my $absdir = File::Spec->rel2abs($outdir);
 
 # open the file and read all the lines
 my $file = shift(@ARGV);
+die "dpRetrieve: No file supplied so unable to retrieve any data files" unless defined $file;
 open (my $fh, "<", $file)
     || die "Could not open supplied filename '$file': $!";
 my @lines = <$fh>;
