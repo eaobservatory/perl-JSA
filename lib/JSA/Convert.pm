@@ -33,6 +33,7 @@ use Astro::FITS::Header::NDF;
 use Exporter 'import';
 our @EXPORT_OK = qw( convert_to_fits convert_to_ndf );
 
+use Starlink::Versions qw/ starversion_lt starversion_string/;
 use JSA::Error qw/ :try /;
 use JSA::Starlink qw/ check_star_env run_star_command /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
@@ -160,6 +161,14 @@ sub ndf2fits {
   # Remove the output file before we start
   unlink $outfile if -e $outfile;
 
+  my $has_cadc_prov = 1;
+  if (starversion_lt('convert', '1.5-13') ) {
+    my $ver = starversion_string("convert");
+    carp "CADC provenance is not supported by this version of CONVERT NDF2FITS ($ver)."
+      ." Please upgrade to at least v1.5-13.\n";
+    $has_cadc_prov = 0;
+  }
+
   # CADC specific options
   my @args = ( File::Spec->catfile($ENV{CONVERT_DIR}, "ndf2fits"),
                "IN=$infile",
@@ -170,7 +179,7 @@ sub ndf2fits {
                "PROFITS",
                "DUPLEX",
                "PROHIS",
-        #       "PROVENANCE=CADC",
+               ($has_cadc_prov ? "PROVENANCE=CADC" : () ),
                "COMP=DV" );
 
 
