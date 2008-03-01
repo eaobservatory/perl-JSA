@@ -226,11 +226,8 @@ my %existing_files = scan_dir();
 
 # First thing we have to do is copy the files locally by calling the
 # dpRetrieve command. We hope it is in the path.
-# For testing we ask this perl to run it since we know it is perl
-# For CADC we rely on path.
 
-run_command(File::Spec->catfile($curdir,"dpRetrieve"),
-            "-id", $id, "-debug", $inputs);
+run_command("dpRetrieve","-id", $id, "-debug", $inputs);
 
 # Now scan the directory again
 my %post_retrieve = scan_dir();
@@ -450,8 +447,7 @@ for my $f (sort keys %drhdrs) {
 
 # Call dpRetrieve with the correct arguments
 
-run_command(File::Spec->catfile($curdir,"dpCapture"),
-       "-id", $id, "-debug");
+run_command("dpCapture", "-id", $id, "-debug");
 
 exit;
 
