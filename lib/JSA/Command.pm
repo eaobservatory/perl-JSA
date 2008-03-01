@@ -101,7 +101,8 @@ sub run_command {
   chomp(@stderr);
 
   my $exstat = $conv->exit_status;
-  throw JSA::Error::BadExec( "Error running command $args[0] - status = $exstat.".(@stderr ? " Errors:". join("\n",@stderr) : "")."\n" )
+  throw JSA::Error::BadExec( "Error running command ".join(" ",@args)."\n".
+        " - status = $exstat.".(@stderr ? " Errors:\n". join("\n",@stderr) : "")."\n" )
     if ($exstat != 0 && !$control{nothrow});
   return (\@stdout,\@stderr, $exstat);
 }
