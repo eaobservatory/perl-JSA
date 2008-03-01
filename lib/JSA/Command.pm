@@ -43,26 +43,90 @@ Run a shell command using the supplied arguments.
   run_command( $command, @args );
 
 The command should include the full path to the command.
-Throws C<JSA::Error::BadExec> if the command fails.
+Throws C<JSA::Error::BadExec> with the contents of standard error
+if the command fails.
 
 Use C<JSA::Starlink::run_star_command> when running Starlink
 commands.
 
+In list context returns a reference to an array containing the
+messages logged to standard out and a reference to an array containing
+the messages sent to standard error.
+
+  ($stdout, $stderr) = run_command( $command, @args );
+
+The exit status is returned as the 3rd item in the list but that will
+always be 0 if exceptions are enabled.
+
+Control parameters can be passed in by using a reference to a hash
+as the first argument.
+
+  ($stdout, $stderr, $stat) = run_command( { nothrow => 1 }, $command, @args );
+
+If exceptions are disabled the exit status can be non-zero.
+
+Hash options are:
+
+  nothrow => if true, disable exception throwing. This can be useful
+             if an application embeds errors in standard out.
+
 =cut
 
 sub run_command {
+  my %control = ( nothrow => 0 );
+  if (ref($_[0]) eq 'HASH') {
+    my $h = shift;
+    %control = (%control, %$h);
+  }
+
+  # Now read the command
   my @args = @_;
 
+  # Get some temp handles for stdout and stderr
+  my ($out1, $err1, $out2, $err2) = tmpfh_out_err();
+
   my $conv = Proc::SafeExec->new( { exec => \@args,
-                                    stdout => "new"
+                                    stdout => $out1,
+                                    stderr => $err1,
                                   } );
 
   $conv->wait;
 
-  my $exstat = $conv->exit_status >> 8;
-  throw JSA::Error::BadExec( "Error running command $args[0] - status = $exstat" )
-    if $exstat != 0;
-  return 1;
+  # Now read back
+  seek($out2, 0,0);
+  my @stdout = <$out2>;
+  chomp(@stdout);
+  seek($err2, 0,0);
+  my @stderr = <$err2>;
+  chomp(@stderr);
+
+  my $exstat = $conv->exit_status;
+  throw JSA::Error::BadExec( "Error running command $args[0] - status = $exstat.".(@stderr ? " Errors:". join("\n",@stderr) : "")."\n" )
+    if ($exstat != 0 && !$control{nothrow});
+  return (\@stdout,\@stderr, $exstat);
+}
+
+=item B<tmpfh_out_err>
+
+Return filehandles that can be used during command execution to
+capture STDOUT and STDERR. Two filehandles are returned for STDOUT
+and STDERR (the second pair are dupes of the first to allow C<Proc::SafeExec>
+to close them in the child).
+
+  ($out1, $err1, $out2, $err2) = tmpfh_out_err();
+
+The first pair are pure filehandles, the second pair are File::Temp
+objects. The first pair should be sent to C<Proc::SafeExec> and the
+second pair should be retained for analysis after program execution.
+
+=cut
+
+sub tmpfh_out_err {
+  my $out = File::Temp->new();
+  my $err = File::Temp->new();
+  open my $dup_out, "<&",$out or croak "Could not dupe temp out: $!";
+  open my $dup_err, "<&",$err or croak "Could not dupe temp err: $!";
+  return ($dup_out, $dup_err, $out, $err);
 }
 
 =back
