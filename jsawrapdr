@@ -430,7 +430,7 @@ for my $f (sort keys %drhdrs) {
     my $prod = $drhdrs{$f}->value( "PRODUCT" );
     if (defined $prod && exists $PRODS{$prod}) {
       # is exportable so first fix up provenance
-      prov_update_parent_path( $f );
+      prov_update_parent_path( $f, @PRODUCTS );
 
       # Modify the WCS attributes so that we generate the correct
       # FITS headers regardless of how the pipeline was configured.
