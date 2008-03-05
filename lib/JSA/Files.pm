@@ -28,8 +28,10 @@ use JSA::Error;
 
 use Exporter 'import';
 our @EXPORT_OK = qw( uri_to_file file_to_uri drfilename_to_cadc
+                     dissect_drfile dissect_cadcfile
                      cadc_to_drfilename looks_like_drfile looks_like_cadcfile
-                     compare_file_lists scan_dir );
+                     looks_like_rawfile
+                     compare_file_lists scan_dir construct_rawfile );
 
 
 # List of support product types as found in ASN_TYPE FITS header
@@ -99,6 +101,31 @@ sub file_to_uri {
   return $uri;
 }
 
+=item B<looks_like_rawfile>
+
+Examines the supplied filename and determines whether it looks like
+a raw data file.
+
+  $israw = looks_like_rawfile( $filename );
+
+The file suffix must be ".sdf".
+
+=cut
+
+sub looks_like_rawfile {
+  my $filename = shift;
+  $filename = _strip_path( $filename );
+
+  if ($filename =~ /^[ah]\d{8}_\d{5}_\d\d_\d{4}\.sdf$/) {
+    # ACSIS
+    return 1;
+  } elsif ($filename =~ /^s[48][abcd]\d{8}_\d{5}_\d{4}\.sdf$/) {
+    # SCUBA-2
+    return 1;
+  }
+  return 0;
+}
+
 =item B<looks_like_drfile>
 
 Examines the supplied filename to determine whether it looks like
@@ -121,8 +148,7 @@ sub looks_like_drfile {
 
   # do not check that the "a" corresponds to the correct UT date for
   # DAS -> ACSIS transition
-  
-  if ($filename =~ /^g?[ah]\d{8}_\d{5}_\d\d_\w+\.sdf$/) {
+  if ($filename =~ /^g?[ah]\d{8}_\d{5}_\d\d_[a-z]+(\d\d\d)?\.sdf$/) {
     # ACSIS
     return 1;
   } elsif ($filename =~ /^g?s\d{8}_\d{5}_\d{3}_\w+\.sdf$/) {
@@ -402,6 +428,52 @@ sub cadc_to_drfilename {
     $new = File::Spec->catfile( $dir, $new );
   }
   return $new;
+}
+
+=item B<construct_rawfile>
+
+Construct a raw filename given a FITS header object or a FITS hash.
+Subsystem will be a number for ACSIS and the SUBARRAY for SCUBA-2.
+
+ $raw = construct_rawfile( %hdr );
+
+=cut
+
+sub construct_rawfile {
+  my %hdr;
+  if (@_ == 1) {
+    my $h = shift;
+    tie %hdr, $h, ref($h);
+  } else {
+    %hdr = @_;
+  }
+
+  # No need for header translation at present (may be different if SCUBA is included)
+  my $ut = $hdr{UTDATE};
+  my $inst = $hdr{INSTRUME};
+  my $be = $hdr{BACKEND};
+  my $nsub = $hdr{NSUBSCAN};
+  my $obs  = $hdr{OBSNUM};
+
+  my $file;
+  if ($be =~ /(DAS|ACSIS)/) {
+    my $prefix;
+    if ($be =~ /DAS/) {
+      $prefix = "h";
+    } elsif ($be =~ /ACSIS/) {
+      $prefix = "a";
+    } else {
+      throw JSA::Error::FatalError->new("Unrecognized backend '$be'");
+    }
+    $file = sprintf($prefix.'%08d_%05d_%02d_%04d.sdf', $ut, $obs, $hdr{SUBSYSNR}, $nsub );
+
+  } elsif ($inst =~ /SCUBA\-?2/) {
+    $file = $hdr{SUBARRAY}. sprintf('%08d_%05d_%04d.sdf', $ut, $obs, $nsub );
+  } else {
+    throw JSA::Error::FatalError->new("Unrecognized instrument name $inst ".(defined $be ? " / $be " : ""));
+  }
+
+  return $file;
 }
 
 =item B<scan_dir>
