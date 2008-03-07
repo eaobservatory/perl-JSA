@@ -130,12 +130,12 @@ sub run_star_command {
   return (\@out, \@errors, $exstat);
 }
 
-=item C<prov_update_parent_path>
+=item B<prov_update_parent_path>
 
 Rename the provenance entries in the supplied file to match the
 CADC filenaming convention rather than the CADC naming scheme.
 
-  update_parent_prov( $file );
+  prov_update_parent_path( $file );
 
 Note that this command only works if the parent file actually
 exists, since in many cases the ASN_TYPE header is required
@@ -153,7 +153,7 @@ by removing only those entries required to give us a valid parent.
 
 The allowed product names can be provided as a second argument
 
-  update_parent_prov( $file, @products );
+  prov_update_parent_path( $file, @products );
 
 If no list is provided all products are assumed to be allowed.
 
