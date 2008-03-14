@@ -206,7 +206,7 @@ sub parse_retrieve_line {
   
   # see if we need to attach a directory. We do this if the
   # file is relative.
-  if (!File::Spec->file_name_is_absolute) {
+  if (!File::Spec->file_name_is_absolute($path)) {
     # no directory so we guess ORAC_DATA_IN, else it will have
     # to be current working directory. We check in ORAC_DATA_IN
     if (exists $ENV{ORAC_DATA_IN} &&

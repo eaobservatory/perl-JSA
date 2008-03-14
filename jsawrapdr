@@ -186,7 +186,7 @@ my $curdir = File::Spec->rel2abs( File::Spec->curdir );
 # Make sure that inputs is corrected for -outdir
 if (defined $inputs) {
   $inputs = File::Spec->catfile( $curdir, $inputs )
-    unless File::Spec->file_name_is_absolute;
+    unless File::Spec->file_name_is_absolute($inputs);
 } else {
   die "Must supply a -inputs file";
 }
