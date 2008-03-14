@@ -443,7 +443,7 @@ sub construct_rawfile {
   my %hdr;
   if (@_ == 1) {
     my $h = shift;
-    tie %hdr, $h, ref($h);
+    tie %hdr, "Astro::FITS::Header", $h;
   } else {
     %hdr = @_;
   }
