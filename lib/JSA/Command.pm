@@ -101,10 +101,20 @@ sub run_command {
   chomp(@stderr);
 
   my $exstat = $conv->exit_status;
+  # see perlvar documentation
+  my $exit_status = $exstat >> 8;
+  my $signal = $exstat & 127;
+  my $sigtext = '';
+  if ($signal) {
+    $sigtext =  "(signal $signal) ";
+  } elsif ($exit_status == 255) {
+    $sigtext = "(via die) ";
+  }
+
   throw JSA::Error::BadExec( "Error running command ".join(" ",@args)."\n".
-        " - status = $exstat.".(@stderr ? " Errors:\n". join("\n",@stderr) : "")."\n" )
-    if ($exstat != 0 && !$control{nothrow});
-  return (\@stdout,\@stderr, $exstat);
+        " - status = $exit_status $sigtext.".(@stderr ? " Errors:\n". join("\n",@stderr) : "")."\n" )
+    if ($exit_status != 0 && !$control{nothrow});
+  return (\@stdout,\@stderr, $exit_status);
 }
 
 =item B<tmpfh_out_err>
