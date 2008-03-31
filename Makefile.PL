@@ -29,6 +29,7 @@ WriteMakefile(
                'PREREQ_PM'      => { 
                                     'Test::More' => 0,
                                     'Test::Command' => 0,
+                                    'Proc::SafeExec' => 0,
                                     'Astro::FITS::Header' => 3,
                                     'Astro::FITS::HdrTrans' => 1.0,
                                    },
