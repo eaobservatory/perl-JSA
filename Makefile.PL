@@ -32,6 +32,7 @@ WriteMakefile(
                                     'Proc::SafeExec' => 0,
                                     'Astro::FITS::Header' => 3,
                                     'Astro::FITS::HdrTrans' => 1.0,
+                                    'File::Temp' => 0.20,
                                    },
               EXE_FILES => [qw/
                                 dpRetrieve jsawrapdr dpCapture
