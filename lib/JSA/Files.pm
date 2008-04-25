@@ -207,7 +207,7 @@ sub dissect_drfile {
 
   my $isgroup = ($drfile =~ s/^g//);
   my ($prefix, $utdate,$obsnum,$subsys,$product,$prodcount);
-  if ($drfile =~ /^([ahs])(\d{8})_(\d{5})_(\d{2,3})_([a-z]+)(\d*)\.sdf$/) {
+  if ($drfile =~ /^(g?[ahs])(\d{8})_(\d{1,5})_(\d{1,3})_([a-z]+)(\d*)\.sdf$/) {
     $prefix = $1;
     $utdate = $2;
     $obsnum = $3;
