@@ -70,12 +70,7 @@ my $dictionary =  $FindBin::RealBin. "/import/data.dictionary";
 # first on the array.  Actual instrument table will be the second element.
 my @tables = qw/COMMON/;
 
-# Get the current date, unless one was supplied on the command line
-my $date = $ARGV[0];
-$date =
-  $date && $date =~ /^\d{8}/
-  ? Time::Piece->strptime($ARGV[0], "%Y%m%d")
-  : localtime;
+my $date = $self->set_date( $ARGV[0] );
 
 # Instantiate the archive database object
 my $adb = OMP::DBbackend::Archive->new;
@@ -219,6 +214,19 @@ for my $inst (@instruments) {
 $adb->disconnect if defined $adb;
 
 #---------------------- Subroutines ----------------------
+
+# Get the current date, unless one was supplied.
+sub set_date {
+
+  my ( $date ) = @_;
+
+  $date =
+    $date && $date =~ /^\d{8}/
+    ? Time::Piece->strptime($ARGV[0], "%Y%m%d")
+    : localtime;
+
+  return $date;
+}
 
 # get_columns:  Given a table name and a DBI database handle object,
 #               return a hash reference containing columns with
