@@ -193,13 +193,8 @@ for my $inst (@instruments) {
     my $insert_ref = get_insert_values('COMMON', \%columns, \%dict, $common_hdrs);
 
     # Do insert
-    if ($UPDATE) {
-      update_hash( 'COMMON', $dbh, $insert_ref )
-        or $error = $dbh->errstr;
-    } else {
-      insert_hash('COMMON', $dbh, $insert_ref)
-      or $error = $dbh->errstr;
-    }
+    my $error = _update_or_insert( 'COMMON', $dbh, $insert_ref );
+
     if ($error) {
       $dbh->rollback;
       if ($error =~ /insert duplicate key row/) {
@@ -227,13 +222,8 @@ for my $inst (@instruments) {
 
       my $insert_ref = get_insert_values('ACSIS', \%columns, \%dict, $subsys_hdrs);
 
-      if ($UPDATE) {
-        update_hash('ACSIS', $dbh, $insert_ref)
-        or $error = $dbh->errstr;
-      } else {
-        insert_hash('ACSIS', $dbh, $insert_ref)
-        or $error = $dbh->errstr;
-      }
+      my $error = _update_or_insert( 'ACSIS', $dbh, $insert_ref );
+
       if ($error) {
         $dbh->rollback if $MODDB;
         print "$error\n\n";
@@ -338,6 +328,12 @@ sub get_insert_values {
   transform_value($table, $columns, \%values);
 
   return \%values;
+}
+
+sub _update_or_insert {
+
+  my $ok = $UPDATE ? &update_hash : &insert_hash;
+  return $dbh->errstr;
 }
 
 # update_hash:  Given a table name, a DBI database handle and
