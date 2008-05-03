@@ -147,7 +147,6 @@ for my $inst (@instruments) {
   # Group all steps together in a single transaction, so that if any
   # insert fails, the entire observation fails to go in to the DB.
 
-
  OBS: for my $runnr (sort {$a <=> $b} keys %observations) {
 
     # Obtain COMMON table values from first obs object in the observation
@@ -205,46 +204,8 @@ for my $inst (@instruments) {
       next;
     }
 
-    my $subsysnr = 0;
-    my $totsub = @{$observations{$runnr}};
-    for my $subsys_obs (@{$observations{$runnr}}) {
-      $subsysnr++;
-      print "Processing subsysnr $subsysnr of $totsub\n";
-
-      # Obtain instrument table values from this Obs object
-      my $subsys_hdrs = $subsys_obs->hdrhash;
-
-      # Need to calculate the frequency information
-      calc_freq( $subsys_obs, $subsys_hdrs );
-
-      # Create headers that don't exist
-      create_headers('ACSIS', $subsys_obs, $subsys_hdrs);
-
-      my $insert_ref = get_insert_values('ACSIS', \%columns, \%dict, $subsys_hdrs);
-
-      my $error = _update_or_insert( 'ACSIS', $dbh, $insert_ref );
-
-      if ($error) {
-        $dbh->rollback if $MODDB;
-        print "$error\n\n";
-        next OBS;
-      }
-
-      # Create headers that don't exist
-      create_headers('FILES', $subsys_obs, $subsys_hdrs);
-
-      $insert_ref = get_insert_values('FILES', \%columns, \%dict, $subsys_hdrs);
-
-      if (!$UPDATE) {
-        insert_hash('FILES', $dbh, $insert_ref)
-          or $error = $dbh->errstr;
-      }
-      if ($error) {
-        $dbh->rollback;
-        print "$error\n\n";
-        next OBS;
-      }
-    }
+    add_subsys_obs( $dbh, $observations{$runnr}, \%columns, \%dict )
+      or next OBS;
 
     # End transaction
     $dbh->commit if $MODDB;
@@ -328,6 +289,55 @@ sub get_insert_values {
   transform_value($table, $columns, \%values);
 
   return \%values;
+}
+
+sub add_subsys_obs {
+
+  my ( $dbh, $obs, $cols, $dict ) = @_;
+
+  my $subsysnr = 0;
+  my $totsub = scalar @{ $obs };
+
+  for my $subsys_obs ( @{ $obs } ) {
+    $subsysnr++;
+    print "Processing subsysnr $subsysnr of $totsub\n";
+
+    # Obtain instrument table values from this Obs object
+    my $subsys_hdrs = $subsys_obs->hdrhash;
+
+    # Need to calculate the frequency information
+    calc_freq( $subsys_obs, $subsys_hdrs );
+
+    # Create headers that don't exist
+    create_headers('ACSIS', $subsys_obs, $subsys_hdrs);
+
+    my $insert_ref = get_insert_values('ACSIS', $cols, $dict, $subsys_hdrs);
+
+    my $error = _update_or_insert( 'ACSIS', $dbh, $insert_ref );
+
+    if ($error) {
+      $dbh->rollback if $MODDB;
+      print "$error\n\n";
+      return;
+    }
+
+    # Create headers that don't exist
+    create_headers('FILES', $subsys_obs, $subsys_hdrs);
+
+    $insert_ref = get_insert_values('FILES', $cols, $dict, $subsys_hdrs);
+
+    if (!$UPDATE) {
+      insert_hash('FILES', $dbh, $insert_ref)
+        or $error = $dbh->errstr;
+    }
+    if ($error) {
+      $dbh->rollback;
+      print "$error\n\n";
+      return;
+    }
+  }
+
+  return 1;
 }
 
 sub _update_or_insert {
