@@ -74,6 +74,17 @@ log file but the "s" option can be used to write to standard output.
 
 Enable debug messages.
 
+=item B<-indir>
+
+Controls the input directory. The current working directory is used if
+this argument is not supplied. Used primarily in conjunction with
+C<-instrument> and C<-ut> options.
+
+=item B<-instrument>
+
+Specify an instrument for which data will be reduced. Must be used in
+conjunction with the C<-ut> option.
+
 =item B<-outdir>
 
 Controls the output directory for all files created by the wrapper. The current
@@ -84,6 +95,11 @@ is used.
 
 Use a temporary directory within the current directory for data processing.
 Supercedes -outdir.
+
+=item B<-ut>
+
+Reduce data for a given UT date. Skips call to dpRetrieve. Must be
+used in conjunction with the C<-ut> option.
 
 =back
 
@@ -137,13 +153,21 @@ BEGIN {
   }
 }
 
-# All products that should be exported.
-our @PRODUCTS = qw/ cube /;
-our %PRODS = map { $_ => undef } @PRODUCTS;
+# All products that should be exported. PRODUCTS are the default
+# products that should be exported. ASSOCS are the different
+# associations. EXTRA_PRODUCTS defines extra products for each
+# association that are to be exported in addition to the defaults.
+our @PRODUCTS = qw/ reduced rimg rsp /;
+our @ASSOCS = qw/ obs night project public /;
+our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ] );
+
+# Turn these into a hash structure.
+our %PRODS = map { $_ => { map { $_ => undef } @PRODUCTS } } @ASSOCS;
+map { my $assoc = $_; map { $PRODS{$assoc}{$_} = undef } @{$EXTRA_PRODUCTS{$assoc}} } keys %EXTRA_PRODUCTS;
 
 # Options
 my ($help, $man, $version, $log, $persist, $id, $drparameters, $inputs, $outdir, $debug,
-   $tmpdir);
+   $tmpdir, $indir, $instrument, $ut);
 my $status = GetOptions("help" => \$help,
                         "man" => \$man,
                         "version" => \$version,
@@ -154,17 +178,33 @@ my $status = GetOptions("help" => \$help,
                         "inputs=s" => \$inputs,
                         "outdir=s" => \$outdir,
                         "debug" => \$debug,
-                        "tmpdir" => \$tmpdir,
+                        "indir=s" => \$indir,
+                        "instrument=s" => \$instrument,
+                        "tmpdir=s" => \$tmpdir,
+                        "ut=s" => \$ut,
                        );
-
+print "ut: $ut\n";
 pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
 if ($version) {
-  my $id = '$Id: racover.pl 14421 2007-09-05 02:37:29Z agarwal $ ';
+  my $rev = '$Id: racover.pl 14421 2007-09-05 02:37:29Z agarwal $ ';
   print "jsawrapdr - CADC compliant wrapper for JSA data processing\n";
-  print " Source code revision: $id\n";
+  print " Source code revision: $rev\n";
   exit;
+}
+
+# Check the UT and instrument parameters. If one's defined but not the
+# other, then die with an error.
+if( defined $ut && ! defined $instrument ) {
+  die "Must include -instrument paramter with -ut";
+}
+if( ! defined $ut && defined $instrument ) {
+  die "Must include -ut parameter with -instrument";
+}
+my $skipdp = 0;
+if( defined $ut && defined $instrument ) {
+  $skipdp = 1;
 }
 
 # We require that STARLINK_DIR and ORAC_DIR are set
@@ -187,7 +227,7 @@ my $curdir = File::Spec->rel2abs( File::Spec->curdir );
 if (defined $inputs) {
   $inputs = File::Spec->catfile( $curdir, $inputs )
     unless File::Spec->file_name_is_absolute($inputs);
-} else {
+} elsif( ! $skipdp ) {
   die "Must supply a -inputs file";
 }
 
@@ -221,147 +261,167 @@ $id = "NONE" unless defined $id;
 # and recreate soft links if it uses soft links or use touch if the file is 
 # already real. This is more work to implement but for the non-JSA user
 # it will be worth it.
-
-my %existing_files = scan_dir();
-
-# First thing we have to do is copy the files locally by calling the
-# dpRetrieve command. We hope it is in the path.
-
-run_command("dpRetrieve","-id", $id, "-debug", $inputs);
-
-# Now scan the directory again
-my %post_retrieve = scan_dir();
-
-# compare the old list with the new and return a list of files
-# that should be processed
-my @files = compare_file_lists( \%existing_files, \%post_retrieve );
-
-log_message("Processing the following files:\n". join("\n",@files)."\n");
-
-# decide whether we are using oracdr or picard
-
-# First thing we have to do is to analyze the files to determine how things
-# should be processed. If we are all FITS files then we must convert to NDF
-# prior to processing. If there are some FITS and some NDF we have to decide
-# whether that is okay. Read all the FITS headers and then decide whether
-# they are all raw or all processed.
-
-# Now count NDF vs FITS
-my $nfits = 0;
-my $nsdf = 0;
-for my $f (@files) {
-  if ($f =~ /\.f\w+$/) {
-    $nfits++;
-  } elsif ($f =~ /\.sdf$/) {
-    $nsdf++;
-  }
-}
-
-if ( ($nfits != @files) && ($nsdf != @files) ) {
-  # mixed NDF and FITS
-  die "There are $nfits FITS files and $nsdf NDFs out of ".@files.
-    " files and this is a bit confusing";
-}
-
-# FITS headers, indexed by filename
-my %FITS = read_headers( @files );
-if (keys %FITS == 0) {
-  die "Could not open any of the supplied files to read headers: ".join(", ",@files);
-} elsif (keys %FITS != @files) {
-  log_warning("Some files could not be read. Continuing with those that can\n");
-  @files = keys %FITS;
-}
-
-# Decide on ORAC-DR vs PICARD
-# FITS files are not processable by ORAC-DR and are not archived as such at CADC
-# NDF are processed by orac-dr unless they have PRODUCT headers. No check is made
-# for filename compliance with raw time series ICD.
-
-# Get PRODUCT information
-my ($nproduct, %products) = get_header_value( "PRODUCT", values %FITS);
+#
+# Only do this if we haven't been told to skip the dpRetrieve. Instead
+# we'll supply the UT date and instrument to ORAC-DR.
 
 my $useoracdr = 0;
-if ($nfits == @files) {
-  # All of them are fits so we must use picard
-  log_message("Got $nfits fits - using PICARD\n");
-} elsif ($nsdf == @files) {
-  # we have NDFs so we need to open them and look for PRODUCT headers
-  # Should we check to make sure that the PRODUCT headers match?
-  log_message("Got $nsdf NDF\n");
-  if ($nproduct == 0) {
-    # oracdr - assume these are raw data. They may be data processed outside
-    # of the DR
-    $useoracdr = 1;
-  }
-}
-
-# Analyze product information for non-oracdr case
-if (!$useoracdr) {
-  if ($nproduct == @files) {
-
-    # check product values
-    if (keys %products > 1) {
-      log_warning( "Processing different products in a single run may be incorrect. (".
-                   join(",",keys %products).")\n");
-    }
-  } elsif ($nproduct == 0) {
-    die "None of the input files contained PRODUCT FITS headers";
-
-  } else {
-    die "There are $nproduct headers in ".@files.
-      ", making it difficult to determine whether to run ORAC-DR or PICARD";
-  }
-}
-
-# Now need to determine the ORAC_INSTRUMENT from the supplied headers
 my $oracinst;
-if ($useoracdr) {
-  my %instruments;
-  for my $f (keys %FITS) {
-    my $oa = get_orac_instrument( $FITS{$f} );
-    die "Unable to determine ORAC_INSTRUMENT for file '$f'\n"
-      unless defined $oa;
-    $instruments{$oa}++;
-  }
-  if (keys %instruments > 1) {
-    die "Can not process files from multiple instruments (".join(",",keys %instruments).")\n";
-  } else {
-    # get the single instrument
-    ($oracinst) = keys %instruments;
-  }
-}
+my $tmpfile = '';
+my @files;
+my %post_retrieve;
 
-# Convert FITS files into NDF and update name supplied to DR
-# We could do this before we read the FITS headers but it is more efficient to
-# delay conversion in case some other error condition is hit first. Conversion
-# will take a non-trivial amount of time
-if ($nfits > 0) {
-  my @new;
+if( ! $skipdp ) {
+
+  my %existing_files = scan_dir();
+
+  # First thing we have to do is copy the files locally by calling the
+  # dpRetrieve command. We hope it is in the path.
+
+  run_command("dpRetrieve","-id", $id, "-debug", $inputs);
+
+  # Now scan the directory again
+  %post_retrieve = scan_dir();
+
+  # compare the old list with the new and return a list of files that
+  # should be processed
+  @files = compare_file_lists( \%existing_files, \%post_retrieve );
+
+  log_message("Processing the following files:\n". join("\n",@files)."\n");
+
+  # decide whether we are using oracdr or picard
+
+  # First thing we have to do is to analyze the files to determine how
+  # things should be processed. If we are all FITS files then we must
+  # convert to NDF prior to processing. If there are some FITS and
+  # some NDF we have to decide whether that is okay. Read all the FITS
+  # headers and then decide whether they are all raw or all processed.
+
+  # Now count NDF vs FITS
+  my $nfits = 0;
+  my $nsdf = 0;
   for my $f (@files) {
-    if (looks_like_cadcfile( $f )) {
-      my $out = convert_to_ndf( $f );
-      if ($out) {
-        push(@new, $out );
-      }
-    } else {
-      log_warning( "File $f does not use the CADC naming convention. Skipping.\n");
+    if ($f =~ /\.f\w+$/) {
+      $nfits++;
+    } elsif ($f =~ /\.sdf$/) {
+      $nsdf++;
     }
   }
-  if (@new) {
-    @files = @new;
-  } else {
-    die "No files left to process after conversion to NDF";
-  }
-}
 
-# We now have to write these files to a text file
-# suitable for orac-dr to read with the -file option
-my $tmpfile = File::Temp->new() or die "Could not create a temporary file";
-print $tmpfile "$_\n" for @files;
-close($tmpfile) or die "Error closing temp file handle";
+  if ( ($nfits != @files) && ($nsdf != @files) ) {
+    # mixed NDF and FITS
+    die "There are $nfits FITS files and $nsdf NDFs out of ".@files.
+        " files and this is a bit confusing";
+  }
+
+  # FITS headers, indexed by filename
+  my %FITS = read_headers( @files );
+  if (keys %FITS == 0) {
+    die "Could not open any of the supplied files to read headers: ".join(", ",@files);
+  } elsif (keys %FITS != @files) {
+    log_warning("Some files could not be read. Continuing with those that can\n");
+    @files = keys %FITS;
+  }
+
+  # Decide on ORAC-DR vs PICARD
+  # FITS files are not processable by ORAC-DR and are not archived as
+  # such at CADC NDF are processed by orac-dr unless they have PRODUCT
+  # headers. No check is made for filename compliance with raw time
+  # series ICD.
+
+  # Get PRODUCT information
+  my ($nproduct, %products) = get_header_value( "PRODUCT", values %FITS);
+
+  $useoracdr = 0;
+  if ($nfits == @files) {
+    # All of them are fits so we must use picard
+    log_message("Got $nfits fits - using PICARD\n");
+  } elsif ($nsdf == @files) {
+    # we have NDFs so we need to open them and look for PRODUCT
+    # headers Should we check to make sure that the PRODUCT headers
+    # match?
+    log_message("Got $nsdf NDF\n");
+    if ($nproduct == 0) {
+      # oracdr - assume these are raw data. They may be data processed
+      # outside of the DR
+      $useoracdr = 1;
+    }
+  }
+
+  # Analyze product information for non-oracdr case
+  if (!$useoracdr) {
+    if ($nproduct == @files) {
+
+      # check product values
+      if (keys %products > 1) {
+        log_warning( "Processing different products in a single run may be incorrect. (".
+                     join(",",keys %products).")\n");
+      }
+    } elsif ($nproduct == 0) {
+      die "None of the input files contained PRODUCT FITS headers";
+
+    } else {
+      die "There are $nproduct headers in ".@files.
+        ", making it difficult to determine whether to run ORAC-DR or PICARD";
+    }
+  }
+
+  # Now need to determine the ORAC_INSTRUMENT from the supplied headers
+  if ($useoracdr) {
+    my %instruments;
+    for my $f (keys %FITS) {
+      my $oa = get_orac_instrument( $FITS{$f} );
+      die "Unable to determine ORAC_INSTRUMENT for file '$f'\n"
+      unless defined $oa;
+      $instruments{$oa}++;
+    }
+    if (keys %instruments > 1) {
+      die "Can not process files from multiple instruments (".join(",",keys %instruments).")\n";
+    } else {
+      # get the single instrument
+      ($oracinst) = keys %instruments;
+    }
+  }
+
+  # Convert FITS files into NDF and update name supplied to DR We
+  # could do this before we read the FITS headers but it is more
+  # efficient to delay conversion in case some other error condition
+  # is hit first. Conversion will take a non-trivial amount of time
+  if ($nfits > 0) {
+    my @new;
+    for my $f (@files) {
+      if (looks_like_cadcfile( $f )) {
+        my $out = convert_to_ndf( $f );
+        if ($out) {
+          push(@new, $out );
+        }
+      } else {
+        log_warning( "File $f does not use the CADC naming convention. Skipping.\n");
+      }
+    }
+    if (@new) {
+      @files = @new;
+    } else {
+      die "No files left to process after conversion to NDF";
+    }
+  }
+
+  # We now have to write these files to a text file suitable for
+  # orac-dr to read with the -file option
+  $tmpfile = File::Temp->new() or die "Could not create a temporary file";
+  print $tmpfile "$_\n" for @files;
+  close($tmpfile) or die "Error closing temp file handle";
+
+} else {
+
+  %post_retrieve = scan_dir();
+  $useoracdr = 1;
+  $oracinst = $instrument;
+
+}
 
 # Configure shared environment variables
-$ENV{ORAC_DATA_IN} = $outdir;
+$ENV{'ORAC_DATA_IN'} = ( defined $indir ? $indir : $outdir );
 $ENV{ORAC_DATA_OUT} = $outdir;
 
 # ORAC_PERL5LIB is only set if required
@@ -380,10 +440,14 @@ if ($useoracdr) {
                File::Spec->catfile($ENV{ORAC_DIR},"bin","oracdr"),
                "-nodisplay",
                "-log","fs",
-               "-loop","file",
-               "-file", "$tmpfile",
-               "-recsuffix", "CADC",
+               "-recsuffix", "ADV",
                "-batch" );
+
+  if( $skipdp ) {
+    push @drcommand, "-ut", "$ut", "-skip", "-from", "1", "-to", "1000", "-loop", "flag";
+  } else {
+    push @drcommand, "-loop", "file", "-file", "$tmpfile"
+  }
 
   # The recipe comes at the end and is optional
   push(@drcommand, $drparameters) if defined $drparameters;
@@ -409,7 +473,6 @@ if ($useoracdr) {
 # Run the DR command.
 # We need to decide whether a partial execution of the DR should result in
 # file ingestion.
-
 run_command(@drcommand);
 
 # Process NDF data products and convert them into FITS
@@ -427,10 +490,11 @@ for my $f (sort keys %drhdrs) {
   my $obstype = $drhdrs{$f}->value( "OBS_TYPE" );
   if (defined $obstype && $obstype =~ /science/i) {
     print "Analyzing file headers for DR product in $f\n";
+    my $assoc = $drhdrs{$f}->value( "ASN_TYPE" );
     my $prod = $drhdrs{$f}->value( "PRODUCT" );
-    if (defined $prod && exists $PRODS{$prod}) {
+    if (defined $prod && defined $assoc && exists $PRODS{$assoc}{$prod}) {
       # is exportable so first fix up provenance
-      prov_update_parent_path( $f, @PRODUCTS );
+      prov_update_parent_path( $f, keys %{$PRODS{$assoc}} );
 
       # Modify the WCS attributes so that we generate the correct
       # FITS headers regardless of how the pipeline was configured.
@@ -446,8 +510,9 @@ for my $f (sort keys %drhdrs) {
 }
 
 # Call dpRetrieve with the correct arguments
-
-run_command("dpCapture", "-id", $id, "-debug");
+if( ! $skipdp ) {
+  run_command("dpCapture", "-id", $id, "-debug");
+}
 
 exit;
 
