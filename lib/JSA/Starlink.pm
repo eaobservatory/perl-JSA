@@ -195,7 +195,8 @@ sub prov_update_parent_path {
     }
 
     # Remove the rejected parents (in reverse order)
-    for my $i (sort { $b <=> $a} @rejected) {
+    my %seen = ();
+    for my $i (sort { $b <=> $a } grep { ! $seen{$_} ++ } @rejected) {
       print "Removing $i\n";
       ndg_rmprv( $indf, $i, $status);
     }
@@ -336,7 +337,7 @@ sub _get_prov_parents {
   # Note that we do not use a lexical for status since we want to
   # emulate the interface used for the NDF module
   return () if $_[0] != &NDF::SAI__OK;
-  
+
   # Get the 0th provenance entry
   ndg_gtprv( $indf, $index, my $provloc, $_[0] );
 
@@ -414,6 +415,9 @@ sub _check_parent_product {
         print "Product match\n";
         @isok = ($index);
       }
+    } elsif ( looks_like_rawfile( $path ) ) {
+      print "Looks like raw\n";
+      @isok = ($index);
     } else {
       print "Strange match\n";
     }
