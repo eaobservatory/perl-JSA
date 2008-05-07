@@ -1,5 +1,35 @@
 package JAS::EnterData;
 
+=head1 NAME
+
+JAS::EnterData - Parse headers and store in database
+
+=head1 SYNOPSIS
+
+I<Incomplete so far.>
+
+  my $enter = JAS::EnterData->new;
+
+  #  Set the current date.
+  $enter->set_date;
+
+=head1 DESCRIPTION
+
+JAS::EnterData is a object oriented module to provide back end support
+to load data to CADC.
+
+Reads the headers of all data from either the current date or the
+specified UT date, and uploads the results to the header database. If
+no date is supplied the current localtime is used to determine the
+relevant UT date (which means that it will still pick up last night's
+data even if run after 2pm).
+
+=head2 METHODS
+
+=over 2
+
+=cut
+
 BEGIN {
   use constant OMPLIB => '/jac_sw/omp/msbserver';
 
@@ -70,7 +100,7 @@ my $dictionary =  $FindBin::RealBin. "/import/data.dictionary";
 # first on the array.  Actual instrument table will be the second element.
 my @tables = qw/COMMON/;
 
-my $date = $self->set_date( $ARGV[0] );
+my $date = set_date( $ARGV[0] );
 
 # Instantiate the archive database object
 my $adb = OMP::DBbackend::Archive->new;
@@ -161,13 +191,12 @@ for my $inst (@instruments) {
     my %invalid = $verify->verify_headers;
 
     for (keys %invalid) {
-      if ($invalid{$_}->[0] =~ /does not match/) {
-        $common_hdrs->{$_} = undef;
-      } elsif ($invalid{$_}->[0] =~ /should not/) {
-        if ($common_hdrs->{$_} =~ /^UNDEF/) {
-          $common_hdrs->{$_} = undef;
-        }
-      }
+
+      undef $common_hdrs->{$_}
+        if $invalid{$_}->[0] =~ /does not match/
+        or ( $invalid{$_}->[0] =~ /should not/
+              && $common_hdrs->{$_} =~ /^UNDEF/
+            ) ;
     }
 
     # Calculate RA/Dec (ICRS) extent and base position of observation
@@ -177,8 +206,6 @@ for my $inst (@instruments) {
 
     # Begin transaction
     $dbh->begin_work if $MODDB;
-
-    my $error;
 
     # Create headers that don't exist
     create_headers('COMMON', $common_obs, $common_hdrs);
@@ -215,7 +242,16 @@ $adb->disconnect if defined $adb;
 
 #---------------------- Subroutines ----------------------
 
-# Get the current date, unless one was supplied.
+=item B<set_date>
+
+Sets the date to optional given date as C<yyyymmdd>.  If no date is
+given or does not match the format, then current date in local
+timezone is used.
+
+  $enter->set_date( 20251013 );
+
+=cut
+
 sub set_date {
 
   my ( $date ) = @_;
@@ -228,11 +264,14 @@ sub set_date {
   return $date;
 }
 
-# get_columns:  Given a table name and a DBI database handle object,
-#               return a hash reference containing columns with
-#               their associated data types.
-#
-#               get_columns( $table, $dbh )
+=item B<get_columns>
+
+Given a table name and a DBI database handle object, return a hash
+reference containing columns with their associated data types.
+
+  $cols = $enter->get_columns( $table, $dbh )
+
+=cut
 
 sub get_columns {
   my $table = shift;
@@ -253,14 +292,17 @@ sub get_columns {
   return \%result;
 }
 
-# get_insert_values:  Given a table name, a hash reference containing
-#                     table column information (see global hash %columns),
-#                     a hash reference containing the dictionary contents,
-#                     and a hash reference containing observation headers,
-#                     return a hash reference with the table's columns as the
-#                     keys, and the insertion values as the values.
-#
-#                     get_insert_values( $table, \%columns, \%dictionary, \%hdrhash );
+=item B<get_insert_values>
+Given a table name, a hash reference containing table column
+information (see global hash %columns), a hash reference containing
+the dictionary contents, and a hash reference containing observation
+headers, return a hash reference with the table's columns as the keys,
+and the insertion values as the values.
+
+  $vals =
+    $enter->get_insert_values( $table, \%columns, \%dictionary, \%hdrhash );
+
+=cut
 
 sub get_insert_values {
   my $table = shift;
@@ -354,14 +396,17 @@ sub _update_or_insert {
   return $dbh->errstr;
 }
 
-# update_hash:  Given a table name, a DBI database handle and
-#               a hash reference, retrieve the current data values
-#               based on OBSID or OBSID_SUBSYSNR, decide what has changed
-#               and update the values
-#
-#               update_hash( $table, $dbh, \%to_update );
-#
-#               No-op for files table at the present time
+=item B<update_hash>
+
+Given a table name, a DBI database handle and a hash reference,
+retrieve the current data values based on OBSID or OBSID_SUBSYSNR,
+decide what has changed and update the values.
+
+  $enter->update_hash( $table, $dbh, \%to_update );
+
+No-op for files table at the present time.
+
+=cut
 
 sub update_hash {
   my ($table, $dbh, $field_values) = @_;
@@ -468,18 +513,19 @@ sub update_hash {
   return 1;
 }
 
-# insert_hash:  Given a table name, a DBI database handle and a
-#               hash reference, insert the hash's contents into
-#               the table.  Basically a named insert.  Returns the
-#               executed statement output.  Copied from example in
-#               DBI.pm.
-#
-#               If any of the values in %to_insert are array references
-#               multiple rows will be inserted corresponding to the content.
-#               If more than one row has an array reference the size of those
-#               arrays must be identical.
-#
-#               insert_hash($table, $dbh, \%to_insert);
+=item B<insert_hash>
+
+Given a table name, a DBI database handle and a hash reference, insert
+the hash contents into the table.  Basically a named insert.  Returns
+the executed statement output.  (Copied from example in L<DBI>.)
+
+If any of the values in C<%to_insert> are array references multiple
+rows will be inserted corresponding to the content.  If more than one
+row has an array reference the size of those arrays must be identical.
+
+  $status = $enter->insert_hash($table, $dbh, \%to_insert);
+
+=cut
 
 sub insert_hash {
   my ($table, $dbh, $field_values) = @_;
@@ -567,13 +613,15 @@ sub insert_hash {
   return 1;
 }
 
-# transform_value:  Given a table name, column name, and value
-#                   to be inserted in a table, alter the
-#                   value if the database expects the value
-#                   to be in a different format than that of the
-#                   headers
-#
-#                   transform_value($table, \%columns, \%values);
+=item B<transform_value>
+
+Given a table name, column name, and value to be inserted in a table,
+alter the value if the database expects the value to be in a different
+format than that of the headers.
+
+  $enter->transform_value($table, \%columns, \%values);
+
+=cut
 
 sub transform_value {
   my $table = shift;
@@ -633,19 +681,21 @@ sub transform_value {
   return 1;
 }
 
-# create_headers:  Create any headers that need to go into the database,
-#                  but don't exist.  Currently these headers are:
-#
-#                  decj2000, decj2000_int, filename, idkey, raj2000,
-#                  raj2000_int, ut_dmf, (and sometimes) RUN, UTDATE
-#                  EXPOSED (out of date)
-#
-#                  These arguments should be provided in this order:
-#                  name of the table to receive the headers,
-#                  an OMP::Info::Obs object, and a reference to the
-#                  header hash.  Returns true on success.
-#
-#                  create_headers( $common_table, $obs, \%headers );
+=item B<create_headers>
+
+Create any headers that need to go into the database, but don't exist.
+Currently these headers are:
+
+  decj2000, decj2000_int, filename, idkey, raj2000, raj2000_int,
+  ut_dmf, (and sometimes) RUN, UTDATE EXPOSED (out of date)
+
+These arguments should be provided in this order: name of the table to
+receive the headers, an OMP::Info::Obs object, and a reference to the
+header hash.  Returns true on success.
+
+  $ok = $enter->create_headers( $common_table, $obs, \%headers );
+
+=cut
 
 sub create_headers {
   my $table = shift;
@@ -736,10 +786,14 @@ sub create_headers {
 
 }
 
-# get_max_idkey:  Given the COMMON table name and a database handle object,
-#                 return the highest idkey/index in the COMMON table
-#
-#                 $idkey = get_max_idkey( $common_table, $dbh );
+=item B<get_max_idkey>
+
+Given the COMMON table name and a database handle object, return the
+highest idkey/index in the COMMON table.
+
+  $idkey = $enter->get_max_idkey( $common_table, $dbh );
+
+=cut
 
 sub get_max_idkey {
   my $table = shift;
@@ -754,10 +808,14 @@ sub get_max_idkey {
   return $max;
 }
 
-# create_dictionary:  Given the location of the data dictionary,
-#                     return a hash containing the dictionary contents.
-#
-#                     %dictionary = create_dictionary( $dictionary );
+=item B<create_dictionary>
+
+Given the location of the data dictionary, return a hash containing
+the dictionary contents.
+
+  %dictionary = $enter->create_dictionary( $dictionary );
+
+=cut
 
 sub create_dictionary {
   my $dictionary = shift;
@@ -781,13 +839,15 @@ sub create_dictionary {
   return %dict;
 }
 
-# calc_radec: Calculate RA/Dec extent (ICRS) of the observation
-#             and the base position
-#
-#             $status = calc_radec( $obs, $header );
-#
-# Populates header with corners of grid (in decimal degrees)
-# Status is perl status: 1 good, 0 bad
+=item B<calc_radec>
+
+Calculate RA/Dec extent (ICRS) of the observation and the base
+position.  It populates header with corners of grid (in decimal
+degrees).  Status is perl status: 1 is good, 0 bad.
+
+  $status = $enter->calc_radec( $obs, $header );
+
+=cut
 
 sub calc_radec {
   my ($obs, $headerref) = @_;
@@ -866,14 +926,18 @@ sub calc_radec {
   return 1;
 }
 
-# Calculate frequency properties
-#
-#  calc_freq( $obs, $headerref );
-#
-# Calculates:
-#    zsource, restfreq
-#    freq_sig_lower, freq_sig_upper : BARYCENTRIC Frequency GHz
-#    freq_img_lower, freq_img_upper : BARYCENTRIC Frequency Image Sideband GHz
+=item B<calc_freq>
+
+Calculate frequency properties, updates given hash reference.
+
+  $enter->calc_freq( $obs, $headerref );
+
+It Calculates:
+    zsource, restfreq
+    freq_sig_lower, freq_sig_upper : BARYCENTRIC Frequency GHz
+    freq_img_lower, freq_img_upper : BARYCENTRIC Frequency Image Sideband GHz
+
+=cut
 
 sub calc_freq {
   my $obs = shift;
@@ -927,17 +991,22 @@ sub calc_freq {
   }
 }
 
-# Open an NDF file, read the frameset and the first entry from the supplied list
-# of JCMTSTATE components (can be empty).
-#
-#  Returns hash of JCMTSTATE information and the Starlink::AST object
-#
-#  ($wcs, %state) = read_ndf( $file, @state );
-#
-#  returns empty list on error.
-#  In scalar context just returns WCS frameset
-#
-#  $wcs = read_ndf( $file );
+
+=item B<read_ndf>
+
+Open an NDF file, read the frameset and the first entry from the
+supplied list of JCMTSTATE components (can be empty).
+
+Returns hash of JCMTSTATE information and the Starlink::AST object.
+
+  ($wcs, %state) = read_ndf( $file, @state );
+
+returns empty list on error.  In scalar context just returns WCS
+frameset...
+
+  $wcs = $enter->read_ndf( $file );
+
+=cut
 
 sub read_ndf {
   my $file = shift;
@@ -1001,21 +1070,9 @@ sub read_ndf {
 
 1;
 
-=head1 NAME
+=pod
 
-jcmtenterdata - Parse headers and store in database
-
-=head1 SYNOPSIS
-
-  jcmtenterdata
-  jcmtenterdata 20070209
-
-=head1 DESCRIPTION
-
-Reads the headers of all data from either the current date or the specified UT date, and uploads
-the results to the header database. If no date is supplied the current localtime is used to
-determine the relevant UT date (which means that it will still pick up last night's data even
-if run after 2pm).
+=back
 
 =head1 NOTES
 
@@ -1023,22 +1080,26 @@ Skips any data files that are from simulated runs (SIMULATE=T).
 
 =head1 AUTHORS
 
-Kynan Delorey E<lt>k.delorey@jach.hawaii.eduE<gt>, Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>
+Kynan Delorey E<lt>k.delorey@jach.hawaii.eduE<gt>,
+Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>
 
 Copyright (C) 2006, 2007 Particle Physics and Astronomy Research Council.
 All Rights Reserved.
 
-This program is free software; you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation; either version 2 of the License, or (at your option) any later
-version.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version.
 
-This program is distributed in the hope that it will be useful,but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE. See the GNU General Public License for more details.
+This program is distributed in the hope that it will be useful,but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with
-this program; if not, write to the Free Software Foundation, Inc., 59 Temple
-Place,Suite 330, Boston, MA  02111-1307, USA
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
+USA
 
 =cut
+
