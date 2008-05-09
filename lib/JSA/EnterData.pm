@@ -392,48 +392,41 @@ sub process {
   my %columns;
   $columns{$tables[0]} = $self->get_columns( $tables[0], $dbh );
 
-  # Read in dictionary contents
   my %dict = $self->create_dictionary;
-
-  # Store observation objects for global access
   my %observations;
 
   for my $inst (@instruments) {
     print "Inserting data for [$inst] Date [". $date->ymd ."]\n";
 
-    # Place instrument table on the tables array
     $tables[1] = $inst;
 
-    # Retrieve instrument table columns
     $columns{$inst} = $self->get_columns($inst, $dbh);
     $columns{FILES} = $self->get_columns('FILES', $dbh);
 
-    # Retrieve observations from disk
-    # An Info::Obs object will be returned for each subscan
-    # in the observation. No need to retrieve associated obslog comments
-    # That's no. of subsystems used * no. of subscans objects
-    # returned per observation.
-    my $grp = new OMP::Info::ObsGroup(instrument => $inst,
-                                      date => $date,
-                                      nocomments => 1,
-                                      retainhdr => 1,
-                                      ignorebad => 1,);
+    # Retrieve observations from disk.  An Info::Obs object will be returned for
+    # each subscan in the observation. No need to retrieve associated obslog
+    # comments. That's no. of subsystems used * no. of subscans objects returned
+    # per observation.
+    my $grp = OMP::Info::ObsGroup->new( instrument => $inst,
+                                        date => $date,
+                                        nocomments => 1,
+                                        retainhdr => 1,
+                                        ignorebad => 1,
+                                      );
 
-    # Store observation objects in @obs
     my @obs = $grp->obs;
 
-    # Go to next instrument if no observations returned
     if (! $obs[0]) {
       print "\tNo observations found for instrument $inst\n\n";
       next;
     }
 
-    # Need to create a hash with keys corresponding to the observation
-    # number (an array won't be very efficient since observations can be
-    # missing and run numbers can be large). The values in this hash have
-    # to be a reference to an array of Info::Obs objects representing each
-    # subsystem. We need to construct new Obs objects based on the subsystem
-    # number.  $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
+    # Need to create a hash with keys corresponding to the observation number
+    # (an array won't be very efficient since observations can be missing and
+    # run numbers can be large). The values in this hash have to be a reference
+    # to an array of Info::Obs objects representing each subsystem. We need to
+    # construct new Obs objects based on the subsystem number.
+    # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
 
     for my $obs (@obs) {
       my $hdrref = $obs->hdrhash;
@@ -446,27 +439,23 @@ sub process {
     # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
     # 3. Insert a row in the FILES table for each subscan
     #
-    # Group all steps together in a single transaction, so that if any
-    # insert fails, the entire observation fails to go in to the DB.
+    # Group all steps together in a single transaction, so that if any insert
+    # fails, the entire observation fails to go in to the DB.
 
-  OBS: for my $runnr (sort {$a <=> $b} keys %observations) {
+    OBS: for my $runnr (sort {$a <=> $b} keys %observations) {
 
-      # Obtain COMMON table values from first obs object in the observation
       my $common_obs = $observations{$runnr}->[0];
       my $common_hdrs = $common_obs->hdrhash;
 
       print "\t[". join(",",$common_obs->simple_filename) ."] ... ";
 
-      # Skip observation if SIMULATE header = T
       if (($common_hdrs->{SIMULATE})) {
         print "simulation data. Skipping\n";
         next;
       }
 
-      # Verify the headers, and set invalid headers to undef
-      my $verify = new JCMT::DataVerify(Obs => $common_obs);
+      my $verify = JCMT::DataVerify->new(Obs => $common_obs);
       my %invalid = $verify->verify_headers;
-
       for (keys %invalid) {
 
         undef $common_hdrs->{$_}
@@ -481,17 +470,16 @@ sub process {
       my $cstat = $self->calc_radec( $common_obs, $common_hdrs );
       next unless $cstat;
 
-      # Begin transaction
       $dbh->begin_work if $self->load_header_db;
 
-      # Create headers that don't exist
-      $self->create_headers('COMMON', $common_obs, $common_hdrs);
-
-      # Create hash reference for named insert
-      my $insert_ref = $self->get_insert_values('COMMON', \%columns, \%dict, $common_hdrs);
-
-      # Do insert
-      my $error = $self->_update_or_insert( 'COMMON', $dbh, $insert_ref );
+      my $error =
+        $self->_update_or_insert( 'dbhandle' => $dbh,
+                                  'table'   => 'COMMON',
+                                  'obs'     => $common_obs,
+                                  'headers' => $common_hdrs,
+                                  'columns' => \%columns,
+                                  'dict'    => \%dict,
+                                );
 
       if ($error) {
         $dbh->rollback;
@@ -506,11 +494,9 @@ sub process {
       $self->add_subsys_obs( $dbh, $observations{$runnr}, \%columns, \%dict )
         or next OBS;
 
-      # End transaction
       $dbh->commit if $self->load_header_db;
 
       print "successful\n";
-
     }
   }
 
@@ -589,7 +575,7 @@ sub get_insert_values {
   }
 
   # Do value transformation
-  transform_value($table, $columns, \%values);
+  $self->transform_value($table, $columns, \%values);
 
   return \%values;
 }
@@ -611,12 +597,14 @@ sub add_subsys_obs {
     # Need to calculate the frequency information
     $self->calc_freq( $subsys_obs, $subsys_hdrs );
 
-    # Create headers that don't exist
-    $self->create_headers('ACSIS', $subsys_obs, $subsys_hdrs);
-
-    my $insert_ref = $self->get_insert_values('ACSIS', $cols, $dict, $subsys_hdrs);
-
-    my $error = $self->_update_or_insert( 'ACSIS', $dbh, $insert_ref );
+    my $error =
+      $self->_update_or_insert( 'dbhandle' => $dbh,
+                                'table'   => 'ACSIS',
+                                'headers' => $subsys_hdrs,
+                                'obs'     => $subsys_obs,
+                                'columns' => $cols,
+                                'dict'    => $dict,
+                              );
 
     if ($error) {
       $dbh->rollback if $self->load_header_db;
@@ -645,10 +633,17 @@ sub add_subsys_obs {
 
 sub _update_or_insert {
 
-  my ( $self, $table, $dbh, $vals ) = @_;
+  my ( $self, %args ) = @_;
+
+  # Create missing headers.
+  $self->create_headers( @args{qw/ table obs headers /} );
 
   my $run = $self->update ? 'update_hash' : 'insert_hash';
-  my $ok = $self->$run( $table, $dbh, $vals );
+
+  my $ok =
+    $self->$run( @args{qw/ table dbhandle /},
+                  $self->get_insert_values( @args{qw/ table columns dict headers /} )
+                );
 
   return $dbh->errstr;
 }
