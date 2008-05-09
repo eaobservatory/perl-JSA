@@ -1,4 +1,4 @@
-package JAS::EnterData;
+package JSA::EnterData;
 
 =head1 NAME
 
@@ -136,6 +136,65 @@ BEGIN
     }
   }
 
+=item B<new>
+
+Constructor.  A data dictionary file name is required, which is set by
+default.  It can be overridden as ...
+
+  $enter = JSA::EnterData->new( 'dict' => '/file/path/' );
+
+Configuration values which can be passed as key-value pairs are ...
+
+=over 4
+
+=item I<date> C<yyyymmdd>
+
+Date to set given in C<yyyymmdd> format.
+Default is the current date in local timezone (at the time of use of
+this module).
+
+=item I<debug> C<1 | 0>
+
+Debugging means interact with the database, but don't actually do any
+inserts, and be very verbose.  Default is false.
+
+=item I<dict> C<file name>
+
+File name for data dictionary.  Default name is in
+"/import/data.dictionary" located in directory containing this module.
+
+=item I<force-disk> C<1 | 0>
+
+A truth value whether to force looking for data on disk, not in
+database.  Default is true.
+
+When the value is true, I<force-db> is marked false.
+
+=item I<force-db> C<1 | 0>
+
+A truth value whether to force looking for data in database, not on
+disk. Default is false.
+
+Currently it does not do anything.
+
+When the value is true, I<force-disk> is marked false.
+
+=item I<load-header-db> C<1 | 0>
+
+A truth value to control loading of header database.  Default is true.
+
+=item I<syb-date> C<date format>
+
+Date format for Sybase database.  Default is C<%Y-%m-%d %H:%M:%S>.
+
+=item I<update> C<1 | 0>
+
+A truth value whether to update (?).
+
+=back
+
+=cut
+
   sub new {
 
     my ( $class, %args ) = @_;
@@ -167,11 +226,70 @@ BEGIN
   }
 }
 
-sub get_dict {
+=item B<debug>
 
-  my ( $self ) = @_;
-  return $self->{'dict'};
+Returns the set truth value if no arguments given.
+
+  $debug = $enter->debug;
+
+Else, sets the value to turn on or off debugging; returns nothing.
+
+  $enter->debug( 0 );
+
+=item B<date>
+
+Returns the set date if no arguments given.
+
+  $date = $enter->date;
+
+Else, sets the date to date given in C<yyyymmdd> format; returns
+nothing.  If date does not match the format, then current date in
+local timezone is used.
+
+  $enter->date( 20251013 );
+
+=cut
+
+sub date {
+
+  my $self = shift;
+
+  return $self->{'date'} unless scalar @_;
+
+  my $date = shift;
+  $self->{'date'} =
+    $date && $date =~ /^\d{8}$/
+      ? Time::Piece->strptime( $date, '%Y%m%d' )
+      : localtime
+    ;
+
+  return;
 }
+
+=item B<syb_date>
+
+Returns the set date format for Sybase database consumption if no
+arguments given.
+
+  $format = $enter->syb_date;
+
+Else, sets the date format; returns nothing.
+
+  $enter->syb_date( '%Y-%m-%d %H:%M:%S' );
+
+=item B<force_disk>
+
+Returns the truth value, when called without arguments, to indicate
+whether searching the disk for data is forced.
+
+  $disk = $enter->force_disk;
+
+Else, sets the given truth value; returns nothing.  When the value is
+true, I<force-db> is marked false (see I<new>).
+
+  $enter->force_disk( 1 );
+
+=cut
 
 sub force_db {
 
@@ -183,6 +301,20 @@ sub force_db {
   $self->force_disk( 0 ) if $self->{'force-db'};
   return;
 }
+
+=item B<force_db>
+
+Returns the truth value, when called without arguments, to indicate
+whether searching the database for data is forced.
+
+  $db = $enter->force_db;
+
+Else, sets the given truth value; returns nothing.  When the value is
+true, I<force-disk> is marked false (see I<new>).
+
+  $enter->force_db( 0 );
+
+=cut
 
 sub force_disk {
 
@@ -197,8 +329,44 @@ sub force_disk {
   return;
 }
 
-sub process
-{
+=item B<load_header_db>
+
+Returns the set truth value to indicate where to load in the header
+database, if no arguments given.
+
+  $load = $enter->load_header_db;
+
+Else, sets the truth value to turn on or off loading the header
+database; returns nothing.
+
+  $enter->load_header_db( 1 );
+
+=item B<update>
+
+Returns the set truth value if no arguments given.
+
+  $update = $enter->update;
+
+Else, sets the value to turn on or off updating; returns nothing.
+
+  $enter->update( 0 );
+
+=cut
+
+=item B<get_dict>
+
+Returns the file name for the data dictionary.
+
+=cut
+
+sub get_dict {
+
+  my ( $self ) = @_;
+  return $self->{'dict'};
+}
+
+sub process {
+
   my ( $self, $date ) = @_;
 
   $date = $self->date( $date );
@@ -339,36 +507,6 @@ sub process
 
     }
   }
-
-  return;
-}
-
-=item B<set_date>
-
-Returns the set date if no arguments given.
-
-  $date = $enter->date;
-
-Else, sets the date to date given in C<yyyymmdd> format; returns
-nothing.  If date does not match the format, then current date in
-local timezone is used.
-
-  $enter->date( 20251013 );
-
-=cut
-
-sub date {
-
-  my $self = shift;
-
-  return $self->{'date'} unless scalar @_;
-
-  my $date = shift;
-  $self->{'date'} =
-    $date && $date =~ /^\d{8}$/
-      ? Time::Piece->strptime( $date, '%Y%m%d' )
-      : localtime
-    ;
 
   return;
 }
