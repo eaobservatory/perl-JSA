@@ -365,6 +365,12 @@ sub get_dict {
   return $self->{'dict'};
 }
 
+=item B<process>
+
+a sub of humongous length to be documented, refactored.
+
+=cut
+
 sub process {
 
   my ( $self, $date ) = @_;
