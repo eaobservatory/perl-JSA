@@ -11,7 +11,7 @@ I<Incomplete so far.>
   my $enter = JAS::EnterData->new;
 
   #  Set the current date.
-  $enter->set_date;
+  $enter->date;
 
 =head1 DESCRIPTION
 
@@ -53,6 +53,7 @@ use Astro::Coords::Angle::Hour;
 
 use JCMT::DataVerify;
 
+use OMP::Error qw/ :try /;
 use OMP::DBbackend::Archive;
 use OMP::Info::ObsGroup;
 use OMP::General;
@@ -70,212 +71,321 @@ BEGIN {
   $ENV{ADAM_EXIT} = 1;
 }
 
-# Debugging.  Set to true to turn on.  Debugging means interact
-# with the database, but don't actually do any inserts, and be
-# very verbose.
-our $debug = 0;
+BEGIN
+{
+  my %_db =
+    (
+      'arch-db' => OMP::DBbackend::Archive->new
+    );
 
-# Upload to header database?
-our $MODDB = 1;
+  sub _get_dbh {
 
-# Update mode
-our $UPDATE = 0;
-
-# Sybase date format
-my $syb_date = '%Y-%m-%d %H:%M:%S';
-
-# Force observation queries to query files on disk rather than
-# the database.
-$OMP::ArchiveDB::SkipDBLookup = 1;
-
-# Instruments known to the database
-my @instruments = qw/ACSIS/;
-
-# Location of data dictionary
-# NOTE: This should go in to the OMP config system at some point
-
-my $dictionary =  $FindBin::RealBin. "/import/data.dictionary";
-
-# Tables of interest.  All instruments reference the COMMON table, so it is
-# first on the array.  Actual instrument table will be the second element.
-my @tables = qw/COMMON/;
-
-my $date = set_date( $ARGV[0] );
-
-# Instantiate the archive database object
-my $adb = OMP::DBbackend::Archive->new;
-
-# Get the database handle
-my $dbh;
-$dbh = $adb->handle if defined $adb;
-
-# The %columns hash will contain a key for each table, each key's value
-# being an anonymous hash containing the column information.  Store this
-# information for the COMMON table initially.
-my %columns;
-$columns{$tables[0]} = get_columns( $tables[0], $dbh );
-
-# Read in dictionary contents
-my %dict = create_dictionary($dictionary);
-
-# Store observation objects for global access
-my %observations;
-
-for my $inst (@instruments) {
-  print "Inserting data for [$inst] Date [". $date->ymd ."]\n";
-
-  # Place instrument table on the tables array
-  $tables[1] = $inst;
-
-  # Retrieve instrument table columns
-  $columns{$inst} = get_columns($inst, $dbh);
-  $columns{FILES} = get_columns('FILES', $dbh);
-
-  # Retrieve observations from disk
-  # An Info::Obs object will be returned for each subscan
-  # in the observation. No need to retrieve associated obslog comments
-  # That's no. of subsystems used * no. of subscans objects
-  # returned per observation.
-  my $grp = new OMP::Info::ObsGroup(instrument => $inst,
-                                    date => $date,
-                                    nocomments => 1,
-                                    retainhdr => 1,
-                                    ignorebad => 1,);
-
-  # Store observation objects in @obs
-  my @obs = $grp->obs;
-
-  # Go to next instrument if no observations returned
-  if (! $obs[0]) {
-    print "\tNo observations found for instrument $inst\n\n";
-    next;
+    return $_db{'arch-db'}->handle if defined $_db{'arch-db'};
+    return;
   }
 
-  # Need to create a hash with keys corresponding to the observation
-  # number (an array won't be very efficient since observations can be
-  # missing and run numbers can be large). The values in this hash have
-  # to be a reference to an array of Info::Obs objects representing each
-  # subsystem. We need to construct new Obs objects based on the subsystem
-  # number.  $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
+  sub DESTROY {
 
-  for my $obs (@obs) {
-    my $hdrref = $obs->hdrhash;
-    my @subhdrs = $obs->subsystems;
-    $observations{$obs->runnr} = \@subhdrs;
+    $_db{'arch-db'}->disconnect if defined $_db{'arch-db'};
   }
 
-  # For each observation:
-  # 1. Insert a row in the COMMON table.
-  # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
-  # 3. Insert a row in the FILES table for each subscan
-  #
-  # Group all steps together in a single transaction, so that if any
-  # insert fails, the entire observation fails to go in to the DB.
+  my %default =
+    (
+      'date'     => scalar localtime,
+      'syb-date' => '%Y-%m-%d %H:%M:%S',
 
- OBS: for my $runnr (sort {$a <=> $b} keys %observations) {
+      'load-header-db' => 1,
+      'force-disk'     => 1,
+      'force-db'       => 0,
+      # Update only mode.
+      'update'         => 0,
 
-    # Obtain COMMON table values from first obs object in the observation
-    my $common_obs = $observations{$runnr}->[0];
-    my $common_hdrs = $common_obs->hdrhash;
+      # Location of data dictionary
+      # NOTE: This should go in to the OMP config system at some point
+      'dict' =>  $FindBin::RealBin . '/import/data.dictionary',
 
-    print "\t[". join(",",$common_obs->simple_filename) ."] ... ";
+      # Debugging.  Set to true to turn on.  Debugging means interact
+      # with the database, but don't actually do any inserts, and be
+      # very verbose.
+      'debug' => 0,
+    );
 
-    # Skip observation if SIMULATE header = T
-    if (($common_hdrs->{SIMULATE})) {
-      print "simulation data. Skipping\n";
-      next;
+  #  Generate some accessor functions.
+  for my $k ( keys %default ) {
+
+    next
+      # Dictionary must be given in constructor.
+      if $k eq 'dict'
+      # Special handling when date to set is given.
+      or $k eq 'date'
+      # Need to turn off the other if one is true.
+      or $k =~ m/^ force-d(?: isk | b ) $/x
+      ;
+
+    {
+      (my $sub = $k ) =~ tr/-/_/;
+      no strict 'refs';
+      *$sub = sub {
+                my $self = shift;
+
+                return $self->{ $k } unless scalar @_;
+
+                $self->{ $k } = shift;
+                return;
+              };
+    }
+  }
+
+  sub new {
+
+    my ( $class, %args ) = @_;
+
+    my %obj = %default;
+    for ( keys %default ) {
+
+      $obj{ $_ } = $args{ $_ } if exists $args{ $_ };
     }
 
-    # Verify the headers, and set invalid headers to undef
-    my $verify = new JCMT::DataVerify(Obs => $common_obs);
-    my %invalid = $verify->verify_headers;
+    my $obj = bless \%obj, $class;
 
-    for (keys %invalid) {
+    $obj->_verify_dict;
 
-      undef $common_hdrs->{$_}
-        if $invalid{$_}->[0] =~ /does not match/
-        or ( $invalid{$_}->[0] =~ /should not/
-              && $common_hdrs->{$_} =~ /^UNDEF/
-            ) ;
-    }
+    for ( qw/ force-disk force-db / ) {
 
-    # Calculate RA/Dec (ICRS) extent and base position of observation
-    # Both subsystems are identical so we only have to do this with the first one
-    my $cstat = calc_radec( $common_obs, $common_hdrs );
-    next unless $cstat;
+      ( my $sub = $_ ) =~ tr/-/_/;
+      if ( $obj->can( $sub ) ) {
 
-    # Begin transaction
-    $dbh->begin_work if $MODDB;
-
-    # Create headers that don't exist
-    create_headers('COMMON', $common_obs, $common_hdrs);
-
-    # Create hash reference for named insert
-    my $insert_ref = get_insert_values('COMMON', \%columns, \%dict, $common_hdrs);
-
-    # Do insert
-    my $error = _update_or_insert( 'COMMON', $dbh, $insert_ref );
-
-    if ($error) {
-      $dbh->rollback;
-      if ($error =~ /insert duplicate key row/) {
-        print "File metadata already present\n";
-      } else {
-        print "$error\n\n";
+        $obj{ $_ } = $obj->$sub;
       }
-      next;
+      else {
+
+        die "Oops, $sub() is unimplemented.";
+      }
     }
 
-    add_subsys_obs( $dbh, $observations{$runnr}, \%columns, \%dict )
-      or next OBS;
-
-    # End transaction
-    $dbh->commit if $MODDB;
-
-    print "successful\n";
-
+    return $obj;
   }
 }
 
-# Close database connection
-$adb->disconnect if defined $adb;
+sub get_dict {
 
-#---------------------- Subroutines ----------------------
+  my ( $self ) = @_;
+  return $self->{'dict'};
+}
+
+sub force_db {
+
+  my $self = shift;
+
+  return $self->{'force-db'} unless scalar @_;
+
+  $self->{'force-db'} = !! shift;
+  $self->force_disk( 0 ) if $self->{'force-db'};
+  return;
+}
+
+sub force_disk {
+
+  my $self = shift;
+
+  return $OMP::ArchiveDB::SkipDBLookup unless scalar @_;
+
+  # Force observation queries to query files on disk rather than the database.
+  $OMP::ArchiveDB::SkipDBLookup = !! shift;
+
+  $self->force_db( 0 ) if $self->{'force-disk'};
+  return;
+}
+
+sub process
+{
+  my ( $self, $date ) = @_;
+
+  $date = $self->date( $date );
+
+  # Instruments known to the database
+  my @instruments = qw/ACSIS/;
+
+  # Tables of interest.  All instruments reference the COMMON table, so it is
+  # first on the array.  Actual instrument table will be the second element.
+  my @tables = qw/COMMON/;
+
+  my $dbh = _get_dbh();
+
+  # The %columns hash will contain a key for each table, each key's value
+  # being an anonymous hash containing the column information.  Store this
+  # information for the COMMON table initially.
+  my %columns;
+  $columns{$tables[0]} = $self->get_columns( $tables[0], $dbh );
+
+  # Read in dictionary contents
+  my %dict = $self->create_dictionary;
+
+  # Store observation objects for global access
+  my %observations;
+
+  for my $inst (@instruments) {
+    print "Inserting data for [$inst] Date [". $date->ymd ."]\n";
+
+    # Place instrument table on the tables array
+    $tables[1] = $inst;
+
+    # Retrieve instrument table columns
+    $columns{$inst} = $self->get_columns($inst, $dbh);
+    $columns{FILES} = $self->get_columns('FILES', $dbh);
+
+    # Retrieve observations from disk
+    # An Info::Obs object will be returned for each subscan
+    # in the observation. No need to retrieve associated obslog comments
+    # That's no. of subsystems used * no. of subscans objects
+    # returned per observation.
+    my $grp = new OMP::Info::ObsGroup(instrument => $inst,
+                                      date => $date,
+                                      nocomments => 1,
+                                      retainhdr => 1,
+                                      ignorebad => 1,);
+
+    # Store observation objects in @obs
+    my @obs = $grp->obs;
+
+    # Go to next instrument if no observations returned
+    if (! $obs[0]) {
+      print "\tNo observations found for instrument $inst\n\n";
+      next;
+    }
+
+    # Need to create a hash with keys corresponding to the observation
+    # number (an array won't be very efficient since observations can be
+    # missing and run numbers can be large). The values in this hash have
+    # to be a reference to an array of Info::Obs objects representing each
+    # subsystem. We need to construct new Obs objects based on the subsystem
+    # number.  $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
+
+    for my $obs (@obs) {
+      my $hdrref = $obs->hdrhash;
+      my @subhdrs = $obs->subsystems;
+      $observations{$obs->runnr} = \@subhdrs;
+    }
+
+    # For each observation:
+    # 1. Insert a row in the COMMON table.
+    # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
+    # 3. Insert a row in the FILES table for each subscan
+    #
+    # Group all steps together in a single transaction, so that if any
+    # insert fails, the entire observation fails to go in to the DB.
+
+  OBS: for my $runnr (sort {$a <=> $b} keys %observations) {
+
+      # Obtain COMMON table values from first obs object in the observation
+      my $common_obs = $observations{$runnr}->[0];
+      my $common_hdrs = $common_obs->hdrhash;
+
+      print "\t[". join(",",$common_obs->simple_filename) ."] ... ";
+
+      # Skip observation if SIMULATE header = T
+      if (($common_hdrs->{SIMULATE})) {
+        print "simulation data. Skipping\n";
+        next;
+      }
+
+      # Verify the headers, and set invalid headers to undef
+      my $verify = new JCMT::DataVerify(Obs => $common_obs);
+      my %invalid = $verify->verify_headers;
+
+      for (keys %invalid) {
+
+        undef $common_hdrs->{$_}
+          if $invalid{$_}->[0] =~ /does not match/
+          or ( $invalid{$_}->[0] =~ /should not/
+                && $common_hdrs->{$_} =~ /^UNDEF/
+              ) ;
+      }
+
+      # Calculate RA/Dec (ICRS) extent and base position of observation
+      # Both subsystems are identical so we only have to do this with the first one
+      my $cstat = $self->calc_radec( $common_obs, $common_hdrs );
+      next unless $cstat;
+
+      # Begin transaction
+      $dbh->begin_work if $self->load_header_db;
+
+      # Create headers that don't exist
+      $self->create_headers('COMMON', $common_obs, $common_hdrs);
+
+      # Create hash reference for named insert
+      my $insert_ref = $self->get_insert_values('COMMON', \%columns, \%dict, $common_hdrs);
+
+      # Do insert
+      my $error = $self->_update_or_insert( 'COMMON', $dbh, $insert_ref );
+
+      if ($error) {
+        $dbh->rollback;
+        if ($error =~ /insert duplicate key row/) {
+          print "File metadata already present\n";
+        } else {
+          print "$error\n\n";
+        }
+        next;
+      }
+
+      $self->add_subsys_obs( $dbh, $observations{$runnr}, \%columns, \%dict )
+        or next OBS;
+
+      # End transaction
+      $dbh->commit if $self->load_header_db;
+
+      print "successful\n";
+
+    }
+  }
+
+  return;
+}
 
 =item B<set_date>
 
-Sets the date to optional given date as C<yyyymmdd>.  If no date is
-given or does not match the format, then current date in local
-timezone is used.
+Returns the set date if no arguments given.
 
-  $enter->set_date( 20251013 );
+  $date = $enter->date;
+
+Else, sets the date to date given in C<yyyymmdd> format; returns
+nothing.  If date does not match the format, then current date in
+local timezone is used.
+
+  $enter->date( 20251013 );
 
 =cut
 
-sub set_date {
+sub date {
 
-  my ( $date ) = @_;
+  my $self = shift;
 
-  $date =
-    $date && $date =~ /^\d{8}/
-    ? Time::Piece->strptime($ARGV[0], "%Y%m%d")
-    : localtime;
+  return $self->{'date'} unless scalar @_;
 
-  return $date;
+  my $date = shift;
+  $self->{'date'} =
+    $date && $date =~ /^\d{8}$/
+      ? Time::Piece->strptime( $date, '%Y%m%d' )
+      : localtime
+    ;
+
+  return;
 }
 
 =item B<get_columns>
 
-Given a table name and a DBI database handle object, return a hash
-reference containing columns with their associated data types.
+Given a table name and a DBI database handle object, return a hash reference
+containing columns with their associated data types.
 
   $cols = $enter->get_columns( $table, $dbh )
 
 =cut
 
 sub get_columns {
-  my $table = shift;
-  my $dbh = shift;
+
+  my ( $self, $table, $dbh ) = @_;
+
   my %result;
   return {} unless defined $dbh;
 
@@ -293,6 +403,7 @@ sub get_columns {
 }
 
 =item B<get_insert_values>
+
 Given a table name, a hash reference containing table column
 information (see global hash %columns), a hash reference containing
 the dictionary contents, and a hash reference containing observation
@@ -305,34 +416,32 @@ and the insertion values as the values.
 =cut
 
 sub get_insert_values {
-  my $table = shift;
-  my $columns = shift;
-  my $dictionary = shift;
-  my $hdrhash = shift;
+
+  my ( $self, $table, $columns, $dictionary, $hdrhash ) = @_;
 
   # Map headers to columns, translating from the dictionary as
   # necessary.
   my %values;
   for my $header (keys %$hdrhash) {
-    if (exists $columns{$table}{lc($header)}) {
+    if (exists $columns->{$table}{lc($header)}) {
 
       # Column exists, no need to translate
       $values{lc($header)} = $hdrhash->{$header};
     } else {
 
       # Header not found, try translating
-      if (exists $dictionary->{lc($header)} and exists $columns{$table}{$dictionary->{lc($header)}}) {
+      if (exists $dictionary->{lc($header)} and exists $columns->{$table}{$dictionary->{lc($header)}}) {
 
         # Found header alias in dictionary and column exists in table
         my $alias = $dictionary->{lc($header)};
         $values{$alias} = $hdrhash->{$header};
 
         print "Mapped header [$header] to column [$alias]\n"
-          if ($debug);
+          if $self->debug;
       }
     }
     print "Could not find alias for header [$header]. Skipped.\n"
-      if ($debug and ! exists $values{lc($header)});
+      if $self->debug and ! exists $values{lc($header)};
   }
 
   # Do value transformation
@@ -343,7 +452,7 @@ sub get_insert_values {
 
 sub add_subsys_obs {
 
-  my ( $dbh, $obs, $cols, $dict ) = @_;
+  my ( $self, $dbh, $obs, $cols, $dict ) = @_;
 
   my $subsysnr = 0;
   my $totsub = scalar @{ $obs };
@@ -356,27 +465,27 @@ sub add_subsys_obs {
     my $subsys_hdrs = $subsys_obs->hdrhash;
 
     # Need to calculate the frequency information
-    calc_freq( $subsys_obs, $subsys_hdrs );
+    $self->calc_freq( $subsys_obs, $subsys_hdrs );
 
     # Create headers that don't exist
-    create_headers('ACSIS', $subsys_obs, $subsys_hdrs);
+    $self->create_headers('ACSIS', $subsys_obs, $subsys_hdrs);
 
-    my $insert_ref = get_insert_values('ACSIS', $cols, $dict, $subsys_hdrs);
+    my $insert_ref = $self->get_insert_values('ACSIS', $cols, $dict, $subsys_hdrs);
 
-    my $error = _update_or_insert( 'ACSIS', $dbh, $insert_ref );
+    my $error = $self->_update_or_insert( 'ACSIS', $dbh, $insert_ref );
 
     if ($error) {
-      $dbh->rollback if $MODDB;
+      $dbh->rollback if $self->load_header_db;
       print "$error\n\n";
       return;
     }
 
     # Create headers that don't exist
-    create_headers('FILES', $subsys_obs, $subsys_hdrs);
+    $self->create_headers('FILES', $subsys_obs, $subsys_hdrs);
 
-    $insert_ref = get_insert_values('FILES', $cols, $dict, $subsys_hdrs);
+    $insert_ref = $self->get_insert_values('FILES', $cols, $dict, $subsys_hdrs);
 
-    if (!$UPDATE) {
+    if ( $self->update ) {
       insert_hash('FILES', $dbh, $insert_ref)
         or $error = $dbh->errstr;
     }
@@ -392,7 +501,11 @@ sub add_subsys_obs {
 
 sub _update_or_insert {
 
-  my $ok = $UPDATE ? &update_hash : &insert_hash;
+  my ( $self, $table, $dbh, $vals ) = @_;
+
+  my $run = $self->update ? 'update_hash' : 'insert_hash';
+  my $ok = $self->$run( $table, $dbh, $vals );
+
   return $dbh->errstr;
 }
 
@@ -409,7 +522,8 @@ No-op for files table at the present time.
 =cut
 
 sub update_hash {
-  my ($table, $dbh, $field_values) = @_;
+
+  my ( $self, $table, $dbh, $field_values ) = @_;
 
   return if $table eq 'FILES';
 
@@ -492,7 +606,7 @@ sub update_hash {
   # Now have to do an UPDATE
   $sql = "UPDATE $table SET ";
   my @changes;
-  if (!$debug && $MODDB) {
+  if (!$self->debug && $self->load_header_db ) {
     # real version with placeholders
     @changes = map { "$_ = ? " } sort keys %differ;
   } else {
@@ -502,7 +616,7 @@ sub update_hash {
   $sql .= join(", ", @changes );
   $sql .= " where $unique_key = '$unique_val'";
 
-  if (!$debug && $MODDB) {
+  if (!$self->debug && $self->load_header_db ) {
     my $sth = $dbh->prepare($sql)
       or die "Could not prepare sql statement for insert\n". $dbh->errstr. "\n";
     my $status = $sth->execute( map { $differ{$_} } sort keys %differ );
@@ -528,7 +642,8 @@ row has an array reference the size of those arrays must be identical.
 =cut
 
 sub insert_hash {
-  my ($table, $dbh, $field_values) = @_;
+
+  my ( $self, $table, $dbh, $field_values ) = @_;
 
   # Go through the hash and work out whether we have multiple inserts
   my @have_ref;
@@ -582,7 +697,7 @@ sub insert_hash {
   # cache the SQL statement
   my $sth;
 
-  if (!$debug && $MODDB) {
+  if (!$self->debug && $self->load_header_db) {
     $sth = $dbh->prepare($sql)
       or die "Could not prepare sql statement for insert\n". $dbh->errstr ."\n";
   }
@@ -590,7 +705,7 @@ sub insert_hash {
   # and insert all the rows
   for my $row (@insert_hashes) {
     my @values = @{$row}{@fields}; # hash slice
-    if ($debug) {
+    if ($self->debug) {
       # print out some SQL that is not going to be executed
       for (@values) {
         if (defined $_) {
@@ -605,7 +720,7 @@ sub insert_hash {
          $table, join(",", @fields), join(",", @values);
 
       print "-----> SQL: $debug_sql\n";
-    } elsif ($MODDB) {
+    } elsif ($self->load_header_db) {
       my $status = $sth->execute(@values);
       return $status if !$status; # return if bad status
     }
@@ -624,9 +739,8 @@ format than that of the headers.
 =cut
 
 sub transform_value {
-  my $table = shift;
-  my $columns = shift;
-  my $values = shift;
+
+  my ( $self, $table, $columns, $values ) = @_;
 
   # Transform data hash.  Each data type name contains a hash mapping
   # values from the headers to the values the database expects.
@@ -654,9 +768,9 @@ sub transform_value {
 
         # Convert date to sybase compatible
         my $date = Time::Piece->strptime($val,'%Y-%m-%dT%H:%M:%S');
-        $values->{$column} = $date->strftime($syb_date);
+        $values->{$column} = $date->strftime($self->syb_date);
         print "Converted date [$val] to [". $values->{$column} ."] for column [$column]\n"
-          if ($debug);
+          if $self->debug;
 
       } elsif (exists $transform_data{$data_type}) {
 
@@ -666,7 +780,7 @@ sub transform_value {
           # defined in the %transform_data hash
           $values->{$column} = $transform_data{$data_type}{$val};
           print "Transformed value [$val] to [". $values->{$column} ."] for column [$column]\n"
-            if ($debug);
+            if $self->debug;
         }
       } elsif ($column eq 'lststart' or $column eq 'lstend') {
 
@@ -674,7 +788,7 @@ sub transform_value {
         my $ha = new Astro::Coords::Angle::Hour($val, units => 'sex');
         $values->{$column} = $ha->hours;
         print "Converted time [$val] to [". $values->{$column} ."] for column [$column]\n"
-          if ($debug);
+          if $self->debug;
       }
     }
   }
@@ -698,9 +812,8 @@ header hash.  Returns true on success.
 =cut
 
 sub create_headers {
-  my $table = shift;
-  my $obs = shift;
-  my $headerref = shift;
+
+  my ( $self, $table, $obs, $headerref ) = @_;
 
   # Get date of observation
   my $obsdate = $obs->utdate;
@@ -733,16 +846,16 @@ sub create_headers {
       # immediate release
       $release_date = OMP::General->yesterday(1);
     }
-    $headerref->{release_date} = $release_date->strftime($syb_date);
+    $headerref->{release_date} = $release_date->strftime($self->syb_date);
 
     print "Created header [release_date] with value [". $headerref->{release_date} ."]\n"
-      if ($debug);
+      if $self->debug;
 
     # Create last_modifed
     my $today = gmtime;
-    $headerref->{last_modified} = $today->strftime($syb_date);
+    $headerref->{last_modified} = $today->strftime($self->syb_date);
     print "Created header [last_modified] with value [". $headerref->{last_modified} ."]\n"
-      if ($debug);
+      if $self->debug;
 
   } elsif ($table eq 'ACSIS') {
 
@@ -750,7 +863,7 @@ sub create_headers {
     my @subscans = $obs->simple_filename;
     $headerref->{max_subscan} = scalar(@subscans);
     print "Created header [max_subscan] with value [". $headerref->{max_subscan} ."]\n"
-      if ($debug);
+      if $self->debug;
 
   } elsif ($table eq 'FILES') {
 
@@ -773,7 +886,7 @@ sub create_headers {
     }
 
     print "Created header [file_id] with value [". join(",",@{$headerref->{file_id}}) ."]\n"
-      if ($debug);
+      if $self->debug;
   }
 
   if ($table eq 'ACSIS' || $table eq 'FILES') {
@@ -781,7 +894,7 @@ sub create_headers {
     # Create obsid_subsysnr
     $headerref->{obsid_subsysnr} = $obsid . "_" . $headerref->{SUBSYSNR};
     print "Created header [obsid_subsysnr] with value [". $headerref->{obsid_subsysnr} ."]\n"
-      if ($debug);
+      if $self->debug;
   }
 
 }
@@ -796,9 +909,10 @@ highest idkey/index in the COMMON table.
 =cut
 
 sub get_max_idkey {
-  my $table = shift;
-  my $dbh = shift;
-  return 1 unless $MODDB;
+
+  my ( $self, $table, $dbh ) = @_;
+
+  return 1 unless $self->load_header_db;
 
   my $sth = $dbh->prepare_cached("select max(idkey) from $table");
   $sth->execute or die "Could not obtain max idkey: ". $dbh->errstr ."\n";
@@ -818,7 +932,10 @@ the dictionary contents.
 =cut
 
 sub create_dictionary {
-  my $dictionary = shift;
+
+  my ( $self ) = @_;
+
+  my $dictionary = $self->dict;
   my %dict;
 
   open (my $DICT, "<", $dictionary )
@@ -850,7 +967,8 @@ degrees).  Status is perl status: 1 is good, 0 bad.
 =cut
 
 sub calc_radec {
-  my ($obs, $headerref) = @_;
+
+  my ( $self, $obs, $headerref ) = @_;
 
   # Filenames for a subsystem
   my @filenames = $obs->filename;
@@ -898,7 +1016,7 @@ sub calc_radec {
   # This means we have to look at JCMTSTATE anyway (but we still ask SMURF because that
   # will save us doing coordinate conversion)
 
-  my (undef, %state ) = read_ndf( $filenames[0], qw/ TCS_TR_SYS / );
+  my (undef, %state ) = $self->read_ndf( $filenames[0], qw/ TCS_TR_SYS / );
   die "Error reading state information from file $filenames[0]\n"
     unless keys %state;
 
@@ -940,14 +1058,14 @@ It Calculates:
 =cut
 
 sub calc_freq {
-  my $obs = shift;
-  my $headerref = shift;
+
+  my ( $self, $obs, $headerref ) = @_;
 
   # Filenames for a subsystem
   my @filenames = $obs->filename;
 
   # need the Frameset
-  my $wcs = read_ndf( $filenames[0] );
+  my $wcs = $self->read_ndf( $filenames[0] );
 
   # Change to BARYCENTRIC, GHz
   $wcs->Set( 'system(1)' => 'FREQ',
@@ -989,8 +1107,9 @@ sub calc_freq {
     $headerref->{freq_img_lower} = $freq[0];
     $headerref->{freq_img_upper} = $freq[1];
   }
-}
 
+  return;
+}
 
 =item B<read_ndf>
 
@@ -999,7 +1118,7 @@ supplied list of JCMTSTATE components (can be empty).
 
 Returns hash of JCMTSTATE information and the Starlink::AST object.
 
-  ($wcs, %state) = read_ndf( $file, @state );
+  ($wcs, %state) = $enter->read_ndf( $file, @state );
 
 returns empty list on error.  In scalar context just returns WCS
 frameset...
@@ -1009,8 +1128,9 @@ frameset...
 =cut
 
 sub read_ndf {
-  my $file = shift;
-  my @statekeys = @_;
+
+  my ( $self, $file, @statekeys ) = @_;
+
   my $status = &NDF::SAI__OK;
   my $bad;
 
@@ -1066,6 +1186,22 @@ sub read_ndf {
   } else {
     return $wcs;
   }
+}
+
+# Verify that the data dictionary is a readable file.
+sub _verify_dict {
+
+  my ( $self ) = @_;
+
+  my $dict = $self->get_dict;
+
+  throw OMP::Error::FatalError( 'No valid data dictionary given' )
+    unless defined $dict ;
+
+  throw OMP::Error::FatalError( "Data dictionary, $dict, is not a readable file." )
+    unless -f $dict && -r _;
+
+  return 1;
 }
 
 1;
