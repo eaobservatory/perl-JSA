@@ -615,7 +615,7 @@ sub add_subsys_obs {
     # Create headers that don't exist
     $self->create_headers('FILES', $subsys_obs, $subsys_hdrs);
 
-    $insert_ref = $self->get_insert_values('FILES', $cols, $dict, $subsys_hdrs);
+    my $insert_ref = $self->get_insert_values('FILES', $cols, $dict, $subsys_hdrs);
 
     if ( $self->update ) {
       insert_hash('FILES', $dbh, $insert_ref)
@@ -645,7 +645,7 @@ sub _update_or_insert {
                   $self->get_insert_values( @args{qw/ table columns dict headers /} )
                 );
 
-  return $dbh->errstr;
+  return $args{'dbhandle'}->errstr;
 }
 
 =item B<update_hash>
