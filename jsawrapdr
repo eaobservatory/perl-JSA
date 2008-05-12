@@ -183,7 +183,7 @@ my $status = GetOptions("help" => \$help,
                         "tmpdir=s" => \$tmpdir,
                         "ut=s" => \$ut,
                        );
-print "ut: $ut\n";
+
 pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
