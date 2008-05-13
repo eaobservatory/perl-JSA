@@ -23,6 +23,7 @@ use warnings::register;
 use Astro::FITS::CFITSIO;
 use Astro::FITS::HdrTrans;
 use Astro::FITS::Header::NDF;
+use Carp;
 use NDF 1.47;
 
 use JSA::Files qw/ drfilename_to_cadc /;
