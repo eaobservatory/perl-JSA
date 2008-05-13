@@ -135,12 +135,11 @@ use Astro::FITS::Header::NDF;
 use Astro::FITS::Header::CFITSIO;
 use Astro::FITS::HdrTrans;
 
-use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
-                      set_wcs_attribs /;
+use JSA::Starlink qw/ check_star_env run_star_command /;
 use JSA::Command qw/ run_command /;
-use JSA::Convert qw/ convert_to_fits convert_to_ndf /;
+use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
-use JSA::Headers qw/ read_headers update_fits_headers update_fits_product /;
+use JSA::Headers qw/ read_headers /;
 
 # Add the path for this routine to the full path. This will allow
 # dpCapture and dpRetrieve to be found in emulation. Add to the end of 
@@ -154,18 +153,6 @@ BEGIN {
     $ENV{PATH} = $newpath;
   }
 }
-
-# All products that should be exported. PRODUCTS are the default
-# products that should be exported. ASSOCS are the different
-# associations. EXTRA_PRODUCTS defines extra products for each
-# association that are to be exported in addition to the defaults.
-our @PRODUCTS = qw/ reduced rimg rsp /;
-our @ASSOCS = qw/ obs night project public /;
-our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ] );
-
-# Turn these into a hash structure.
-our %PRODS = map { $_ => { map { $_ => undef } @PRODUCTS } } @ASSOCS;
-map { my $assoc = $_; map { $PRODS{$assoc}{$_} = undef } @{$EXTRA_PRODUCTS{$assoc}} } keys %EXTRA_PRODUCTS;
 
 # Options
 my ($help, $man, $version, $log, $persist, $id, $drparameters, $inputs, $outdir, $debug,
@@ -488,31 +475,8 @@ my @drfiles = compare_file_lists( \%post_retrieve, \%post_process );
 # Now look for all files that have product headers that are okay
 my %drhdrs = read_headers( @drfiles );
 
-for my $f (sort keys %drhdrs) {
-  my $obstype = $drhdrs{$f}->value( "OBS_TYPE" );
-  if (defined $obstype && $obstype =~ /science/i) {
-    print "Analyzing file headers for DR product in $f\n";
-    my $assoc = $drhdrs{$f}->value( "ASN_TYPE" );
-    my $prod = $drhdrs{$f}->value( "PRODUCT" );
-    if (defined $prod && defined $assoc && exists $PRODS{$assoc}{$prod}) {
-      # is exportable so first fix up provenance
-      prov_update_parent_path( $f, keys %{$PRODS{$assoc}} );
-
-      # Modify the WCS attributes so that we generate the correct
-      # FITS headers regardless of how the pipeline was configured.
-      set_wcs_attribs( $f );
-
-      # Update INSTREAM and FILE_ID headers.
-      update_fits_headers( $f );
-
-      # then convert to fits
-      my $outfile = convert_to_fits( $f );
-
-      # Now need to fix up PRODUCT names in extensions
-      update_fits_product( $outfile );
-    }
-  }
-}
+# And convert these files.
+convert_dr_files( \%drfiles );
 
 # Call dpRetrieve with the correct arguments
 if( ! $skipdp ) {
