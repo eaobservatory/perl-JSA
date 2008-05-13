@@ -31,17 +31,63 @@ use Astro::FITS::Header;
 use Astro::FITS::Header::NDF;
 
 use Exporter 'import';
-our @EXPORT_OK = qw( convert_to_fits convert_to_ndf );
+our @EXPORT_OK = qw( convert_to_fits convert_to_ndf convert_dr_files );
 
 use Starlink::Versions qw/ starversion_lt starversion_string/;
 use JSA::Error qw/ :try /;
-use JSA::Starlink qw/ check_star_env run_star_command /;
+use JSA::Headers qw/ update_fits_headers update_fits_product /;
+use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
+                      set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    looks_like_drfile looks_like_cadcfile /;
+
+# Products and associations to look for.
+our @PRODUCTS = qw/ reduced rimg rsp /;
+our @ASSOCS = qw/ obs night project public /;
+our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
+
+# Set up a hash.
+our %PRODS = map { $_ => { map { $_ => undef } @PRODUCTS } } @ASSOCS;
+map { my $assoc = $_; map { $PRODS{$assoc}{$_} = undef } @{$EXTRA_PRODUCTS{$assoc}} } keys %EXTRA_PRODUCTS;
 
 =head1 FUNCTIONS
 
 =over 4
+
+=item B<can_convert_to_fits>
+
+Determine whether or not an NDF can be converted to a FITS file for
+injest by CADC.
+
+  $convert = can_convert_to_fits( $header );
+
+A file can be converted if it is a science observation and its product
+type is listed in the association type array.
+
+The only argument is an C<Astro::FITS::Header> item created from the
+NDF.
+
+=cut
+
+sub can_convert_to_fits {
+  my $header = shift;
+
+  return 0 if ( ! UNIVERSAL::isa( $header, "Astro::FITS::Header" ) );
+
+  my $obstype = $header->value( "OBS_TYPE" );
+
+  return 0 if ( ! defined $obstype || $obstype !~ /science/i );
+
+  my $assoc = $header->value( "ASN_TYPE" );
+  my $product = $header->value( "PRODUCT" );
+
+  return 0 if( ! defined $assoc || ! defined $product );
+
+  return 1 if ( exists $PRODS{$assoc}{$product} );
+
+  return 0;
+
+}
 
 =item B<convert_to_fits>
 
@@ -131,6 +177,47 @@ sub convert_to_ndf {
     or JSA::Error::Conversion->throw( "Could not convert $fits to NDF" );
 
   return $outfile; 
+}
+
+=item B<convert_dr_files>
+
+Convert a list of ORAC-DR-created files into FITS files in preparation
+for injest by CADC.
+
+  convert_dr_files( $hashref );
+
+The only argument is a reference to a hash, keys being files to be
+converted and values being an Astro::FITS::Header object created from
+reading the header for the given filename. This is essentially a
+reference to a hash as returned by the C<JSA::Headers->read_headers()>
+method.
+
+=cut
+
+sub convert_dr_files {
+  my $href = shift;
+
+  for my $file ( sort keys %$href ) {
+    if ( can_convert_to_fits( $href->{$file} ) ) {
+
+      my $assoc = $href->{$file}->value( "ASN_TYPE" );
+
+      # is exportable so first fix up provenance
+      prov_update_parent_path( $file, keys %{$PRODS{$assoc}} );
+
+      # Modify the WCS attributes so that we generate the correct FITS
+      # headers regardless of how the pipeline was configured.
+      set_wcs_attribs( $file );
+
+      update_fits_headers( $file );
+
+      # then convert to fits
+      my $outfile = convert_to_fits( $file );
+
+      # Now need to fix up PRODUCT names in extensions
+      update_fits_product( $outfile );
+    }
+  }
 }
 
 =back
@@ -228,6 +315,7 @@ sub fits2ndf {
 =head1 AUTHORS
 
 Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>,
+Brad Cavanagh E<lt>b.cavanagh@jach.hawaii.eduE<gt>
 
 =head1 COPYRIGHT
 
