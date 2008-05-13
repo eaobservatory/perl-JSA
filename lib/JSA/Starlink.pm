@@ -37,6 +37,7 @@ use Exporter 'import';
 our @EXPORT_OK = qw/ check_star_env
                      run_star_command
                      prov_update_parent_path
+                     set_wcs_attribs
                    /;
 
 =head1 FUNCTIONS
@@ -309,6 +310,40 @@ sub prov_update_parent_path {
   }
   err_end($status);
 
+  return;
+}
+
+=item B<set_wcs_attribs>
+
+Set appropriate WCS attributes for an NDF.
+
+  set_wcs_attribs( $file );
+
+The following WCS attributes are set:
+
+ o StdOfRest = BARY
+ o System(1) = FK5
+ o System(3) = FREQ
+
+Takes one argument, the file for which the WCS attributes are to be
+set.
+
+Returns undef.
+
+=cut
+
+sub set_wcs_attribs {
+  my $file = shift;
+
+  check_star_env( "KAPPA", "wcsattrib" );
+
+  my @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "wcsattrib" ),
+               "NDF=$file",
+               "MODE=MSet",
+               "SETTING='System(3)=FREQ,StdOfRest=BARY,System(1)=FK5'",
+             );
+
+  run_star_command( @args );
   return;
 }
 
