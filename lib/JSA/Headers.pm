@@ -168,11 +168,9 @@ Update CADC-specific FITS headers in an NDF file.
 
   update_fits_headers( $file );
 
-This function updates two FITS headers:
+This function updates one FITS header:
 
  o INSTREAM: set to 'JCMT'
- o FILEID: set to the filename as returned by the dr_filename_to_cadc()
-   function (see C<JSA::Files>)
 
 This function takes one argument: the NDF file to be updated.
 
@@ -192,21 +190,6 @@ sub update_fits_headers {
                "COMMENT=\!",
                "EDIT=WRITE",
                "POSITION=\!" );
-
-  run_star_command( @args );
-
-  my %hdrs = read_headers( ( $file ) );
-  tie my %keywords, "Astro::FITS::Header", $hdrs{$file};
-  my $asn_type = $keywords{'ASN_TYPE'};
-  my $outfile = drfilename_to_cadc( $file, ASN_TYPE => $asn_type );
-
-  @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
-            "NDF=$file",
-            "KEYWORD=FILEID",
-            "VALUE=$outfile",
-            "COMMENT=\!",
-            "EDIT=WRITE",
-            "POSITION=\!" );
 
   run_star_command( @args );
 
