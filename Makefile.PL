@@ -35,7 +35,7 @@ WriteMakefile(
                                     'File::Temp' => 0.20,
                                    },
               EXE_FILES => [qw/
-                                dpRetrieve jsawrapdr dpCapture
+                                dpRetrieve jsawrapdr dpCapture convert_dr_files cadc_drcopy.pl
                               /],
                'dist'           => { COMPRESS => "gzip -9f"},
                ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
