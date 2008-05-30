@@ -42,8 +42,10 @@ use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    looks_like_drfile looks_like_cadcfile /;
 
 # Products and associations to look for.
-our @PRODUCTS = qw/ reduced rimg rsp /;
-our @ASSOCS = qw/ obs night project public /;
+#our @PRODUCTS = qw/ reduced rimg rsp /;
+#our @ASSOCS = qw/ obs night project public /;
+our @PRODUCTS = qw/ /;
+our @ASSOCS = qw/ obs /;
 our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
 
 # Set up a hash.
@@ -184,23 +186,35 @@ sub convert_to_ndf {
 Convert a list of ORAC-DR-created files into FITS files in preparation
 for injest by CADC.
 
-  convert_dr_files( $hashref );
+  convert_dr_files( $hashref, \%options );
 
-The only argument is a reference to a hash, keys being files to be
-converted and values being an Astro::FITS::Header object created from
-reading the header for the given filename. This is essentially a
+The only mandatory argument is a reference to a hash, keys being files
+to be converted and values being an Astro::FITS::Header object created
+from reading the header for the given filename. This is essentially a
 reference to a hash as returned by the C<JSA::Headers->read_headers()>
 method.
+
+Optional arguments are passed in a hash reference with the following
+allowed keys:
+
+ - indir: the input directory
+ - outdir: the output directory
 
 =cut
 
 sub convert_dr_files {
   my $href = shift;
 
+  my $opts = shift;
+
   for my $file ( sort keys %$href ) {
     if ( can_convert_to_fits( $href->{$file} ) ) {
 
       my $assoc = $href->{$file}->value( "ASN_TYPE" );
+
+      if( defined( $opts->{indir} ) ) {
+        $file = File::Spec->catfile( $opts->{indir}, $file );
+      }
 
       # is exportable so first fix up provenance
       prov_update_parent_path( $file, keys %{$PRODS{$assoc}} );
@@ -216,6 +230,16 @@ sub convert_dr_files {
 
       # Now need to fix up PRODUCT names in extensions
       update_fits_product( $outfile );
+
+      # Rename the file if the input directory isn't the same as the
+      # output directory.
+      if( defined( $opts->{outdir} ) &&
+          defined( $opts->{indir} ) &&
+          $opts->{indir} ne $opts->{outdir} ) {
+        my ( $vol, $dir, $ofile ) = File::Spec->splitpath( $outfile );
+        rename( $outfile,
+                File::Spec->catfile($opts->{outdir}, $ofile ) );
+      }
     }
   }
 }
