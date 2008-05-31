@@ -145,7 +145,7 @@ if( defined( $dir ) ) {
     print "Using current date: $ut\n";
   }
 
-  @INDIRS = map { File::Spec->catdir( @_, $ut ) } values %INSTRUMENTS;
+  @INDIRS = map { File::Spec->catdir( $_, $ut ) } values %INSTRUMENTS;
 
 }
 if( defined( $transdir ) ) {
