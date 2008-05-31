@@ -38,6 +38,10 @@ Display a help message.
 
 Display this man page.
 
+=item B<-tempdir>
+
+Override the temporary directory used for file conversion.
+
 =item B<-transdir>
 
 Override the CADC transfer directory. Defaults to the standard CADC
@@ -96,11 +100,12 @@ my %INSTRUMENTS = ( ACSIS => '/jcmtdata/reduced/acsis/',
 my $CADCDIR = "/jcmtdata/cadc/new";
 
 # Get command-line options.
-my ( $date_str, $dir, $help, $man, $transdir, $version );
+my ( $date_str, $dir, $help, $man, $tempdir, $transdir, $version );
 my $status = GetOptions( "date=s"     => \$date_str,
                          "dir=s"      => \$dir,
                          "help"       => \$help,
                          "man"        => \$man,
+                         "tempdir=s"  => \$tempdir,
                          "transdir=s" => \$transdir,
                          "version"    => \$version,
                        );
@@ -163,6 +168,7 @@ foreach my $indir ( @INDIRS ) {
   # Convert the files.
   convert_dr_files( \%drhdrs, { indir => $indir,
                                 outdir => $transdir,
+                                tempdir => $tempdir,
                               } );
 
 }

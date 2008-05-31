@@ -22,24 +22,26 @@ routines provided by C<JSA::Files>.
 =cut
 
 use strict;
-use Carp;
 use warnings;
-use File::Spec;
 use warnings::register;
-use Proc::SafeExec;
+
 use Astro::FITS::Header;
 use Astro::FITS::Header::NDF;
-
-use Exporter 'import';
-our @EXPORT_OK = qw( convert_to_fits convert_to_ndf convert_dr_files );
-
+use Carp;
+use File::Copy;
+use File::Spec;
+use Proc::SafeExec;
 use Starlink::Versions qw/ starversion_lt starversion_string/;
+
 use JSA::Error qw/ :try /;
 use JSA::Headers qw/ update_fits_headers update_fits_product /;
 use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    looks_like_drfile looks_like_cadcfile /;
+
+use Exporter 'import';
+our @EXPORT_OK = qw( convert_to_fits convert_to_ndf convert_dr_files );
 
 # Products and associations to look for.
 #our @PRODUCTS = qw/ reduced rimg rsp /;
@@ -199,6 +201,7 @@ allowed keys:
 
  - indir: the input directory
  - outdir: the output directory
+ - tempdir: a temporary directory for file conversion.
 
 =cut
 
@@ -212,33 +215,47 @@ sub convert_dr_files {
 
       my $assoc = $href->{$file}->value( "ASN_TYPE" );
 
-      if( defined( $opts->{indir} ) ) {
-        $file = File::Spec->catfile( $opts->{indir}, $file );
+      # Copy the file to the temporary directory, if necessary.
+      my $tfile = $file;
+      if( defined( $opts->{tempdir} ) ) {
+        $tfile = File::Spec->catfile( $opts->{tempdir}, $file );
+        copy( $file, $tfile );
       }
 
       # is exportable so first fix up provenance
-      prov_update_parent_path( $file, keys %{$PRODS{$assoc}} );
+      prov_update_parent_path( $tfile, keys %{$PRODS{$assoc}} );
 
       # Modify the WCS attributes so that we generate the correct FITS
       # headers regardless of how the pipeline was configured.
-      set_wcs_attribs( $file );
+      set_wcs_attribs( $tfile );
 
-      update_fits_headers( $file );
+      update_fits_headers( $tfile );
 
       # then convert to fits
-      my $outfile = convert_to_fits( $file );
+      my $outfile = convert_to_fits( $tfile );
 
       # Now need to fix up PRODUCT names in extensions
       update_fits_product( $outfile );
 
-      # Rename the file if the input directory isn't the same as the
-      # output directory.
-      if( defined( $opts->{outdir} ) &&
-          defined( $opts->{indir} ) &&
-          $opts->{indir} ne $opts->{outdir} ) {
+      # At this point, the output file is in either the same directory
+      # as the input file (if $opts->{tempdir} isn't defined) or in
+      # the temporary directory (if $opts->{tempdir} is defined). If
+      # we have been given an output directory, copy the output file
+      # to a temporary filename in the output directory, then rename
+      # it to the proper filename.
+      if( defined( $opts->{outdir} ) ) {
+        my $tempfilename = "cadc$$";
         my ( $vol, $dir, $ofile ) = File::Spec->splitpath( $outfile );
-        rename( $outfile,
-                File::Spec->catfile($opts->{outdir}, $ofile ) );
+        copy( $outfile,
+              File::Spec->catfile( $opts->{outdir}, $tempfilename ) );
+        rename( File::Spec->catfile( $opts->{outdir}, $tempfilename ),
+                File::Spec->catfile( $opts->{outdir}, $ofile ) );
+        unlink( $outfile );
+      }
+
+      # Clean up temporary directory.
+      if( defined( $opts->{tempdir} ) ) {
+        unlink $tfile;
       }
     }
   }
