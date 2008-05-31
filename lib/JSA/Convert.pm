@@ -236,8 +236,6 @@ sub convert_dr_files {
         prov_update_parent_path( $tfile, keys %{$PRODS{$assoc}} );
       } catch JSA::Error with {
         # Just skip this file for now.
-my $E = shift;
-print "$E";
         $skip = 1;
       };
       next if $skip;
