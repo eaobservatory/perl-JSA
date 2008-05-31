@@ -211,7 +211,9 @@ sub convert_dr_files {
   my $opts = shift;
 
   for my $file ( sort keys %$href ) {
-    if ( can_convert_to_fits( $href->{$file} ) ) {
+
+    if ( can_convert_to_fits( $href->{$file} ) &&
+         looks_like_drfile( $file ) ) {
 
       my $assoc = $href->{$file}->value( "ASN_TYPE" );
 
@@ -219,11 +221,26 @@ sub convert_dr_files {
       my $tfile = $file;
       if( defined( $opts->{tempdir} ) ) {
         $tfile = File::Spec->catfile( $opts->{tempdir}, $file );
-        copy( $file, $tfile );
+        if( defined( $opts->{indir} ) ) {
+          my $ifile = File::Spec->catfile( $opts->{indir}, $file );
+          print "copying $ifile to $tfile\n";
+          copy( $ifile, $tfile ) or die "Copy failed: $!";
+        } else {
+          copy( $file, $tfile ) or die "Copy failed: $!";
+        }
       }
 
       # is exportable so first fix up provenance
-      prov_update_parent_path( $tfile, keys %{$PRODS{$assoc}} );
+      my $skip = 0;      
+      try {
+        prov_update_parent_path( $tfile, keys %{$PRODS{$assoc}} );
+      } catch JSA::Error with {
+        # Just skip this file for now.
+my $E = shift;
+print "$E";
+        $skip = 1;
+      };
+      next if $skip;
 
       # Modify the WCS attributes so that we generate the correct FITS
       # headers regardless of how the pipeline was configured.
