@@ -28,6 +28,9 @@ use Proc::SafeExec;
 use NDF 1.47;
 use Astro::FITS::Header::NDF;
 
+# find out where starlink is located
+use Starlink::Config qw/ :override /;
+
 use JSA::Command qw/ run_command /;
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ looks_like_drfile looks_like_cadcfile drfilename_to_cadc dissect_drfile
@@ -69,8 +72,8 @@ sub check_star_env {
   my $appname = shift;
   my $command = shift;
 
-  throw JSA::Error::BadEnv( "Do not know where the Starlink software is installed. Please set \$STARLINK_DIR.") 
-    unless (exists $ENV{STARLINK_DIR} && -d $ENV{STARLINK_DIR});
+  throw JSA::Error::BadEnv( "Do not know where the Starlink software is installed. You may need to set \$STARLINK_DIR.") 
+    unless (exists $StarConfig{"Star"} && -d $StarConfig{"Star"});
 
   if (defined $appname) {
     my $env = $appname;
