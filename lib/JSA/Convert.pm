@@ -31,6 +31,7 @@ use Carp;
 use File::Copy;
 use File::Spec;
 use Proc::SafeExec;
+use Starlink::Config qw/ :override /;
 use Starlink::Versions qw/ starversion_lt starversion_string/;
 
 use JSA::Error qw/ :try /;
@@ -250,7 +251,7 @@ sub convert_dr_files {
       my $outfile = convert_to_fits( $tfile );
 
       # Now need to fix up PRODUCT names in extensions
-      update_fits_product( $outfile );
+#      update_fits_product( $outfile );
 
       # At this point, the output file is in either the same directory
       # as the input file (if $opts->{tempdir} isn't defined) or in
@@ -313,7 +314,8 @@ sub ndf2fits {
   }
 
   # CADC specific options
-  my @args = ( File::Spec->catfile($ENV{CONVERT_DIR}, "ndf2fits"),
+  my @args = ( File::Spec->catfile($StarConfig{"Star_Bin"},
+                                   "convert", "ndf2fits"),
                "IN=$infile",
                "OUT=$outfile",
                "ENCODING=FITS-WCS(CD)",
@@ -352,7 +354,8 @@ sub fits2ndf {
   unlink $outfile if -e $outfile;
 
   # CADC specific options
-  my @args = ( File::Spec->catfile($ENV{CONVERT_DIR}, "fits2ndf"),
+  my @args = ( File::Spec->catfile($StarConfig{"Star_Bin"},
+                                   "convert", "fits2ndf"),
                "IN=$infile",
                "OUT=$outfile",
              );

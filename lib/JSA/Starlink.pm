@@ -56,12 +56,13 @@ directory.
   check_star_env();
 
 The first argument (optional) refers to the name of an application
-whose environment variable should be tested.
+whose $StarConfig{"Star_Bin"}/$appname directory should exist.
 
   check_star_env( $appname, $command );
 
-The second optional argument refers to a command within that application
-which should exist in $appname_DIR directory.
+The second optional argument refers to a command within that
+application which should exist in the $StarConfig{"Star_Bin"}/$appname
+directory.
 
 Throws a C<JSA::Error::BadEnv> if there is something wrong with
 the environment.
@@ -76,17 +77,23 @@ sub check_star_env {
     unless (exists $StarConfig{"Star"} && -d $StarConfig{"Star"});
 
   if (defined $appname) {
-    my $env = $appname;
-    $env .= "_DIR" unless $appname =~ /_DIR$/;
 
-    throw JSA::Error::BadEnv("$env environment variable is either not set or the directory does not exist")
-      unless (exists $ENV{$env} && -d $ENV{$env});
+    # Try to find the requested directory.
+    my $dir = $appname;
+    $dir =~ s/_dir$//i;
+    $dir = lc( $dir );
+
+    throw JSA::Error::BadEnv("$dir directory could not be found in Starlink software directory tree." )
+      unless (exists $StarConfig{"Star_Bin"} &&
+              -d File::Spec->catfile( $StarConfig{"Star_Bin"}, $dir ) );
 
     # check for the command
     if (defined $command) {
 
-      throw JSA::Error::BadEnv("Command '$command' does not seem to exist in $ENV{$env} directory")
-        unless -e File::Spec->catfile($ENV{$env}, $command );
+      my $app = File::Spec->catfile( $StarConfig{"Star_Bin"}, $dir, $command );
+
+      throw JSA::Error::BadEnv("Command '$app' does not seem to exist")
+        unless -e $app;
 
     }
 
@@ -340,7 +347,8 @@ sub set_wcs_attribs {
 
   check_star_env( "KAPPA", "wcsattrib" );
 
-  my @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "wcsattrib" ),
+  my @args = ( File::Spec->catfile( $StarConfig{"Star_Bin"},
+                                    "kappa", "wcsattrib" ),
                "NDF=$file",
                "MODE=MSet",
                "SETTING='System(3)=FREQ,StdOfRest=BARY,System(1)=FK5'",

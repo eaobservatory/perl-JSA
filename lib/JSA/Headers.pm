@@ -25,6 +25,7 @@ use Astro::FITS::HdrTrans;
 use Astro::FITS::Header::NDF;
 use Carp;
 use NDF 1.47;
+use Starlink::Config qw/ :override /;
 
 use JSA::Files qw/ drfilename_to_cadc /;
 use JSA::Starlink qw/ check_star_env run_star_command /;
@@ -183,7 +184,8 @@ sub update_fits_headers {
 
   check_star_env( "KAPPA", "fitsmod" );
 
-  my @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
+  my @args = ( File::Spec->catfile( $StarConfig{"Star_Bin"},
+                                    "kappa", "fitsmod" ),
                "NDF=$file",
                "KEYWORD=INSTREAM",
                "VALUE=JCMT",
