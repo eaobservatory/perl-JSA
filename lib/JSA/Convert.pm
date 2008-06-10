@@ -45,9 +45,8 @@ use Exporter 'import';
 our @EXPORT_OK = qw( convert_to_fits convert_to_ndf convert_dr_files );
 
 # Products and associations to look for.
-#our @PRODUCTS = qw/ reduced rimg rsp /;
 #our @ASSOCS = qw/ obs night project public /;
-our @PRODUCTS = qw/ /;
+our @PRODUCTS = qw/ reduced rimg rsp /;
 our @ASSOCS = qw/ obs /;
 our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
 
