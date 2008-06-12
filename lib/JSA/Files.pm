@@ -49,7 +49,6 @@ while ( my ($k,$v) = each(%PRODUCT_TYPES) ) {
   $FILE_ABBREV_TO_PROD_TYPE{$v} = $k;
 }
 
-
 =head1 FUNCTIONS
 
 =over 4
@@ -122,6 +121,9 @@ sub looks_like_rawfile {
   } elsif ($filename =~ /^s[48][abcd]\d{8}_\d{5}_\d{4}\.sdf$/) {
     # SCUBA-2
     return 1;
+  } elsif ($filename =~ /^\d{8}_dem_\d{4}(_\d)?\.sdf$/) {
+    # SCUBA
+    return 1;
   }
   return 0;
 }
@@ -154,6 +156,11 @@ sub looks_like_drfile {
   } elsif ($filename =~ /^g?s\d{8}_\d{5}_\d{3}_\w+\.sdf$/) {
     # SCUBA-2
     return 1;
+  } elsif ($filename =~ /^\d{8}_\d{4}_(resw|flat)\.sdf$/ ||
+           $filename =~ /^\d{8}_\d{4}_(sho|lon|p13|p20|p11)_\w+\.sdf$/ ||
+           $filename =~ /^\d{8}_grp_\d{4}_\w+_(long|short|p2000|p1100|p1350)\.sdf$/) {
+    # SCUBA
+    return 1;
   }
   return 0;
 }
@@ -178,7 +185,10 @@ sub looks_like_cadcfile {
     return 1; # Heterodyne
   } elsif ($filename =~ /^jcmts\d{8}_\d{5}_\d{3}_\w+_[a-z]{3}_\d{3}\.fits/) {
     return 1; # SCUBA-2
+  } elsif ($filename =~ /^jcmts\d{8}_\d{5}_(lon|sho|p20|p13|p11|mix)_\w+_[a-z]{3}_\d{3}.fits/) {
+    return 1; # SCUBA
   }
+  print "Failed looks_like_cadcfile\n";
   return 0;
 }
 
@@ -216,16 +226,43 @@ sub dissect_drfile {
     $prodcount = $6;
     $prodcount = undef if (defined $prodcount && $prodcount eq '');
 
-    # Clean up strings
-    $obsnum =~ s/^0+//;
-    $subsys =~ s/^0+//;
-    $prodcount =~ s/^0+// if defined $prodcount;
+  } elsif ($drfile =~ /^(\d{8})_(\d{4})_(resw|flat)\.sdf$/) {
+    # SCUBA reduce switch or flatfield
+    $prefix = "s";
+    $utdate = $1;
+    $obsnum = $2;
+    $subsys = "mix";
+    $product = $3;
+    $isgroup = 0;
 
-    return ($isgroup, $prefix,$utdate,$obsnum,$subsys,$product,$prodcount);
+  } elsif ($drfile =~ /^(\d{8})_(\d{4})_(sho|lon|p13|p20|p11)_(\w+)\.sdf$/) {
+    # SCUBA obs products after sub instrument split
+    $prefix = "s";
+    $utdate = $1;
+    $obsnum = $2;
+    $subsys = $3;
+    $product = $4;
+    $isgroup = 0;
+
+  } elsif ($drfile =~ /^(\d{8})_grp_(\d{4})_(\w+)_(long|short|p2000|p1100|p1350)\.sdf$/) {
+    # SCUBA group
+    $prefix = "s";
+    $utdate = $1;
+    $obsnum = $2;
+    $subsys = substr($4,0,3);
+    $product = $3;
+    $isgroup = 1;
+
   } else {
     JSA::Error::FatalError->throw( "DR file '$original' looked okay but failed pattern match" );
   }
-  return ();
+
+  # Clean up strings
+  $obsnum =~ s/^0+//;
+  $subsys =~ s/^0+//;
+  $prodcount =~ s/^0+// if defined $prodcount;
+
+  return ($isgroup, $prefix,$utdate,$obsnum,$subsys,$product,$prodcount);
 }
 
 =item B<dissect_cadcfile>
@@ -236,7 +273,6 @@ Given a CADC filename, split it into its component parts.
 
 Where the parts are defined as
 
-  telescope - "jcmt"
   prefix
   utdate
   obsnum
@@ -258,7 +294,7 @@ sub dissect_cadcfile {
 
   my ($prefix, $utdate, $obsnum, $subsys, $product, $prodcount,
       $type, $version);
-  if ($cadcfile =~ /^jcmt([hs])(\d{8})_(\d{5})_(\d{2,3})_(\w+)_([a-z]{3})_(\d{3})\.fits/) {
+  if ($cadcfile =~ /^jcmt([hs])(\d{8})_(\d{5})_(\d{2,3}|lon|sho|p20|p13|p11|mix)_(\w+)_([a-z]{3})_(\d{3})\.fits/) {
     $prefix = $1;
     $utdate = $2;
     $obsnum = $3;
@@ -335,7 +371,7 @@ sub drfilename_to_cadc {
   if ($isgroup) {
     # we will need a type
     if (!defined $type) {
-      JSA::Error::BadArgs->throw( "Must supply a association type for group products" );
+      JSA::Error::BadArgs->throw( "Must supply a association type for group products ($drname)" );
     } elsif (exists $PRODUCT_TYPES{$type}) {
       $type = $PRODUCT_TYPES{$type};
     } elsif (exists $FILE_ABBREV_TO_PROD_TYPE{$type}) {
@@ -371,9 +407,15 @@ sub drfilename_to_cadc {
 
   # Note that we format subsystem as %02d because this will work
   # for SCUBA-2 850/450 without breaking ACSIS 2digit.
+  my $subsys_format = '%02d';
+
+  # SCUBA currently uses a string for subsys
+  if ($subsys !~ /^\d+$/) {
+    $subsys_format = '%s';
+  }
 
   # Now form the new filename
-  my $new = sprintf('%s%s%08d_%05d_%02d_%s'.$p.'_%s_%03d.%s',
+  my $new = sprintf('%s%s%08d_%05d_'.$subsys_format.'_%s'.$p.'_%s_%03d.%s',
                     "jcmt", $prefix, $utdate, $obsnum, $subsys,
                     $product, (defined $prodcount ? $prodcount : () ),
                     $type, $args{VERSION}, "fits");
@@ -417,11 +459,51 @@ sub cadc_to_drfilename {
     $parts[0] = 'a';
   }
 
-  # product formatting
-  my $p = ( defined $parts[5] ? "%03d" : "" );
+  # Is this an obs product or a group?
+  my $isobs = ($parts[6] eq 'obs' ? 1 : 0 );
 
-  my $new = sprintf( '%s%08d_%05d_%02d_%s'.$p.'.sdf',
-                     @parts[0..4],(defined $parts[5] ? $parts[5] : () ) );
+  # see if this is plausibly a SCUBA observation
+  my $is_scuba;
+  if ($parts[0] eq 's' && $parts[3] =~ /^(lon|sho|p11|p13|p20|mix)/) {
+    $is_scuba = 1;
+  }
+
+  my $new;
+  if ($is_scuba) {
+    if ($isobs) {
+      if ($parts[4] =~ /(resw|flat)/) {
+        $new = sprintf( '%08d_%04d_%s'.".sdf", @parts[1,2,4]);
+      } else {
+        $new = sprintf( '%08d_%04d_%s_%s'.".sdf", @parts[1,2,3,4]);
+      }
+
+    } else {
+      my %lut = ( lon => "long", "sho" => "short", "p11" => "p1100",
+                  "p13" => "p1350", "p20" => "p2000");
+      JSA::Error::FatalError->throw("Do not know how to convert subsystem '$parts[4]' for group")
+          unless exists $lut{$parts[3]};
+      my $newtype = $lut{$parts[3]};
+      $new = sprintf('%08d_grp_%04d_%s_%s'.".sdf", @parts[1,2,4], $newtype);
+    }
+
+  } else {
+    # product formatting
+    my $p = ( defined $parts[5] ? "%03d" : "" );
+
+    # zero padding depends on whether we are an obs or not
+    my $obsfmt = '%05d';
+    my $ssysfmt = '%02d';
+    if (!$isobs) {
+      $obsfmt = '%d';
+      $ssysfmt = '%d';
+    }
+
+    $new = sprintf( '%s%08d_'.$obsfmt.'_'.$ssysfmt.'_%s'.$p.'.sdf',
+                    @parts[0..4],(defined $parts[5] ? $parts[5] : () ) );
+
+    # account for group
+    $new = "g".$new unless $isobs;
+  }
 
   # prepend directory if needed
   if ($dir) {
@@ -469,6 +551,9 @@ sub construct_rawfile {
 
   } elsif ($inst =~ /SCUBA\-?2/) {
     $file = $hdr{SUBARRAY}. sprintf('%08d_%05d_%04d.sdf', $ut, $obs, $nsub );
+  } elsif ($inst eq "SCUBA") {
+    # Note that this will not work for those special cased files with the _N suffix
+    $file = sprintf('%08d_dem_%04d.sdf', $ut, $hdr{RUN});
   } else {
     throw JSA::Error::FatalError->new("Unrecognized instrument name $inst ".(defined $be ? " / $be " : ""));
   }
