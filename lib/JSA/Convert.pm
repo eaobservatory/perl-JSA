@@ -250,7 +250,7 @@ sub convert_dr_files {
       my $outfile = convert_to_fits( $tfile );
 
       # Now need to fix up PRODUCT names in extensions
-#      update_fits_product( $outfile );
+      update_fits_product( $outfile );
 
       # At this point, the output file is in either the same directory
       # as the input file (if $opts->{tempdir} isn't defined) or in
