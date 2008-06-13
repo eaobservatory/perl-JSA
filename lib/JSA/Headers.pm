@@ -244,6 +244,10 @@ sub update_fits_product {
       my $newprod = $prodref . lc("_$extname");
 
       $ifits->update_key( Astro::FITS::CFITSIO::TSTRING(), "PRODUCT", $newprod, undef, $status );
+
+      # Update the header checksum
+      $ifits->update_chksum($status);
+
       $status = 0;
     }
   }
