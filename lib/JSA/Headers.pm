@@ -182,10 +182,12 @@ This function does not return anything.
 sub update_fits_headers {
   my $file = shift;
 
+  # Make sure we actually need to do this. FITSMOD adds a new
+  # card even if it already exists.
+
   check_star_env( "KAPPA", "fitsmod" );
 
-  my @args = ( File::Spec->catfile( $StarConfig{"Star_Bin"},
-                                    "kappa", "fitsmod" ),
+  my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "fitsmod"),
                "NDF=$file",
                "KEYWORD=INSTREAM",
                "VALUE=JCMT",

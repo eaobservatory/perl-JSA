@@ -353,8 +353,7 @@ sub fits2ndf {
   unlink $outfile if -e $outfile;
 
   # CADC specific options
-  my @args = ( File::Spec->catfile($StarConfig{"Star_Bin"},
-                                   "convert", "fits2ndf"),
+  my @args = ( File::Spec->catfile($ENV{CONVERT_DIR}, "fits2ndf"),
                "IN=$infile",
                "OUT=$outfile",
              );

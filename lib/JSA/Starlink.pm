@@ -56,13 +56,15 @@ directory.
   check_star_env();
 
 The first argument (optional) refers to the name of an application
-whose $StarConfig{"Star_Bin"}/$appname directory should exist.
+whose corresponding APPNAME_DIR environment variable should exist.
+If that variable is not defined Starlink::Config is used to locate
+it. If it can not be found throws a C<JSA::Error::BadEnv> exception.
+If it is successfully located APPNAME_DIR will be set appropriately.
 
   check_star_env( $appname, $command );
 
 The second optional argument refers to a command within that
-application which should exist in the $StarConfig{"Star_Bin"}/$appname
-directory.
+application which should exist in the $APPNAME_DIR directory.
 
 Throws a C<JSA::Error::BadEnv> if there is something wrong with
 the environment.
@@ -73,24 +75,42 @@ sub check_star_env {
   my $appname = shift;
   my $command = shift;
 
+  # if APPNAME_DIR environment variable is defined and that directory exists
+  # we do not do anything further
+
+  # Note that Starlink::Config will use $STARLINK_DIR itself since we have override
+  # enabled.
   throw JSA::Error::BadEnv( "Do not know where the Starlink software is installed. You may need to set \$STARLINK_DIR.") 
     unless (exists $StarConfig{"Star"} && -d $StarConfig{"Star"});
 
   if (defined $appname) {
 
-    # Try to find the requested directory.
-    my $dir = $appname;
-    $dir =~ s/_dir$//i;
-    $dir = lc( $dir );
+    # Work out the environment variable name
+    my $env = uc($appname);
+    $env .= "_DIR" unless $env =~ /_DIR$/;
 
-    throw JSA::Error::BadEnv("$dir directory could not be found in Starlink software directory tree." )
-      unless (exists $StarConfig{"Star_Bin"} &&
-              -d File::Spec->catfile( $StarConfig{"Star_Bin"}, $dir ) );
+    # if that envrinment variable exists and the directory exists we are okay
+    if (exists $ENV{$env} && -d $ENV{$env}) {
+	# everything is okay
+    } else {
+	# Try to find the requested directory.
+	my $dir = $appname;
+	$dir =~ s/_dir$//i;
+	$dir = lc( $dir );
+
+	my $testdir = File::Spec->catfile($StarConfig{"Star_Bin"}, $dir);
+
+	throw JSA::Error::BadEnv("$dir directory could not be found in Starlink software directory tree." )
+	    unless -d $testdir;
+
+	# if we get here then that directory is okay so set the environment
+	$ENV{$env} = $testdir;
+    }
 
     # check for the command
     if (defined $command) {
 
-      my $app = File::Spec->catfile( $StarConfig{"Star_Bin"}, $dir, $command );
+      my $app = File::Spec->catfile( $ENV{$env}, $command );
 
       throw JSA::Error::BadEnv("Command '$app' does not seem to exist")
         unless -e $app;
@@ -347,8 +367,7 @@ sub set_wcs_attribs {
 
   check_star_env( "KAPPA", "wcsattrib" );
 
-  my @args = ( File::Spec->catfile( $StarConfig{"Star_Bin"},
-                                    "kappa", "wcsattrib" ),
+  my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "wcsattrib" ),
                "NDF=$file",
                "MODE=MSet",
                "SETTING='System(3)=FREQ,StdOfRest=BARY,System(1)=FK5'",
