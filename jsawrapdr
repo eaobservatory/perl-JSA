@@ -472,11 +472,11 @@ run_command(@drcommand);
 my %post_process = scan_dir();
 my @drfiles = compare_file_lists( \%post_retrieve, \%post_process );
 
-# Now look for all files that have product headers that are okay
+# Read all the FITS headers from these files
 my %drhdrs = read_headers( @drfiles );
 
-# And convert these files.
-convert_dr_files( \%drfiles );
+# And convert those files that have valid PRODUCT headers.
+convert_dr_files( \%drhdrs );
 
 # Call dpRetrieve with the correct arguments
 if( ! $skipdp ) {
