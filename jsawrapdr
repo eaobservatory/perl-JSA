@@ -428,8 +428,8 @@ if ($useoracdr) {
   @drcommand = ( $^X,
                File::Spec->catfile($ENV{ORAC_DIR},"bin","oracdr"),
                "-nodisplay",
-               "-log","fs",
-               "-recsuffix", "ADV",
+               "-log","fsx",
+               "-recsuffix", "ADV,CADC",
                "-batch" );
 
   if( $skipdp ) {
