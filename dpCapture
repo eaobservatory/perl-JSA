@@ -46,6 +46,11 @@ option and is not used.
 
 Indicate that files should be "persisted". Does nothing at present.
 
+=item B<-transdir>
+
+Override the CADC transfer drectory. Defaults to the standard CADC
+transfer directory (/jcmtdata/cadc/new).
+
 =item B<-debug>
 
 Write informational messages to standard error. Not supported by CADC.
@@ -57,7 +62,9 @@ use warnings;
 
 use Getopt::Long;
 use Pod::Usage;
+use File::Copy;
 use File::Spec;
+use File::Temp qw/ tempfile /;
 use Carp;
 
 # Work out where we are so that we can run from a build directory
@@ -67,8 +74,10 @@ use lib $FindBin::RealBin."/lib";
 
 use JSA::Files qw/ looks_like_cadcfile scan_dir /;
 
+my $CADCDIR = "/jcmtdata/cadc/new";
+
 # Options
-my ($help, $man, $version, $persist, $archive, $id, $debug);
+my ($help, $man, $version, $persist, $archive, $id, $transdir, $debug);
 my $status = GetOptions("help" => \$help,
                         "man" => \$man,
                         "version" => \$version,
@@ -76,6 +85,7 @@ my $status = GetOptions("help" => \$help,
                         "archive=s" => \$archive,
                         "debug" => \$debug,
                         "persist" => \$persist,
+                        "transdir=s" => \$transdir,
                        );
 
 pod2usage(1) if $help;
@@ -88,11 +98,33 @@ if ($version) {
   exit;
 }
 
+if( defined( $transdir ) ) {
+  $transdir = File::Spec->rel2abs( $transdir );
+} else {
+  $transdir = $CADCDIR;
+}
+
 # Scan the directory for plausible fits files
 my %files = scan_dir( qr/^jcmt.*\.fits$/ );
 for my $f (sort keys %files) {
+
   if (looks_like_cadcfile( $f )) {
-    print "\tWould ingest file $f\n";
+
+    if( $persist ) {
+
+      # Copy the file into a temporary file in the output directory,
+      # then rename it.
+      my( $fh, $filename ) = tempfile( DIR => $transdir );
+      copy( $f, $filename ) or die "copy from $f to $filename failed: $!";
+      move( $filename, File::Spec->catfile( $transdir, $f ) ) or die "move from $filename to " . File::Spec->catfile( $transdir, $f ) . " failed: $!";
+
+      print "Copied $f to " . File::Spec->catfile( $transdir, $f ) . "\n";
+
+    } else {
+
+      print "\tWould ingest file $f\n";
+
+    }
   }
 }
 
