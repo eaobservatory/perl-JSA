@@ -495,7 +495,7 @@ if( defined( $transdir ) ) {
 
 log_message( "calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
 
-run_command("/home/bradc/development/scicom/perlmods/JSA/dpCapture", "-id", $id, @args);
+run_command("dpCapture", "-id", $id, @args);
 
 exit;
 
