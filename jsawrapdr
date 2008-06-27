@@ -468,7 +468,12 @@ if ($useoracdr) {
 # Run the DR command.
 # We need to decide whether a partial execution of the DR should result in
 # file ingestion.
-run_command(@drcommand);
+log_message( "Running: " . join( " ", @drcommand ) );
+my ( $drstdout, $drstderr, $drstatus ) = run_command( { nothrow => 1 },
+                                                      @drcommand);
+log_message( "Last ten lines of STDOUT:\n" );
+log_message( join "\n", @$drstdout[-10..-1] );
+die "Non-zero exit status: $drstatus" if $drstatus;
 
 # Process NDF data products and convert them into FITS
 #  - Need to filter provenance
@@ -495,7 +500,7 @@ if( defined( $transdir ) ) {
 
 log_message( "calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
 
-run_command("dpCapture", "-id", $id, @args);
+my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "-id", $id, @args);
 
 exit;
 
