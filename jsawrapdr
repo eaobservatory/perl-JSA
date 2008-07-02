@@ -439,7 +439,8 @@ if ($useoracdr) {
                "-batch" );
 
   if( $skipdp ) {
-    push @drcommand, "-ut", "$ut", "-skip", "-from", "1", "-to", "1000", "-loop", "flag";
+    push @drcommand, "-ut", "$ut", "-skip", "-from", "1",
+      "-loop", ($oracinst =~ /^scuba$/i ? "inf" : "flag");
   } else {
     push @drcommand, "-loop", "file", "-file", "$tmpfile"
   }
