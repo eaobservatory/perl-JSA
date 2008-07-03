@@ -544,7 +544,12 @@ sub insert_obs {
   OBS: for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
 
     my $common_obs = $obs->{$runnr}->[0];
-    my $common_hdrs = $common_obs->hdrhash;
+
+    # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
+    # does not untie).  This is so that a single element array reference when
+    # assigned to one of the keys is assigned as reference (not as the element
+    # contained with in).
+    my $common_hdrs = { %{ $common_obs->hdrhash } };
 
     printf "\t[%s]... ", join ',', $common_obs->simple_filename;
 
@@ -643,8 +648,8 @@ sub add_subsys_obs {
     $subsysnr++;
     print "Processing subsysnr $subsysnr of $totsub\n";
 
-    # Obtain instrument table values from this Obs object
-    my $subsys_hdrs = $subsys_obs->hdrhash;
+    # Obtain instrument table values from this Obs object.  Break hash tie.
+    my $subsys_hdrs = { %{ $subsys_obs->hdrhash } };
 
     # Need to calculate the frequency information
     $self->calc_freq( $subsys_obs, $subsys_hdrs );
@@ -1143,17 +1148,8 @@ sub fill_headers_FILES {
     }
   }
 
-  if ( $self->debug ) {
-
-    # Reason for ref() dance:  Assignment of array reference, containing only
-    # one element, to a key of $header -- a tie-d hash (reference) through
-    # Astro::FITS::Headers -- results in assignment of the element itself not
-    # the array reference.  So blindly dereferencing $header->{'file_id'} causes
-    # death when it happens to be simple scalar.
-    my $ref = $header->{'file_id'};
-    printf "Created header [file_id] with value [%s]\n",
-      ref $ref ? join ', ', @{ $ref } : $ref;
-  }
+  printf "Created header [file_id] with value [%s]\n", @{ $header->{'file_id'} }
+    if $self->debug;
 
   return $self->_fill_headers_obsid_subsys( $header, $obsid );
 }
