@@ -1099,14 +1099,14 @@ sub fill_headers_COMMON {
   }
   $header->{'release_date'} = $release_date->strftime($self->sybase_date_format);
 
-  print "Created header [release_date] with value [%s]\n", $header->{'release_date'}
+  printf "Created header [release_date] with value [%s]\n", $header->{'release_date'}
     if $self->debug;
 
   # Create last_modified
   my $today = gmtime;
   $header->{'last_modified'} = $today->strftime($self->sybase_date_format);
 
-  print "Created header [last_modified] with value [%s]\n", $header->{'last_modified'}
+  printf "Created header [last_modified] with value [%s]\n", $header->{'last_modified'}
     if $self->debug;
 
   return;
