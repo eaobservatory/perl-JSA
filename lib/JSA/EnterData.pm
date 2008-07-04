@@ -95,9 +95,9 @@ use NDF;
 
 $| = 1; # Make unbuffered
 
-# Make sure that bad status from SMURF triggers bad exit status
 BEGIN {
 
+  # Make sure that bad status from SMURF triggers bad exit status
   $ENV{ADAM_EXIT} = 1;
 
   my %default =
@@ -107,6 +107,7 @@ BEGIN {
 
       'load-header-db' => 1,
 
+      # $OMP::ArchiveDB::SkipDBLookup is changed.
       'force-disk'     => 1,
       'force-db'       => 0,
 
@@ -133,7 +134,7 @@ BEGIN {
       if $k eq 'dict'
       # Special handling when date to set is given.
       or $k eq 'date'
-      # Only valid instruments please.
+      # Validate instruments before setting.
       or $k eq 'instruments'
       # Need to turn off the other if one is true.
       or $k =~ m/^ force-d(?: isk | b ) $/x
@@ -307,12 +308,12 @@ sub date {
 
   return $self->{'date'} unless scalar @_;
 
-  my $date = shift;
-  $date = OMP::General->today
-    unless $date && $date =~ /^\d{8}$/;
-  $date =~ tr/-//d;
+  my $date = shift || localtime;
 
-  $self->{'date'} = Time::Piece->strptime( $date, '%Y%m%d' );
+  $self->{'date'} =
+    ref $date && $date->isa( 'Time::Piece' )
+      ? $date
+      : Time::Piece->strptime( $date, '%Y%m%d' ) ;
 
   return;
 }
@@ -405,7 +406,7 @@ Returns the set truth value if no arguments given.
 
   $update = $enter->update_mode;
 
-Else, sets the value to turn on or off updating (off or on insertion);
+Else, sets the value to turn on or off update (off or on insert);
 returns nothing.  In insert mode, nothing is inserted in "FILES"
 table.
 
@@ -676,7 +677,7 @@ sub add_subsys_obs {
 
     my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subsys_hdrs );
 
-    if ( $self->update_mode ) {
+    if ( ! $self->update_mode ) {
 
       $self->insert_hash( 'FILES', $dbh, $insert_ref )
         or $error = $dbh->errstr;
@@ -1148,7 +1149,7 @@ sub fill_headers_FILES {
     }
   }
 
-  printf "Created header [file_id] with value [%s]\n", @{ $header->{'file_id'} }
+  printf "Created header [file_id] with value [%s]\n", join ',', @{ $header->{'file_id'} }
     if $self->debug;
 
   return $self->_fill_headers_obsid_subsys( $header, $obsid );
