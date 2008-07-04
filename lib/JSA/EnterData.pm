@@ -994,7 +994,7 @@ sub transform_value {
         my $date = Time::Piece->strptime($val,'%Y-%m-%dT%H:%M:%S');
         $values->{$column} = $date->strftime($self->sybase_date_format);
 
-        printf "Converted date [$val] to [%s] for column [%s]\n", $values->{$column}, $column
+        printf "Converted date [%s] to [%s] for column [%s]\n", $val, $values->{$column}, $column
           if $self->debug;
 
       } elsif (exists $transform_data{$data_type}) {
@@ -1005,7 +1005,7 @@ sub transform_value {
           # defined in the %transform_data hash
           $values->{$column} = $transform_data{$data_type}{$val};
 
-          printf "Transformed value [$val] to [%s] for column [%s]\n", $values->{$column}, $column
+          printf "Transformed value [%s] to [%s] for column [%s]\n", $val, $values->{$column}, $column
             if $self->debug;
         }
       } elsif ($column eq 'lststart' or $column eq 'lstend') {
@@ -1014,7 +1014,7 @@ sub transform_value {
         my $ha = new Astro::Coords::Angle::Hour($val, units => 'sex');
         $values->{$column} = $ha->hours;
 
-        printf "Converted time [$val] to [%s] for column [%s]\n", $values->{$column}, $column
+        printf "Converted time [%s] to [%s] for column [%s]\n", $val, $values->{$column}, $column
           if $self->debug;
       }
     }
