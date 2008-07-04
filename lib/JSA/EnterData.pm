@@ -1388,7 +1388,6 @@ sub calc_radec {
   for my $k ( qw/ FTL FBR FTR FBL /) {
 
     my $res = `/star/bin/kappa/parget $k makecube`;
-    chomp($res);
     $res =~ s/^\s+//;
     $res =~ s/\s+$//;
     $result{$k} = [ map {Astro::Coords::Angle->new( $_, units => 'rad') } split(/\s+/,$res) ];
