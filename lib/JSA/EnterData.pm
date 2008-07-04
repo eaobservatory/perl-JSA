@@ -122,7 +122,7 @@ BEGIN {
       # Debugging.  Set to true to turn on.  Debugging means interact
       # with the database, but don't actually do any inserts, and be
       # very verbose.
-      'debug' => 1,
+      'debug' => 0,
     );
 
   #  Generate some accessor functions.
