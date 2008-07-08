@@ -118,7 +118,7 @@ BEGIN {
 
       # Location of data dictionary
       # NOTE: This should go in to the OMP config system at some point
-      'dict' =>  $FindBin::RealBin . '/import/data.dictionary',
+      'dict' =>  '/jac_sw/archiving/jcmt/import/data.dictionary',
 
       # Debugging.  Set to true to turn on.  Debugging means interact
       # with the database, but don't actually do any inserts, and be
