@@ -79,13 +79,14 @@ sub analyse_timeseries_rms {
   my $rmsvar_rcp_const = 'RMSVAR_RCP';
   my $rmsvar_rcp = _retrieve_constant( $rmsvar_rcp_const, $survey_opt );
 
-  my( $min, $max, $mean ) = _min_max_mean( values %$rms );
+  my $mmm_return = _min_max_mean( [ values %$rms ] );
 
   my %result;
   foreach my $survey ( sort keys %$rmsvar_rcp ) {
     $result{$survey} = new JSA::QA::Result;
-    if( ( $min < $mean * ( 1 - $rmsvar_rcp->{$survey} ) ) ||
-        ( $max > $mean * ( 1 + $rmsvar_rcp->{$survey} ) ) ) {
+    if( ! defined( $mmm_return->{min} ) ||
+        ( $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $rmsvar_rcp->{$survey} ) ) ||
+        ( $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $rmsvar_rcp->{$survey} ) ) ) {
 
       $result{$survey}->pass( 0 );
       $result{$survey}->add_fail_reason( "Receptor-to-receptor RMS values varied by more than " . int( $rmsvar_rcp->{$survey} * 100 ) . "%" );
@@ -148,7 +149,7 @@ sub analyse_tsys {
     }
 
     my $tresult = analyse_tsysvar( \%temp_tsys,
-                                   'survey' => $options{'survey'} );
+                                   'survey' => $survey );
 
     if( ! $tresult->{$survey}->pass ) {
       $result{$survey}->pass( 0 );
@@ -261,12 +262,13 @@ sub analyse_tsysvar {
   my $tsysvar = _retrieve_constant( $tsysvar_const, $survey_opt );
 
   # Determine the mean, min, and max Tsys.
-  my( $min, $max, $mean ) = _min_max_mean( values %$tsys );
+  my $mmm_return = _min_max_mean( [ values %$tsys ] );
 
   foreach my $survey ( keys %$tsysvar ) {
     $result{$survey} = new JSA::QA::Result( pass => 1 );
-    if( $min < $mean * ( 1 - $tsysvar->{$survey} ) ||
-        $max > $mean * ( 1 + $tsysvar->{$survey} ) ) {
+    if( ! defined( $mmm_return->{min} ) ||
+        $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $tsysvar->{$survey} ) ||
+        $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $tsysvar->{$survey} ) ) {
       $result{$survey}->pass( 0 );
       $result{$survey}->add_fail_reason( "Receptor-to-receptor Tsys varied by more than " . int( $tsysvar->{$survey} * 100 ) . "%" );
     }
@@ -322,28 +324,34 @@ sub _retrieve_constant {
 
 Return minimum, maximum, and mean values for a set of numbers.
 
-  ( $min, $max, $mean ) = _min_max_mean( @values );
+  $result = _min_max_mean( $values );
 
-This function takes a list of numbers to be tested. If any of the
-values are equal to the BAD_VALUE constant, they are skipped and not
-used for statistics (i.e. if one value is BAD_VALUE then the mean is (
-sum / (N - 1) )).
+This function takes a reference to an array of numbers to be
+tested. If any of the values are equal to the BAD_VALUE constant, they
+are skipped and not used for statistics (i.e. if one value is
+BAD_VALUE then the mean is ( sum / (N - 1) )).
 
-This value returns a list of the minimum, maximum, and mean values, in
-that order.
+This value returns a reference to a hash with keys being 'min', 'max',
+and 'mean', and values corresponding to the values for each key. If no
+good values are present, then all values returned in the hash will be
+'undef'.
 
 =cut
 
 sub _min_max_mean {
-  my @values = @_;
+  my $values = shift;
 
-  my $max = undef;
+  my %return = ( 'max' => undef,
+                 'min' => undef,
+                 'mean' => undef );
   my $min = undef;
+  my $max = undef;
+  my $mean = undef;
+
   my $num = 0;
-  my $mean = 0;
   my $sum = 0;
 
-  foreach my $value ( @values ) {
+  foreach my $value ( @$values ) {
     next if $value eq BAD_VALUE;
     $sum += $value;
     if( ! defined( $max ) || $value > $max ) { $max = $value; }
@@ -352,11 +360,13 @@ sub _min_max_mean {
   }
   if( $num != 0 ) {
     $mean = $sum / $num;
-  } else {
-    croak "Zero good datapoints found";
   }
 
-  return( $min, $max, $mean );
+  $return{'min'} = $min;
+  $return{'max'} = $max;
+  $return{'mean'} = $mean;
+
+  return \%return;
 }
 
 
