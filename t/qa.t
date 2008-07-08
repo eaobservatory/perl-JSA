@@ -1,7 +1,9 @@
 #!perl
 
-use Test::More tests => 1;
+use Test::More tests => 19;
 use Data::Dumper;
+
+my @surveys = qw/ NGS Telescope GBS SLS /;
 
 use_ok( "JSA::QA" );
 
@@ -22,8 +24,8 @@ my %rms = ( 'H00' => 1.977,
             'H14' => 'bad',
             'H15' => 2.051 );
 
-my $result = JSA::QA::analyse_timeseries_rms( \%rms );
-print Dumper $result;
+#my $result = JSA::QA::analyse_timeseries_rms( \%rms );
+#print Dumper $result;
 
 my %tsys = ( 'H00' => 261.49,
              'H01' => 228.43,
@@ -42,7 +44,44 @@ my %tsys = ( 'H00' => 261.49,
              'H14' => 'bad',
              'H15' => 288.94 );
 
-$result = JSA::QA::analyse_tsysmax( \%tsys );
-print Dumper $result;
-$result = JSA::QA::analyse_tsysvar( \%tsys );
-print Dumper $result;
+# First, test tsysmax. All surveys should pass this.
+$result = analyse_tsysmax( \%tsys );
+foreach my $survey ( @surveys ) {
+  ok( $result->{$survey}->pass, "Survey $survey successfully passed tsysmax test" );
+}
+
+# Now variance in Tsys. Only the GBS survey should fail.
+$result = analyse_tsysvar( \%tsys );
+foreach my $survey ( @surveys ) {
+  if( $survey ne 'GBS' ) {
+    ok( $result->{$survey}->pass, "Survey $survey successfully passed tsysvar test" );
+  } else {
+    ok( ! $result->{$survey}->pass, "Survey $survey successfully failed tsysvar test" );
+  }
+}
+
+# Now the mixed test. Again, only the GBS survey should fail.
+$result = analyse_tsys( \%tsys );
+foreach my $survey ( @surveys ) {
+  if( $survey ne 'GBS' ) {
+    ok( $result->{$survey}->pass, "Survey $survey successfully passed tsysvar test" );
+  } else {
+    ok( ! $result->{$survey}->pass, "Survey $survey successfully failed tsysvar test" );
+  }
+}
+
+# Test a single survey. This tests the option hash.
+$result = analyse_tsys( \%tsys,
+                        'survey' => 'GBS' );
+ok( ! $result->{GBS}->pass, "Single survey test for GBS" );
+ok( ! defined( $result->{SLS} ), "SLS survey test correctly not performed" );
+
+# Now for the RMS test. Only the GBS should fail.
+$result = analyse_timeseries_rms( \%rms );
+foreach my $survey ( @surveys ) {
+  if( $survey ne 'GBS' ) {
+    ok( $result->{$survey}->pass, "Survey $survey successfully passed timeseries RMS test" );
+  } else {
+    ok( ! $result->{$survey}->pass, "Survey $survey successfully failed timeseries RMS test" );
+  }
+}
