@@ -48,7 +48,11 @@ sub add_bad_receptor {
   return if ! defined $receptor;
 
   my $bad_receptors = $self->bad_receptors;
-  push @$bad_receptors, $receptor;
+  if( ref( $receptor ) ) {
+    push @$bad_receptors, @$receptor;
+  } else {
+    push @$bad_receptors, $receptor;
+  }
   $self->bad_receptors( $bad_receptors );
 }
 
@@ -59,7 +63,11 @@ sub add_fail_reason {
   return if ! defined $reason;
 
   my $reasons = $self->fail_reasons;
-  push @$reasons, $reason;
+  if( ref( $reason ) ) {
+    push @$reasons, @$reason;
+  } else {
+    push @$reasons, $reason;
+  }
   $self->fail_reasons( $reasons );
 }
 
