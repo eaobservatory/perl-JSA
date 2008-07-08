@@ -69,7 +69,7 @@ use FindBin;
 
 use lib OMPLIB;
 use lib
-  '/jac_sw/archiving/perlmods/JCMT-DataVerify/lib/JCMT/DataVerify.pm'
+  '/jac_sw/archiving/perlmods/JCMT-DataVerify/lib'
   #'/home/agarwal/src/scicom/trunk/archiving/perlmods/JCMT-DataVerify/lib'
   ;
 
