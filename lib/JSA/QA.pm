@@ -171,9 +171,9 @@ threshold.
 
 This function compares the Tsys value for each receptor with a maximum
 value. If the Tsys for a given receptor exceeds that maximum value for
-a given survey, then this test fails for that survey. Any receptors
-exceeding the maximum value are returned in the result object for that
-survey.
+a given survey, then it is flagged as bad and removed from
+processing. Any receptors exceeding this maximum value are returned in
+the result object for that survey.
 
 This function takes one argument, a reference to a hash with keys
 being receptor names and values being the RMS for that receptor.
@@ -186,6 +186,10 @@ should be tested:
 This function returns a reference to a hash with keys being JLS::QA
 survey subclasses and values being JLS::QA::Result objects.
 
+The returned JLS::QA::Result objects for this function will have their
+pass() accessor set to true, but will have their bad_receptors()
+accessor filled with any receptors exceeding the maximum value.
+
 =cut
 
 sub analyse_tsysmax {
@@ -196,25 +200,18 @@ sub analyse_tsysmax {
 
   my %result;
 
-  my $tsysmax_const = 'TSYSMAX';
+  my $tsysbad_const = 'TSYSBAD';
 
-  my $tsysmax = _retrieve_constant( $tsysmax_const, $survey_opt );
+  my $tsysbad = _retrieve_constant( $tsysbad_const, $survey_opt );
 
-  foreach my $survey ( keys %$tsysmax ) {
-    $result{$survey} = new JSA::QA::Result;
+  foreach my $survey ( keys %$tsysbad ) {
+    $result{$survey} = new JSA::QA::Result( 'pass' => 1 );
     my @bad_receptors;
     foreach my $receptor ( keys %$tsys ) {
       next if $tsys->{$receptor} eq BAD_VALUE;
-      if( $tsys->{$receptor} > $tsysmax->{$survey} ) {
-        $result{$survey}->pass( 0 );
+      if( $tsys->{$receptor} > $tsysbad->{$survey} ) {
         $result{$survey}->add_bad_receptor( $receptor );
       }
-    }
-    if( ! $result{$survey}->pass ) {
-      my $fail_reason = "Receptor" . ( $#{$result{$survey}->bad_receptors} > 0 ? "s " : " " );
-      $fail_reason .= ( join ",", sort @{$result{$survey}->bad_receptors} );
-      $fail_reason .= " had Tsys higher than " . $tsysmax->{$survey} . "K";
-      $result{$survey}->add_fail_reason( $fail_reason );
     }
   }
 
@@ -380,6 +377,7 @@ our @EXPORT_OK = qw/ GOODRECEP RMSVAR_RCP TSYSMAX TSYSVAR /;
 # Number of good receptors.
 use constant GOODRECEP => 13;
 use constant RMSVAR_RCP => 3;
+use constant TSYSBAD => 15000;
 use constant TSYSMAX => 15000;
 use constant TSYSVAR => 1.0;
 
@@ -391,6 +389,7 @@ use base qw/ JSA::QA::Telescope /;
 our @EXPORT_OK = qw/ RMSVAR_RCP TSYSMAX /;
 
 use constant RMSVAR_RCP => 0.3;
+use constant TSYSBAD => 1200;
 use constant TSYSMAX => 600;
 use constant TSYSVAR => 0.3;
 
