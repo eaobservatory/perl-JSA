@@ -29,7 +29,7 @@ use vars qw/ $VERSION $DEBUG /;
 
 use Exporter 'import';
 our @EXPORT = qw/ $VERSION $DEBUG analyse_timeseries_rms analyse_tsys
-                  analyse_tsysmax analyse_tsysvar /;
+                  analyse_tsysmax analyse_tsysvar retrieve_constant /;
 
 $VERSION = '1.00';
 $DEBUG   = 1;
@@ -77,7 +77,7 @@ sub analyse_timeseries_rms {
   my $survey_opt = $options{'survey'};
 
   my $rmsvar_rcp_const = 'RMSVAR_RCP';
-  my $rmsvar_rcp = _retrieve_constant( $rmsvar_rcp_const, $survey_opt );
+  my $rmsvar_rcp = retrieve_constant( $rmsvar_rcp_const, $survey_opt );
 
   my $mmm_return = _min_max_mean( [ values %$rms ] );
 
@@ -210,7 +210,7 @@ sub analyse_tsysmax {
 
   my $tsysbad_const = 'TSYSBAD';
 
-  my $tsysbad = _retrieve_constant( $tsysbad_const, $survey_opt );
+  my $tsysbad = retrieve_constant( $tsysbad_const, $survey_opt );
 
   foreach my $survey ( keys %$tsysbad ) {
     $result{$survey} = new JSA::QA::Result( 'pass' => 1 );
@@ -264,7 +264,7 @@ sub analyse_tsysvar {
   my %result;
 
   my $tsysvar_const = 'TSYSVAR';
-  my $tsysvar = _retrieve_constant( $tsysvar_const, $survey_opt );
+  my $tsysvar = retrieve_constant( $tsysvar_const, $survey_opt );
 
   # Determine the mean, min, and max Tsys.
   my $mmm_return = _min_max_mean( [ values %$tsys ] );
@@ -291,18 +291,12 @@ sub analyse_tsysvar {
   return \%result;
 }
 
-=back
-
-=head1 PRIVATE FUNCTIONS
-
-=over 4
-
-=item B<_retrieve_constant>
+=item B<retrieve_constant>
 
 Retrieve the requested named constant from a JLS::QA survey subclass.
 
-  $value = _retrieve_constant( 'RMSVAR_RCP' );
-  $value = _retrieve_constant( 'RMSVAR_RCP', 'GBS' );
+  $value = retrieve_constant( 'RMSVAR_RCP' );
+  $value = retrieve_constant( 'RMSVAR_RCP', 'GBS' );
 
 This function takes two arguments, the constant to be returned and an
 optional survey for which the constant is to be returned.
@@ -313,7 +307,7 @@ that survey.
 
 =cut
 
-sub _retrieve_constant {
+sub retrieve_constant {
   my $constant = shift;
   my $requested_class;
 
@@ -333,6 +327,12 @@ sub _retrieve_constant {
   }
   return \%return;
 }
+
+=back
+
+=head1 PRIVATE FUNCTIONS
+
+=over 4
 
 =item B<_min_max_mean>
 
