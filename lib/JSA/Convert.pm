@@ -53,6 +53,8 @@ our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
 our %PRODS = map { $_ => { map { $_ => undef } @PRODUCTS } } @ASSOCS;
 map { my $assoc = $_; map { $PRODS{$assoc}{$_} = undef } @{$EXTRA_PRODUCTS{$assoc}} } keys %EXTRA_PRODUCTS;
 
+our $DEBUG = 0;
+
 =head1 FUNCTIONS
 
 =over 4
@@ -222,7 +224,7 @@ sub convert_dr_files {
         $tfile = File::Spec->catfile( $opts->{tempdir}, $file );
         if( defined( $opts->{indir} ) ) {
           my $ifile = File::Spec->catfile( $opts->{indir}, $file );
-          print "copying $ifile to $tfile\n";
+          print "copying $ifile to $tfile\n" if $DEBUG;
           copy( $ifile, $tfile ) or die "Copy failed: $!";
         } else {
           copy( $file, $tfile ) or die "Copy failed: $!";
@@ -326,7 +328,7 @@ sub ndf2fits {
                "COMP=DV" );
 
 
-  print join(" ",@args)."\n";
+  print join(" ",@args)."\n" if $DEBUG;
 
   # consider catching the BadExec error
   run_star_command( @args );
@@ -357,7 +359,7 @@ sub fits2ndf {
                "OUT=$outfile",
              );
 
-  print join(" ",@args)."\n";
+  print join(" ",@args)."\n" if $DEBUG;
 
   # consider catching the BadExec error
   run_star_command( @args );

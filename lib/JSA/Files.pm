@@ -33,6 +33,7 @@ our @EXPORT_OK = qw( uri_to_file file_to_uri drfilename_to_cadc
                      looks_like_rawfile
                      compare_file_lists scan_dir construct_rawfile );
 
+our $DEBUG = 0;
 
 # List of support product types as found in ASN_TYPE FITS header
 # along with corresponding names found in filenames.
@@ -188,7 +189,7 @@ sub looks_like_cadcfile {
   } elsif ($filename =~ /^jcmts\d{8}_\d{5}_(lon|sho|p20|p13|p11|mix)_\w+_[a-z]{3}_\d{3}.fits/) {
     return 1; # SCUBA
   }
-  print "Failed looks_like_cadcfile\n";
+  print "Failed looks_like_cadcfile\n" if $DEBUG;
   return 0;
 }
 
