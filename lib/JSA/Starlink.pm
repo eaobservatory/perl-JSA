@@ -43,6 +43,8 @@ our @EXPORT_OK = qw/ check_star_env
                      set_wcs_attribs
                    /;
 
+our $DEBUG = 0;
+
 =head1 FUNCTIONS
 
 =over 4
@@ -219,7 +221,7 @@ sub prov_update_parent_path {
     my @validated;
     my @rejected;
     for my $i (@parind) {
-      print "Checking parent $i\n";
+      print "Checking parent $i\n" if $DEBUG;
       my ($ok, $rej) = _check_parent_product( $indf, $i, \%prod, $status );
       push(@validated, @$ok);
       push(@rejected, @$rej);
@@ -228,15 +230,15 @@ sub prov_update_parent_path {
     # Remove the rejected parents (in reverse order)
     my %seen = ();
     for my $i (sort { $b <=> $a } grep { ! $seen{$_} ++ } @rejected) {
-      print "Removing $i\n";
+      print "Removing $i\n" if $DEBUG;
       ndg_rmprv( $indf, $i, $status);
     }
 
-    print "Validated: ". join(" ", @validated)."\n";
+    print "Validated: ". join(" ", @validated)."\n" if $DEBUG;
 
     # Get the parent indices again. These should all be valid
     @parind = _get_prov_parents( $indf, 0, $status );
-    print "After removal: ". join(" ",@parind)."\n";
+    print "After removal: ". join(" ",@parind)."\n" if $DEBUG;
 
     # Now go through each of the valid parents
     for my $i (@parind) {
@@ -452,7 +454,7 @@ sub _check_parent_product {
 
   # clean up
   dat_annul( $provloc, $_[0]);
-  print "PATH=$path $_[0]\n";
+  print "PATH=$path $_[0]\n" if $DEBUG;
   my @rejected;
   my @isok;
 
@@ -462,29 +464,28 @@ sub _check_parent_product {
     # The path stored in the file lacks the .sdf
     $path .= ".sdf" unless $path =~ /\.sdf$/;
 
-    print "HELLo\n";
     if (looks_like_cadcfile($path)) {
       # assume that if the provenance already includes CADC form
       # that this file is okay
-      print "Looks like CADCFILE\n";
+      print "Looks like CADCFILE\n" if $DEBUG;
       @isok = ($index);
 
     } elsif (looks_like_drfile($path)) {
       # Rather than read the file header (which may cost a lot of time)
       # parse the filename
-      print "Looks like DR\n";
+      print "Looks like DR\n" if $DEBUG;
       my @parts = dissect_drfile( $path );
 
       if (exists $prod->{$parts[5]}) {
         # we are good
-        print "Product match\n";
+        print "Product match\n" if $DEBUG;
         @isok = ($index);
       }
     } elsif ( looks_like_rawfile( $path ) ) {
-      print "Looks like raw\n";
+      print "Looks like raw\n" if $DEBUG;
       @isok = ($index);
     } else {
-      print "Strange match\n";
+      print "Strange match\n" if $DEBUG;
     }
 
     # if we have got here with an empty index list we need to look in the parent
@@ -500,7 +501,7 @@ sub _check_parent_product {
       } else {
         # if there are no more parents we have to assume that this is a valid
         # parent.
-        print "No parents for $index\n";
+        print "No parents for $index\n" if $DEBUG;
         push(@isok, $index);
       }
     }
