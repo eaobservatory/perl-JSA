@@ -89,7 +89,15 @@ sub analyse_timeseries_rms {
         ( $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $rmsvar_rcp->{$survey} ) ) ) {
 
       $result{$survey}->pass( 0 );
-      $result{$survey}->add_fail_reason( "Receptor-to-receptor RMS values varied by more than " . int( $rmsvar_rcp->{$survey} * 100 ) . "%" );
+      my $fail_reason = sprintf( "Receptor-to-receptor RMS values varied by more than %d%%\n", int( $rmsvar_rcp->{$survey} * 100 ) );
+      $fail_reason .= sprintf( "  [min=%.2f (-%.2f%% of mean) max=%.2f (+%.2f%% of mean) mean=%.2f]",
+                               $mmm_return->{min},
+                               abs( $mmm_return->{min} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
+                               $mmm_return->{max},
+                               abs( $mmm_return->{max} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
+                               $mmm_return->{mean}
+                             );
+      $result{$survey}->add_fail_reason( $fail_reason );
     }
   }
 
@@ -267,7 +275,16 @@ sub analyse_tsysvar {
         $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $tsysvar->{$survey} ) ||
         $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $tsysvar->{$survey} ) ) {
       $result{$survey}->pass( 0 );
-      $result{$survey}->add_fail_reason( "Receptor-to-receptor Tsys varied by more than " . int( $tsysvar->{$survey} * 100 ) . "%" );
+      my $fail_reason = sprintf( "Receptor-to-receptor Tsys values varied by more than %d%%\n", int( $tsysvar->{$survey} * 100 ) );
+      $fail_reason .= sprintf( "  [min=%.2f (-%.2f%% of mean) max=%.2f (+%.2f%% of mean) mean=%.2f]",
+                               $mmm_return->{min},
+                               abs( $mmm_return->{min} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
+                               $mmm_return->{max},
+                               abs( $mmm_return->{max} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
+                               $mmm_return->{mean}
+                             );
+
+      $result{$survey}->add_fail_reason( $fail_reason );
     }
   }
 
@@ -376,9 +393,17 @@ our @EXPORT_OK = qw/ GOODRECEP RMSVAR_RCP TSYSMAX TSYSVAR /;
 
 # Number of good receptors.
 use constant GOODRECEP => 13;
-use constant RMSVAR_RCP => 3;
-use constant TSYSBAD => 15000;
-use constant TSYSMAX => 15000;
+
+# Fractional variation in RMS numbers.
+use constant RMSVAR_RCP => 1.0;
+
+# Tsys limit above which a receptor is flagged as bad.
+use constant TSYSBAD => 1500;
+
+# Mean Tsys for good receptor limit.
+use constant TSYSMAX => 750;
+
+# Fractional variation in Tsys numbers.
 use constant TSYSVAR => 1.0;
 
 
@@ -393,11 +418,15 @@ use constant TSYSBAD => 1200;
 use constant TSYSMAX => 600;
 use constant TSYSVAR => 0.3;
 
+
 package JSA::QA::NGS;
 
 use base qw/ JSA::QA::Telescope /;
 
 our @EXPORT_OK = qw/ /;
+
+use constant RMSVAR_RCP => 0.5;
+use constant TSYSVAR => 0.5;
 
 
 package JSA::QA::SLS;
