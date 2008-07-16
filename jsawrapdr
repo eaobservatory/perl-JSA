@@ -132,6 +132,7 @@ use FindBin;
 
 use Getopt::Long;
 use Pod::Usage;
+use File::Remove qw/ remove /;
 use File::Spec;
 use File::Temp;
 use Carp;
@@ -502,6 +503,9 @@ if( defined( $transdir ) ) {
 log_message( "calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
 
 my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "-id", $id, @args);
+
+# Clean up the output directory.
+remove \1, File::Spec->catfile( $outdir, "*.sdf" );
 
 exit;
 
