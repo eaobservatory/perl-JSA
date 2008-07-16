@@ -473,6 +473,7 @@ if ($useoracdr) {
 log_message( "Running: " . join( " ", @drcommand ) );
 my ( $drstdout, $drstderr, $drstatus ) = run_command( { nothrow => 1 },
                                                       @drcommand);
+@drcommand = map { s/\e\[(?:\d{1,2};?)+m//g } @drcommand;
 log_message( "Last ten lines of STDOUT:\n" );
 log_message( join "\n", @$drstdout[-10..-1] );
 die "Non-zero exit status: $drstatus" if $drstatus;
