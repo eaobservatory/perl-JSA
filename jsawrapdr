@@ -474,8 +474,11 @@ log_message( "Running: " . join( " ", @drcommand ) );
 my ( $drstdout, $drstderr, $drstatus ) = run_command( { nothrow => 1 },
                                                       @drcommand);
 map { s/\e\[(?:\d{1,2};?)+m//g; } @$drstdout;
-log_message( "Last ten lines of STDOUT:\n" );
-log_message( join "\n", @$drstdout[-10..-1] );
+map { s/\e\[(?:\d{1,2};?)+m//g; } @drstderr;
+log_message( "\nLast ten lines of STDOUT:\n" );
+log_message( join "\n", grep { defined } @$drstdout[-10..-1] );
+log_message( "\nLast ten lines of STDERR:\N" );
+log_message( join "\n", grep { defined } @$drstderr[-10..-1] );
 die "Non-zero exit status: $drstatus" if $drstatus;
 
 # Process NDF data products and convert them into FITS
