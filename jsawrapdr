@@ -474,7 +474,7 @@ log_message( "Running: " . join( " ", @drcommand ) );
 my ( $drstdout, $drstderr, $drstatus ) = run_command( { nothrow => 1 },
                                                       @drcommand);
 map { s/\e\[(?:\d{1,2};?)+m//g; } @$drstdout;
-map { s/\e\[(?:\d{1,2};?)+m//g; } @drstderr;
+map { s/\e\[(?:\d{1,2};?)+m//g; } @$drstderr;
 log_message( "\nLast ten lines of STDOUT:\n" );
 log_message( join "\n", grep { defined } @$drstdout[-10..-1] );
 log_message( "\nLast ten lines of STDERR:\N" );
