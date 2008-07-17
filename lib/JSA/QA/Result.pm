@@ -16,6 +16,8 @@ sub new {
   my $result = bless { 'PASS' => 1,
                        'BAD_RECEPTORS' => [],
                        'FAIL_REASONS' => [],
+                       'RMS_STATS' => (),
+                       'TSYS_STATS' => (),
                      }, $class;
 
   $result->_configure( @_ ) if @_;
@@ -39,6 +41,18 @@ sub pass {
   my $self = shift;
   if( @_ ) { $self->{PASS} = shift; }
   return $self->{PASS};
+}
+
+sub rms_stats {
+  my $self = shift;
+  if( @_ ) { $self->{RMS_STATS} = shift; }
+  return $self->{RMS_STATS};
+}
+
+sub tsys_stats {
+  my $self = shift;
+  if( @_ ) { $self->{TSYS_STATS} = shift; }
+  return $self->{TSYS_STATS};
 }
 
 sub add_bad_receptor {
