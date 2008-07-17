@@ -84,6 +84,9 @@ sub analyse_timeseries_rms {
   my %result;
   foreach my $survey ( sort keys %$rmsvar_rcp ) {
     $result{$survey} = new JSA::QA::Result;
+    if( defined( $mmm_return->{min} ) ) {
+      $result{$survey}->rms_stats( $mmm_return );
+    }
     if( ! defined( $mmm_return->{min} ) ||
         ( $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $rmsvar_rcp->{$survey} ) ) ||
         ( $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $rmsvar_rcp->{$survey} ) ) ) {
@@ -158,6 +161,8 @@ sub analyse_tsys {
 
     my $tresult = analyse_tsysvar( \%temp_tsys,
                                    'survey' => $survey );
+
+    $result{$survey}->tsys_stats( $tresult->{$survey}->tsys_stats );
 
     if( ! $tresult->{$survey}->pass ) {
       $result{$survey}->pass( 0 );
@@ -271,6 +276,9 @@ sub analyse_tsysvar {
 
   foreach my $survey ( keys %$tsysvar ) {
     $result{$survey} = new JSA::QA::Result( pass => 1 );
+    if( defined( $mmm_return->{min} ) ) {
+      $result{$survey}->tsys_stats( $mmm_return );
+    }
     if( ! defined( $mmm_return->{min} ) ||
         $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $tsysvar->{$survey} ) ||
         $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $tsysvar->{$survey} ) ) {
