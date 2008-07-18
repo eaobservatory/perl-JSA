@@ -112,9 +112,9 @@ for my $f (sort keys %files) {
 
     if( $persist ) {
 
-      # Copy the file into a temporary file in the output directory,
+      # Copy the file into a temporary file in the current directory,
       # then rename it.
-      my( $fh, $filename ) = tempfile( DIR => $transdir );
+      my( $fh, $filename ) = tempfile( );
       copy( $f, $filename ) or die "copy from $f to $filename failed: $!";
       move( $filename, File::Spec->catfile( $transdir, $f ) ) or die "move from $filename to " . File::Spec->catfile( $transdir, $f ) . " failed: $!";
 
