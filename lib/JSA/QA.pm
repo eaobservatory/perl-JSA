@@ -270,6 +270,8 @@ sub analyse_tsysvar {
 
   my $tsysvar_const = 'TSYSVAR';
   my $tsysvar = retrieve_constant( $tsysvar_const, $survey_opt );
+  my $tsysmax_const = 'TSYSMAX';
+  my $tsysmax = retrieve_constant( $tsysmax_const, $survey_opt );
 
   # Determine the mean, min, and max Tsys.
   my $mmm_return = _min_max_mean( [ values %$tsys ] );
@@ -292,6 +294,15 @@ sub analyse_tsysvar {
                                $mmm_return->{mean}
                              );
 
+      $result{$survey}->add_fail_reason( $fail_reason );
+    }
+    if( defined( $mmm_return->{max} ) &&
+        $mmm_return->{max} > $tsysmax->{$survey} ) {
+      $result{$survey}->pass( 0 );
+      my $fail_reason = sprintf( "Mean Tsys value (%.2f) is greater than maximum allowed value (%d)\n",
+                                 $mmm_return->{max},
+                                 $tsysmax->{$survey}
+                               );
       $result{$survey}->add_fail_reason( $fail_reason );
     }
   }
