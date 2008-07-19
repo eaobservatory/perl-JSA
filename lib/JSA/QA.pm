@@ -42,6 +42,12 @@ use constant BAD_VALUE => 'bad';
 
 =over 4
 
+=item B<analyse_rms_vs_tsys>
+
+Analyse consistency checks between RMS and Tsys from timeseries data.
+
+  $result = analyse_rms_vs_tsys( $
+
 =item B<analyse_timeseries_rms>
 
 Analyse RMS values for each receptor as obtained from timeseries data.
@@ -413,6 +419,17 @@ our @EXPORT_OK = qw/ GOODRECEP RMSVAR_RCP TSYSMAX TSYSVAR /;
 # Number of good receptors.
 use constant GOODRECEP => 13;
 
+# Fractional variation between RMS and Tsys.
+use constant RMSTSYSTOL => 0.3;
+
+# Lower limit of fraction of spectra failing RMS/Tsys consistency
+# check for questionable status.
+use constant RMSTSYSTOL_QUEST => 0.025;
+
+# Lower limit of fraction of spectra failing RMS/Tsys consistency
+# check for failed status.
+use constant RMSTSYSTOL_FAIL => 0.05;
+
 # Fractional variation in RMS numbers.
 use constant RMSVAR_RCP => 1.0;
 
@@ -432,6 +449,9 @@ use base qw/ JSA::QA::Telescope /;
 
 our @EXPORT_OK = qw/ RMSVAR_RCP TSYSMAX /;
 
+use constant RMSTSYSTOL => 0.15;
+use constant RMSTSYSTOL_QUEST => 0.015;
+use constant RMSTSYSTOL_FAIL => 0.03;
 use constant RMSVAR_RCP => 0.3;
 use constant TSYSBAD => 1200;
 use constant TSYSMAX => 600;
