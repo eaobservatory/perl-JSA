@@ -511,7 +511,9 @@ log_message( "calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
 my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "-id", $id, @args);
 
 # Clean up the output directory.
-remove \1, File::Spec->catfile( $outdir, "*.sdf" );
+remove \1, File::Spec->catfile( $outdir, "*.sdf" ),
+           File::Spec->catfile( $outdir, ".orac*.log" ),
+           File::Spec->catfile( $outdir, "*.fits" );
 
 exit;
 
