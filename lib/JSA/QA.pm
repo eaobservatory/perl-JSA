@@ -22,6 +22,7 @@ use strict;
 use warnings;
 use warnings::register;
 use Carp;
+use Statistics::Descriptive;
 
 use JSA::QA::Result;
 
@@ -383,27 +384,17 @@ sub _min_max_mean {
   my %return = ( 'max' => undef,
                  'min' => undef,
                  'mean' => undef );
-  my $min = undef;
-  my $max = undef;
-  my $mean = undef;
 
-  my $num = 0;
-  my $sum = 0;
+  my @values = grep { $_ ne BAD_VALUE } @$values;
 
-  foreach my $value ( @$values ) {
-    next if $value eq BAD_VALUE;
-    $sum += $value;
-    if( ! defined( $max ) || $value > $max ) { $max = $value; }
-    if( ! defined( $min ) || $value < $min ) { $min = $value; }
-    $num++;
+  my $stat = Statistics::Descriptive::Sparse->new();
+  $stat->add_data( @values );
+
+  if( $stat->count != 0 ) {
+    $return{'min'} = $stat->min();
+    $return{'max'} = $stat->max();
+    $return{'mean'} = $stat->mean();
   }
-  if( $num != 0 ) {
-    $mean = $sum / $num;
-  }
-
-  $return{'min'} = $min;
-  $return{'max'} = $max;
-  $return{'mean'} = $mean;
 
   return \%return;
 }
