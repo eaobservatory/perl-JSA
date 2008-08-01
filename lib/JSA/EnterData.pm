@@ -679,8 +679,17 @@ sub add_subsys_obs {
 
     if ( ! $self->update_mode ) {
 
-      $self->insert_hash( 'FILES', $dbh, $insert_ref )
-        or $error = $dbh->errstr;
+      try {
+
+        _verify_file_name( $insert_ref->{'file_id'} );
+
+        $self->insert_hash( 'FILES', $dbh, $insert_ref )
+          or $error = $dbh->errstr;
+      }
+      catch JSA::Error with {
+
+        $error = shift @_;
+      };
     }
 
     if ($error) {
@@ -1695,6 +1704,8 @@ unexpected format.  Else, it simply returns.
 sub _verify_file_name {
 
   my ( $name ) = @_;
+
+  return unless defined $name;
 
   my @bad;
   my $ok = qr{^ a 2\d{7} _ \d+ _ \d+ _ \d+ \. sdf $}x;
