@@ -59,7 +59,7 @@ BEGIN {
   $ENV{'OMP_SITE_CONFIG'} =
     '/home/jcmtarch/enterdata-cfg/enterdata.cfg'
     #'/Users/timj/enterdata.cfg'
-    #'/home/agarwal/src/scicom/trunk/archiving/jcmt/cfg/enterdata.cfg'
+    #'/home/agarwal/src/scicom/trunk/archiving/jcmt/.enterdata-cfg/enterdata.cfg'
     ;
 }
 
@@ -1051,7 +1051,7 @@ BEGIN
 
     $filler = join '_', 'fill_headers', $filler;
 
-warn $filler;
+#warn $filler;
 
     return $self->$filler( $header, $obs );
   }
@@ -1680,6 +1680,37 @@ sub _verify_dict {
   return 1;
 }
 
+=item B<_verify_file_name>
+
+Verifies that a file name is in format matching
+C<{^ a 2\d{7} _ \d+ _ \d+ _ \d+ \. sdf $}x>, e.g.
+C<a20080726_00001_01_0001.sdf>.  File names can be given either as
+plain scalar or in an array reference.
+
+Throws C<JSA::Error> with a message listing all the file names in
+unexpected format.  Else, it simply returns.
+
+=cut
+
+sub _verify_file_name {
+
+  my ( $name ) = @_;
+
+  my @bad;
+  my $ok = qr{^ a 2\d{7} _ \d+ _ \d+ _ \d+ \. sdf $}x;
+
+  for my $n ( ref $name ? @{ $name } : $name ) {
+
+    push @bad, $n unless $n =~ m[$ok];
+  }
+
+  my $size = scalar @bad;
+
+  return unless $size;
+
+  throw JSA::Error sprintf "Bad file name%s: %s\n",
+                    ( $size > 1 ? 's' : '' ), join ', ' , @bad ;
+}
 
 1;
 
