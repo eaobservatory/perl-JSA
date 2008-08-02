@@ -81,6 +81,7 @@ use Scalar::Util qw[ looks_like_number ];
 use Astro::Coords::Angle::Hour;
 
 use JSA::Error qw[ :try ];
+use JSA::Files qw[ looks_like_rawfile ];
 use JCMT::DataVerify;
 
 use OMP::DBbackend::Archive;
@@ -1708,11 +1709,9 @@ sub _verify_file_name {
   return unless defined $name;
 
   my @bad;
-  my $ok = qr{^ a 2\d{7} _ \d+ _ \d+ _ \d+ \. sdf $}x;
-
   for my $n ( ref $name ? @{ $name } : $name ) {
 
-    push @bad, $n unless $n =~ m[$ok];
+    push @bad, $n unless looks_like_rawfile( $n );
   }
 
   my $size = scalar @bad;
