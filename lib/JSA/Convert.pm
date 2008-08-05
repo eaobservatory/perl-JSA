@@ -51,7 +51,12 @@ our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
 
 # Set up a hash.
 our %PRODS = map { $_ => { map { $_ => undef } @PRODUCTS } } @ASSOCS;
-map { my $assoc = $_; map { $PRODS{$assoc}{$_} = undef } @{$EXTRA_PRODUCTS{$assoc}} } keys %EXTRA_PRODUCTS;
+
+for my $assoc (keys %EXTRA_PRODUCTS) {
+  for my $prod (@{$EXTRA_PRODUCTS{$assoc}}) {
+    $PRODS{$assoc}{$prod} = undef;
+  }
+}
 
 our $DEBUG = 0;
 
@@ -79,9 +84,19 @@ sub can_convert_to_fits {
 
   return 0 if ( ! UNIVERSAL::isa( $header, "Astro::FITS::Header" ) );
 
-  my $obstype = $header->value( "OBS_TYPE" );
+  # if there is a SIMULATE header it should be False
+  my $simitem = $header->itembyname("SIMULATE");
+  return 0 if (defined $simitem && $simitem->value());
 
-  return 0 if ( ! defined $obstype || $obstype !~ /science/i );
+  my $inst = $header->value( "INSTRUME" );
+
+  # For SCUBA there is no obs_type header but we simply want
+  # to harvest all files with matching product
+  if ($inst ne "SCUBA") {
+
+    my $obstype = $header->value( "OBS_TYPE" );
+    return 0 if ( ! defined $obstype || $obstype !~ /science/i );
+  }
 
   my $assoc = $header->value( "ASN_TYPE" );
   my $product = $header->value( "PRODUCT" );
