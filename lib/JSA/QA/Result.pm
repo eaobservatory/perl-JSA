@@ -85,6 +85,36 @@ sub add_fail_reason {
   $self->fail_reasons( $reasons );
 }
 
+=item B<merge>
+
+Merge two sets of QA results.
+
+  $merged = $first->merge( $second );
+
+This method only merges the pass(), bad_receptors(), and
+fail_reasons() values.
+
+Returns a JSA::QA::Result object. The input JSA::QA::Result objects
+are unchanged.
+
+=cut
+
+sub merge {
+  my $self = shift;
+  my $second = shift;
+
+  my $merged = new JSA::QA::Result;
+  $merged->pass( $self->pass && $second->pass );
+
+  $merged->add_fail_reason( $self->fail_reasons );
+  $merged->add_fail_reason( $second->fail_reasons );
+
+  $merged->add_bad_receptor( $self->bad_receptors );
+  $merged->add_bad_receptor( $second->bad_receptors );
+
+  return $merged;
+}
+
 sub _configure {
   my $self = shift;
   my %args = @_;
