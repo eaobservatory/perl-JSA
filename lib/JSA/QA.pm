@@ -405,7 +405,9 @@ sub _min_max_mean {
 
 package JSA::QA::Telescope;
 
-our @EXPORT_OK = qw/ GOODRECEP RMSVAR_RCP TSYSMAX TSYSVAR /;
+our @EXPORT_OK = qw/ GOODRECEP RMSTSYSTOL RMSTSYSTOL_QUEST
+                     RMSTSYSTOL_FAIL RMSVAR_RCP TSYSBAD TSYSMAX
+                     TSYSVAR /;
 
 # Number of good receptors.
 use constant GOODRECEP => 13;
@@ -438,7 +440,8 @@ package JSA::QA::GBS;
 
 use base qw/ JSA::QA::Telescope /;
 
-our @EXPORT_OK = qw/ RMSVAR_RCP TSYSMAX /;
+our @EXPORT_OK = qw/ RMSTSYSTOL RMSTSYSTOL_QUEST RMSTSYSTOL_FAIL
+                     RMSVAR_RCP TSYSBAD TSYSMAX TSYSVAR /;
 
 use constant RMSTSYSTOL => 0.15;
 use constant RMSTSYSTOL_QUEST => 0.015;
@@ -453,7 +456,7 @@ package JSA::QA::NGS;
 
 use base qw/ JSA::QA::Telescope /;
 
-our @EXPORT_OK = qw/ /;
+our @EXPORT_OK = qw/ RMSVAR_RCP TSYSVAR /;
 
 use constant RMSVAR_RCP => 0.5;
 use constant TSYSVAR => 0.5;
