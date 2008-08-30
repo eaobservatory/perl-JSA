@@ -20,6 +20,7 @@ use strict;
 use Carp;
 use warnings;
 use File::Spec;
+use File::Basename;
 use warnings::register;
 
 use Proc::SafeExec;
@@ -203,6 +204,9 @@ sub prov_update_parent_path {
   looks_like_drfile($file)
     or JSA::Error::BadFile->throw( "File '$file' does not look like it came from the DR");
 
+  # Grab the base directory.
+  my( $filename, $basedir, $suffix ) = fileparse( $file );
+
   # Starlink status
   my $status = &NDF::SAI__OK;
 
@@ -262,6 +266,12 @@ sub prov_update_parent_path {
 
         # The path stored in the file lacks the .sdf
         $path .= ".sdf" unless $path =~ /\.sdf$/;
+
+        # Check to see if this file exists. If it doesn't, we'll check in the same directory as the original file.
+        if ( ! -e $path ) {
+           my $parent_filename = fileparse( $path );
+           $path = File::Spec->catfile( $basedir, $parent_filename );
+        }
 
         # We need the header
         my $hdr = eval { Astro::FITS::Header::NDF->new(File => $path) };
