@@ -17,12 +17,12 @@ JAS::EnterData - Parse headers and store in database
   $enter->date( 20080625 );
 
   # Fill metadata.
-  $enter->upload_mode( 0 );
+  $enter->update_mode( 0 );
 
   $enter->prepare_and_insert;
 
   # Fill file information.
-  $enter->upload_mode( 1 );
+  $enter->update_mode( 1 );
 
   $enter->prepare_and_insert;
 
@@ -617,6 +617,36 @@ sub insert_obs {
   }
 
   return;
+}
+
+=item B<skip_obs>
+
+Returs a truth value indicating if an observation is a simulation run,
+or for which RA/Dec cannot be calculated. It accepts an
+L<OMP::Info::Obs> object.  If optional header hash reference (see
+L<OMP::Info::Obs/hdrhash>) is not given, it will be retreived from the
+given L<OMP::Info::Obs> object.
+
+  $skip = $enter->skip_obs( $obs );
+
+  $skip = $enter->skip_obs( $obs, $header );
+
+=cut
+
+sub skip_obs {
+
+  my ( $self, $obs, $header ) = @_;
+
+  $header = $obs->hdrhash unless defined $header;
+
+  # Alternatively could (silently) return false.
+  throw JSA::Error "FITS headers are undefined."
+    unless defined $header;
+
+  # Tests are the same which control database changes.
+  return
+       ( exists $header->{'SIMULATE'} && !! $header->{'SIMULATE'} )
+    || ! $self->calc_radec( $obs, $header );
 }
 
 =item B<add_subsys_obs>
