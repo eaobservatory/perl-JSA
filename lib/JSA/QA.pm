@@ -423,8 +423,14 @@ use constant RMSTSYSTOL_QUEST => 0.025;
 # check for failed status.
 use constant RMSTSYSTOL_FAIL => 0.05;
 
+# Fractional variation in RMS across the map.
+use constant RMSVAR_MAP => 0.6;
+
 # Fractional variation in RMS numbers.
 use constant RMSVAR_RCP => 1.0;
+
+# Fractional variation in RMS with frequency.
+use constant RMSVAR_SPEC => 0.2;
 
 # Tsys limit above which a receptor is flagged as bad.
 use constant TSYSBAD => 1500;
@@ -443,23 +449,24 @@ use base qw/ JSA::QA::Telescope /;
 our @EXPORT_OK = qw/ RMSTSYSTOL RMSTSYSTOL_QUEST RMSTSYSTOL_FAIL
                      RMSVAR_RCP TSYSBAD TSYSMAX TSYSVAR /;
 
-use constant RMSTSYSTOL => 0.15;
-use constant RMSTSYSTOL_QUEST => 0.015;
-use constant RMSTSYSTOL_FAIL => 0.03;
-use constant RMSVAR_RCP => 0.3;
+use constant RMSTSYSTOL_QUEST => 0.03;
+use constant RMSTSYSTOL_FAIL => 0.05;
+use constant RMSVAR_RCP => 0.5;
 use constant TSYSBAD => 1200;
 use constant TSYSMAX => 600;
-use constant TSYSVAR => 0.3;
+use constant TSYSVAR => 0.5;
 
 
 package JSA::QA::NGS;
+
+# These are temporarily in place for GBS C18O
 
 use base qw/ JSA::QA::Telescope /;
 
 our @EXPORT_OK = qw/ RMSVAR_RCP TSYSVAR /;
 
-use constant RMSVAR_RCP => 0.5;
-use constant TSYSVAR => 0.5;
+use constant RMSVAR_RCP => 1.0;
+use constant TSYSVAR => 1.0;
 
 
 package JSA::QA::SLS;
