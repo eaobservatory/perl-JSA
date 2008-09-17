@@ -306,7 +306,7 @@ sub analyse_tsysvar {
     if( defined( $mmm_return->{mean} ) &&
         $mmm_return->{mean} > $tsysmax->{$survey} ) {
       $result{$survey}->pass( 0 );
-      my $fail_reason = sprintf( "Mean Tsys value (%.2f) is greater than maximum allowed value (%d)\n",
+      my $fail_reason = sprintf( "Mean Tsys value (%.2f) is greater than maximum allowed value (%d)",
                                  $mmm_return->{mean},
                                  $tsysmax->{$survey}
                                );
