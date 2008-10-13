@@ -475,12 +475,11 @@ my ( $drstdout, $drstderr, $drstatus ) = run_command( { nothrow => 1 },
                                                       @drcommand);
 map { s/\e\[(?:\d{1,2};?)+m//g; } @$drstdout;
 map { s/\e\[(?:\d{1,2};?)+m//g; } @$drstderr;
-log_message( "\nLast ten lines of STDOUT:\n" );
+log_message( "\n*** Last ten lines of STDOUT:\n" );
 my $upper = ( $#$drstdout > 9 ? 10 : $#$drstdout+1 );
 log_message( join "\n", grep { defined } @$drstdout[-$upper..-1] );
-log_message( "\nLast ten lines of STDERR:\n" );
-$upper = ( $#$drstderr > 9 ? 10 : $#$drstderr+1 );
-log_message( join "\n", grep { defined } @$drstderr[-$upper..-1] );
+log_message( "\n*** All output from STDERR:\n" );
+log_message( join "\n", @$drstderr );
 die "Non-zero exit status: $drstatus" if $drstatus;
 
 # Process NDF data products and convert them into FITS
@@ -506,7 +505,7 @@ if( defined( $transdir ) ) {
   push @args, "-transdir", $transdir;
 }
 
-log_message( "calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
+log_message( "\n*** calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
 
 my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "-id", $id, @args);
 
