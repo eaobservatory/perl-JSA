@@ -16,6 +16,7 @@ sub new {
   my $result = bless { 'PASS' => 1,
                        'BAD_RECEPTORS' => [],
                        'FAIL_REASONS' => [],
+                       'NOTES' => [],
                        'RMS_STATS' => (),
                        'TSYS_STATS' => (),
                      }, $class;
@@ -35,6 +36,12 @@ sub fail_reasons {
   my $self = shift;
   if( @_ ) { $self->{FAIL_REASONS} = shift; }
   return $self->{FAIL_REASONS};
+}
+
+sub notes {
+  my $self = shift;
+  if( @_ ) { $self->{NOTES} = shift; }
+  return $self->{NOTES};
 }
 
 sub pass {
@@ -85,13 +92,33 @@ sub add_fail_reason {
   $self->fail_reasons( $reasons );
 }
 
+sub clear_fail_reasons {
+  my $self = shift;
+  $self->{FAIL_REASONS} = [];
+}
+
+sub add_note {
+  my $self = shift;
+  my $note = shift;
+
+  return if ! defined $note;
+
+  my $notes = $self->notes;
+  if( ref( $note ) ) {
+    push @$notes, @$note;
+  } else {
+    push @$notes, $note;
+  }
+  $self->notes( $notes );
+}
+
 =item B<merge>
 
 Merge two sets of QA results.
 
   $merged = $first->merge( $second );
 
-This method only merges the pass(), bad_receptors(), and
+This method only merges the pass(), bad_receptors(), notes() and
 fail_reasons() values.
 
 Returns a JSA::QA::Result object. The input JSA::QA::Result objects
@@ -111,6 +138,9 @@ sub merge {
 
   $merged->add_bad_receptor( $self->bad_receptors );
   $merged->add_bad_receptor( $second->bad_receptors );
+
+  $merged->add_note( $self->notes );
+  $merged->add_note( $second->notes );
 
   return $merged;
 }

@@ -7,7 +7,8 @@ JSA::QA - Quality Assurance functions for ACSIS data.
 =head1 SYNOPSIS
 
   use JSA::QA qw/ analyse_tsys /;
-  analyse_tsys( $tsys );
+  my $qa = new JSA::QA( file => 'config.ini' );
+  $qa->analyse_tsys( $tsys );
 
 =head1 DESCRIPTION
 
@@ -22,6 +23,7 @@ use strict;
 use warnings;
 use warnings::register;
 use Carp;
+use Config::IniFiles;
 use Statistics::Descriptive;
 
 use JSA::QA::Result;
@@ -35,25 +37,170 @@ our @EXPORT = qw/ $VERSION $DEBUG analyse_timeseries_rms analyse_tsys
 $VERSION = '1.00';
 $DEBUG   = 1;
 
-my @SUBCLASSES = qw/ Telescope GBS NGS SLS /;
-
 use constant BAD_VALUE => 'bad';
+
+=head1 CONSTRUCTORS
+
+=over 4
+
+=item B<new>
+
+Create a JSA::QA object.
+
+  my $qa = new JSA::QA( file => 'config.ini' );
+
+The config file must be passed in. For config file layout, see CONFIG FILE LAYOUT section below.
+
+=cut
+
+sub new {
+  my $proto = shift;
+  my $class = ref( $proto ) || $proto;
+
+  my %opts = @_;
+
+  my $qa = {};
+
+  if( exists( $opts{'file'} ) &&
+      -e $opts{'file'} ) {
+    tie my %cfg, 'Config::IniFiles', ( -file => $opts{'file'} );
+    $qa->{CONFIG} = \%cfg;
+  }
+
+  bless( $qa, $class );
+  return $qa;
+}
+
+=back
+
+=head1 ACCESSORS
+
+=over 4
+
+=item B<get_data>
+
+Retrieve quality assurance constants.
+
+  my $goodrecept = $qa->get_data( key => 'GOODRECEP' );
+
+Arguments are passed as key/value pairs.
+
+The only mandatory argument is 'key'.
+
+Optional arguments are:
+
+ - survey: the survey for which the given QA constant applies.
+ - molecule: the molecule for which the given QA constant applies. Of the form "13CO". Can have dashes separating atoms or isotope number (i.e. "13-C-O").
+ - frequency: the frequency, in GHz, for which the QA constant applies.
+
+Optional arguments are handled as follows:
+
+ - if 'survey' alone is given, then the requested QA constant is returned. If no such QA constant is defined in the configuration file for that survey, then the default QA constant is returned.
+ - if 'molecule' is given, that takes priority over 'frequency'. If the given survey has the molecule defined, then that QA constant is returned. If not, then the default QA constant for that survey is returned. If that is not defined, then the default QA constant for that molecule is returned. If that is not defined, then the default QA constant is returned.
+ - if 'frequency' is given, and the given survey has a defined range containing that frequency, then that QA constant is returned. If not, but the survey is defined, then the default QA constant for that survey is returned. If that is not defined, then the default QA constant for the frequency range containing the given frequency is returned. If that is not defined, then the default QA constant is returned.
+
+No translation between molecule and frequency is done.
+
+=back
+
+=cut
+
+sub get_data {
+  my $self = shift;
+  my %opts = @_;
+
+  foreach my $optkey ( keys %opts ) {
+    $opts{lc($optkey)} = $opts{$optkey};
+  }
+
+  return unless defined $opts{'key'};
+
+  my $key = uc( $opts{'key'} );
+
+  if( ! defined( $opts{'survey'} ) ) {
+    # Return the default.
+    return $self->{'CONFIG'}->{'default'}->{$key};
+  }
+
+  my $survey = uc( $opts{'survey'} );
+
+  if( ! defined( $opts{'molecule'} ) &&
+      ! defined( $opts{'frequency'} ) ) {
+
+    # Return the survey, if it exists. Otherwise, return the default.
+    if( exists( $self->{'CONFIG'}->{$survey} ) &&
+        exists( $self->{'CONFIG'}->{$survey}->{$key} ) ) {
+      return $self->{'CONFIG'}->{$survey}->{$key};
+    } else {
+      return $self->{'CONFIG'}->{'default'}->{$key};
+    }
+  }
+
+  if( defined( $opts{'molecule'} ) ) {
+    my $molecule = uc( $opts{'molecule'} );
+
+    # Remove any dashes.
+    $molecule =~ s/-//g;
+
+    # Bodge together the survey and the molecule name.
+    my $str = "$survey $molecule";
+
+    # First search for this combination. If it doesn't exist, fall back to survey. If that doesn't exist, search for the default value for this molecule. If that doesn't exist, fall back to the default.
+    if( exists( $self->{'CONFIG'}->{$str} ) &&
+        exists( $self->{'CONFIG'}->{$str}->{$key} ) ) {
+      return $self->{'CONFIG'}->{$str}->{$key};
+    } elsif( exists( $self->{'CONFIG'}->{$survey} ) &&
+             exists( $self->{'CONFIG'}->{$survey}->{$key} ) ) {
+      return $self->{'CONFIG'}->{$survey}->{$key};
+    } elsif( exists( $self->{'CONFIG'}->{"default $molecule"} ) &&
+             exists( $self->{'CONFIG'}->{"default $molecule"}->{$key} ) ) {
+      return $self->{'CONFIG'}->{"default $molecule"}->{$key};
+    } else {
+      return $self->{'CONFIG'}->{'default'}->{$key};
+    }
+  }
+
+  # Now for frequencies.
+  # Get config keys that have the requested survey and a colon.
+  my $frequency = $opts{'frequency'};
+  my @config_keys = grep { /:/ } grep { /$survey/ } keys %{$self->{'CONFIG'}};
+  foreach my $config_key ( @config_keys ) {
+    $config_key =~ /(\d+):(\d+)/;
+    my $lower = $1;
+    my $upper = $2;
+    if( $lower < $frequency && $frequency < $upper ) {
+      return $self->{'CONFIG'}->{$config_key}->{$key};
+    }
+  }
+  # If we made it here, there isn't an entry matching this frequency for this survey. Fall back to the survey default.
+  if( exists( $self->{'CONFIG'}->{$survey} ) &&
+      exists( $self->{'CONFIG'}->{$survey}->{$key} ) ) {
+    return $self->{'CONFIG'}->{$survey}->{$key};
+  }
+  # If we made it here, there isn't an entry for this survey. Try the default, looking for frequency ranges.
+  @config_keys = grep { /:/ } grep { /default/ } keys %{$self->{'CONFIG'}};
+  foreach my $config_key ( @config_keys ) {
+    $config_key =~ /(\d+):(\d+)/;
+    my $lower = $1;
+    my $upper = $2;
+    if( $lower < $frequency && $frequency < $upper ) {
+      return $self->{'CONFIG'}->{$config_key}->{$key};
+    }
+  }
+  # If we made it here, just return the default.
+  return $self->{'CONFIG'}->{'default'}->{$key};
+
+}
 
 =head1 FUNCTIONS
 
 =over 4
 
-=item B<analyse_rms_vs_tsys>
-
-Analyse consistency checks between RMS and Tsys from timeseries data.
-
-  $result = analyse_rms_vs_tsys( $
-
 =item B<analyse_timeseries_rms>
 
 Analyse RMS values for each receptor as obtained from timeseries data.
 
-  $result = analyse_timeseries_rms( $rms );
+  $result = $qa->analyse_timeseries_rms( $rms );
 
 This function tests differences in RMS between receptors. An
 observation is classified as good if:
@@ -70,36 +217,37 @@ being receptor names and values being the RMS for that receptor.
 An optional hash can be passed to denote that only a specific survey
 should be tested:
 
- $result = analyse_timeseries_rms( $rms, 'survey' => 'GBS' );
+ $result = $qa->analyse_timeseries_rms( $rms, 'survey' => 'GBS' );
 
-This function returns a reference to a hash with keys being JLS::QA
-survey subclasses and values being JLS::QA::Result objects.
+Other allowed parameters are 'molecule', 'frequency', and 'iterate'. 'molecule' and 'frequency' define a specific molecule or frequency (in GHz) to use. If 'iterate' is true, then the analysis will trim out failing receptors until either the number of remaining good receptors is below the GOODRECEP value for the given survey/frequency/molecule, or the test passes.
+
+This function returns a JLS::QA::Result object.
 
 =cut
 
 sub analyse_timeseries_rms {
+  my $self = shift;
   my $rms = shift;
-  my %options = @_;
+  my %opts = @_;
 
-  my $survey_opt = $options{'survey'};
+  my $iterate = ( defined( $opts{'iterate'} ) ? $opts{'iterate'} : 0 );
 
   my $rmsvar_rcp_const = 'RMSVAR_RCP';
-  my $rmsvar_rcp = retrieve_constant( $rmsvar_rcp_const, $survey_opt );
+  my $rmsvar_rcp = $self->get_data( key => $rmsvar_rcp_const, %opts );
 
   my $mmm_return = _min_max_mean( [ values %$rms ] );
 
-  my %result;
-  foreach my $survey ( sort keys %$rmsvar_rcp ) {
-    $result{$survey} = new JSA::QA::Result;
-    if( defined( $mmm_return->{min} ) ) {
-      $result{$survey}->rms_stats( $mmm_return );
-    }
-    if( ! defined( $mmm_return->{min} ) ||
-        ( $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $rmsvar_rcp->{$survey} ) ) ||
-        ( $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $rmsvar_rcp->{$survey} ) ) ) {
+  my $result = new JSA::QA::Result;
 
-      $result{$survey}->pass( 0 );
-      my $fail_reason = sprintf( "Receptor-to-receptor RMS values varied by more than %d%%\n", int( $rmsvar_rcp->{$survey} * 100 ) );
+  if( defined( $mmm_return->{min} ) ) {
+    $result->rms_stats( $mmm_return );
+  }
+  if( ! defined( $mmm_return->{min} ) ||
+      ( $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $rmsvar_rcp ) ) ||
+      ( $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $rmsvar_rcp ) ) ) {
+
+      $result->pass( 0 );
+      my $fail_reason = sprintf( "Receptor-to-receptor RMS values varied by more than %d%%\n", int( $rmsvar_rcp * 100 ) );
       $fail_reason .= sprintf( "  [min=%.2f (-%.2f%% of mean) max=%.2f (+%.2f%% of mean) mean=%.2f]",
                                $mmm_return->{min},
                                abs( $mmm_return->{min} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
@@ -107,11 +255,64 @@ sub analyse_timeseries_rms {
                                abs( $mmm_return->{max} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
                                $mmm_return->{mean}
                              );
-      $result{$survey}->add_fail_reason( $fail_reason );
+      $result->add_fail_reason( $fail_reason );
+  }
+
+  if( ! $result->pass && $iterate ) {
+
+    # First find out how many good receptors we can have.
+    my $goodrecep_const = 'GOODRECEP';
+    my $goodrecep = $self->get_data( key => $goodrecep_const, %opts );
+
+    # Count the number of good receptors.
+    my $numgood = grep { !/bad/ } values %$rms;
+
+    my $newrms = $rms;
+    my $mmm2;
+    my @receptors_removed;
+
+    while( $numgood > $goodrecep ) {
+
+      # Find the highest RMS, knock it out.
+      my $highest_recep = _highest( $newrms );
+      push @receptors_removed, $highest_recep;
+      delete $newrms->{$highest_recep};
+      $result->add_bad_receptor( $highest_recep );
+      # Get the stats on the remaining receptors.
+      $mmm2 = _min_max_mean( [ values %$newrms ] );
+
+      # Check to see if we pass now.
+      if( defined( $mmm2->{min} ) &&
+          ( $mmm2->{min} > $mmm2->{mean} * ( 1 - $rmsvar_rcp ) ) &&
+          ( $mmm2->{max} < $mmm2->{mean} * ( 1 + $rmsvar_rcp ) ) ) {
+        $result->pass( 1 );
+        last;
+      } else {
+        $numgood--;
+      }
+    }
+
+    $result->rms_stats( $mmm2 );
+
+    if( $result->pass ) {
+      $result->clear_fail_reasons;
+      my $note = "Receptor-to-receptor RMS value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's' : '' ) . " " . join ',', sort @receptors_removed;
+      $result->add_note( $note );
+    } else {
+      my $fail_reason = sprintf( "Receptor-to-receptor RMS values varied by more than %d%% after removing high-RMS receptors.\n", int( $rmsvar_rcp * 100 ) );
+      $fail_reason .= sprintf( "  [min=%.2f (-%.2f%% of mean) max=%.2f (+%.2f%% of mean) mean=%.2f]\n",
+                               $mmm2->{min},
+                               abs( $mmm2->{min} - $mmm2->{mean} ) / $mmm2->{mean} * 100,
+                               $mmm2->{max},
+                               abs( $mmm2->{max} - $mmm2->{mean} ) / $mmm2->{mean} * 100,
+                               $mmm2->{mean}
+                             );
+      $fail_reason .= "  Receptors removed: " . join ',', @receptors_removed;
+      $result->add_fail_reason( $fail_reason );
     }
   }
 
-  return \%result;
+  return $result;
 
 }
 
@@ -140,45 +341,38 @@ survey subclasses and values bing JLS::QA::Result objects.
 =cut
 
 sub analyse_tsys {
+  my $self = shift;
   my $tsys = shift;
-  my %options = @_;
-
-  my %result; # Result hash to be returned to caller.
+  my %opts = @_;
 
   # First, analyse the Tsys based on a maximum threshold.
-  my $result = analyse_tsysmax( $tsys, %options );
+  my $result = $self->analyse_tsysmax( $tsys, %opts );
 
   # We now have a list of bad receptors that didn't pass the Tsys
-  # threshold test, so go through each survey in the results, create a
+  # threshold test, so create a
   # new Tsys hash with the survey-specific thresholded receptors set
   # to BAD_VALUE, and come up with the receptor to receptor variance
   # pass/fail, using only the good receptors.
-  foreach my $survey ( keys %$result ) {
+  my %bad_receptors = map { $_, 1 } @{$result->bad_receptors};
 
-    my %bad_receptors = map { $_, 1 } @{$result->{$survey}->bad_receptors};
-    $result{$survey} = $result->{$survey};
-
-    # Create the temporary Tsys values, excluding the bad receptors.
-    my %temp_tsys;
-    foreach my $receptor ( sort keys %$tsys ) {
-      next if $tsys->{$receptor} eq BAD_VALUE;
-      next if exists $bad_receptors{$receptor};
-      $temp_tsys{$receptor} = $tsys->{$receptor};
-    }
-
-    my $tresult = analyse_tsysvar( \%temp_tsys,
-                                   'survey' => $survey );
-
-    $result{$survey}->tsys_stats( $tresult->{$survey}->tsys_stats );
-
-    if( ! $tresult->{$survey}->pass ) {
-      $result{$survey}->pass( 0 );
-      $result{$survey}->add_fail_reason( @{$tresult->{$survey}->fail_reasons} );
-    }
-
+  # Create the temporary Tsys values, excluding the bad receptors.
+  my %temp_tsys;
+  foreach my $receptor ( sort keys %$tsys ) {
+    next if $tsys->{$receptor} eq BAD_VALUE;
+    next if exists $bad_receptors{$receptor};
+    $temp_tsys{$receptor} = $tsys->{$receptor};
   }
 
-  return \%result;
+  my $tresult = $self->analyse_tsysvar( \%temp_tsys, %opts );
+
+  $result->tsys_stats( $tresult->tsys_stats );
+
+  if( ! $tresult->pass ) {
+    $result->pass( 0 );
+    $result->add_fail_reason( @{$tresult->fail_reasons} );
+  }
+
+  return $result;
 
 }
 
@@ -203,39 +397,29 @@ should be tested:
 
   $result = analyse_tsysmax( $rms, 'survey' => 'GBS' );
 
-This function returns a reference to a hash with keys being JLS::QA
-survey subclasses and values being JLS::QA::Result objects.
-
-The returned JLS::QA::Result objects for this function will have their
-pass() accessor set to true, but will have their bad_receptors()
-accessor filled with any receptors exceeding the maximum value.
+This function returns a JLS::QA::Result object.
 
 =cut
 
 sub analyse_tsysmax {
+  my $self = shift;
   my $tsys = shift;
-  my %options = @_;
+  my %opts = @_;
 
-  my $survey_opt = $options{'survey'};
-
-  my %result;
+  my $result = new JSA::QA::Result( 'pass' => 1 );
 
   my $tsysbad_const = 'TSYSBAD';
 
-  my $tsysbad = retrieve_constant( $tsysbad_const, $survey_opt );
+  my $tsysbad = $self->get_data( key => $tsysbad_const, %opts );
 
-  foreach my $survey ( keys %$tsysbad ) {
-    $result{$survey} = new JSA::QA::Result( 'pass' => 1 );
-    my @bad_receptors;
-    foreach my $receptor ( keys %$tsys ) {
-      next if $tsys->{$receptor} eq BAD_VALUE;
-      if( $tsys->{$receptor} > $tsysbad->{$survey} ) {
-        $result{$survey}->add_bad_receptor( $receptor );
-      }
+  my @bad_receptors;
+  foreach my $receptor ( keys %$tsys ) {
+    next if $tsys->{$receptor} eq BAD_VALUE;
+    if( $tsys->{$receptor} > $tsysbad ) {
+      $result->add_bad_receptor( $receptor );
     }
   }
-
-  return \%result;
+  return $result;
 }
 
 =item B<analyse_tsysvar>
@@ -268,90 +452,50 @@ survey subclasses and values being JLS::QA::Result objects.
 =cut
 
 sub analyse_tsysvar {
+  my $self = shift;
   my $tsys = shift;
-  my %options = @_;
+  my %opts = @_;
 
-  my $survey_opt = $options{'survey'};
-
-  my %result;
+  my $result;
 
   my $tsysvar_const = 'TSYSVAR';
-  my $tsysvar = retrieve_constant( $tsysvar_const, $survey_opt );
+  my $tsysvar = $self->get_data( key => $tsysvar_const, %opts );
   my $tsysmax_const = 'TSYSMAX';
-  my $tsysmax = retrieve_constant( $tsysmax_const, $survey_opt );
+  my $tsysmax = $self->get_data( key => $tsysmax_const, %opts );
 
   # Determine the mean, min, and max Tsys.
   my $mmm_return = _min_max_mean( [ values %$tsys ] );
 
-  foreach my $survey ( keys %$tsysvar ) {
-    $result{$survey} = new JSA::QA::Result( pass => 1 );
-    if( defined( $mmm_return->{min} ) ) {
-      $result{$survey}->tsys_stats( $mmm_return );
-    }
-    if( ! defined( $mmm_return->{min} ) ||
-        $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $tsysvar->{$survey} ) ||
-        $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $tsysvar->{$survey} ) ) {
-      $result{$survey}->pass( 0 );
-      my $fail_reason = sprintf( "Receptor-to-receptor Tsys values varied by more than %d%%\n", int( $tsysvar->{$survey} * 100 ) );
-      $fail_reason .= sprintf( "  [min=%.2f (-%.2f%% of mean) max=%.2f (+%.2f%% of mean) mean=%.2f]",
-                               $mmm_return->{min},
-                               abs( $mmm_return->{min} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
-                               $mmm_return->{max},
-                               abs( $mmm_return->{max} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
-                               $mmm_return->{mean}
-                             );
+  $result = new JSA::QA::Result( pass => 1 );
+  if( defined( $mmm_return->{min} ) ) {
+    $result->tsys_stats( $mmm_return );
+  }
+  if( ! defined( $mmm_return->{min} ) ||
+      $mmm_return->{min} < $mmm_return->{mean} * ( 1 - $tsysvar ) ||
+      $mmm_return->{max} > $mmm_return->{mean} * ( 1 + $tsysvar ) ) {
+    $result->pass( 0 );
+    my $fail_reason = sprintf( "Receptor-to-receptor Tsys values varied by more than %d%%\n", int( $tsysvar * 100 ) );
+    $fail_reason .= sprintf( "  [min=%.2f (-%.2f%% of mean) max=%.2f (+%.2f%% of mean) mean=%.2f]",
+                             $mmm_return->{min},
+                             abs( $mmm_return->{min} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
+                             $mmm_return->{max},
+                             abs( $mmm_return->{max} - $mmm_return->{mean} ) / $mmm_return->{mean} * 100,
+                             $mmm_return->{mean}
+                           );
 
-      $result{$survey}->add_fail_reason( $fail_reason );
-    }
-    if( defined( $mmm_return->{mean} ) &&
-        $mmm_return->{mean} > $tsysmax->{$survey} ) {
-      $result{$survey}->pass( 0 );
-      my $fail_reason = sprintf( "Mean Tsys value (%.2f) is greater than maximum allowed value (%d)",
-                                 $mmm_return->{mean},
-                                 $tsysmax->{$survey}
+    $result->add_fail_reason( $fail_reason );
+  }
+  if( defined( $mmm_return->{mean} ) &&
+      $mmm_return->{mean} > $tsysmax ) {
+    $result->pass( 0 );
+    my $fail_reason = sprintf( "Mean Tsys value (%.2f) is greater than maximum allowed value (%d)",
+                               $mmm_return->{mean},
+                               $tsysmax
                                );
-      $result{$survey}->add_fail_reason( $fail_reason );
-    }
+    $result->add_fail_reason( $fail_reason );
   }
 
-  return \%result;
-}
-
-=item B<retrieve_constant>
-
-Retrieve the requested named constant from a JLS::QA survey subclass.
-
-  $value = retrieve_constant( 'RMSVAR_RCP' );
-  $value = retrieve_constant( 'RMSVAR_RCP', 'GBS' );
-
-This function takes two arguments, the constant to be returned and an
-optional survey for which the constant is to be returned.
-
-This function returnsa reference to a hash with keys being JLS::QA
-survey subclasses and values being the requested constant value for
-that survey.
-
-=cut
-
-sub retrieve_constant {
-  my $constant = shift;
-  my $requested_class;
-
-  if( @_ ) { $requested_class = shift; }
-
-  my $base = "JSA::QA::";
-  my %return;
-
-  if( defined( $requested_class ) ) {
-    my $class = $base.$requested_class;
-    $return{$requested_class} = $class->$constant;
-  } else {
-    foreach my $subclass ( @SUBCLASSES ) {
-      my $class = $base.$subclass;
-      $return{$subclass} = $class->$constant;
-    }
-  }
-  return \%return;
+  return $result;
 }
 
 =back
@@ -399,7 +543,26 @@ sub _min_max_mean {
   return \%return;
 }
 
+=item B<_highest>
 
+=cut
+
+sub _highest {
+  my $href = shift;
+
+  my $highest_recep = '';
+  my $highest = 0;
+
+  foreach my $recep ( keys %$href ) {
+    if( $href->{$recep} ne BAD_VALUE && $href->{$recep} > $highest ) {
+      $highest = $href->{$recep};
+      $highest_recep = $recep;
+    }
+  }
+
+  return $highest_recep;
+
+}
 
 
 
