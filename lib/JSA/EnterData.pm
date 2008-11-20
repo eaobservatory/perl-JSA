@@ -419,74 +419,87 @@ set.
 
 =cut
 
-sub prepare_and_insert {
+{
+  # To keep track of already processed files.
+  my ( $old_date , %touched );
 
-  my ( $self, $date ) = @_;
+  sub prepare_and_insert {
 
-  # Format date first before getting it back.
-  $self->date( $date ) if defined $date ;
-  $date = $self->date;
+    my ( $self, $date ) = @_;
 
-  # Tables of interest.  All instruments reference the COMMON table, so it is
-  # first on the array.  Actual instrument table will be the second element.
-  my @tables = qw/COMMON/;
+    # Format date first before getting it back.
+    $self->date( $date ) if defined $date ;
+    $date = $self->date;
 
-  my $db = OMP::DBbackend::Archive->new;
-  my $dbh = $db->handle;
+    if ( defined $old_date && $date->ymd ne $old_date->ymd ) {
 
-  # The %columns hash will contain a key for each table, each key's value
-  # being an anonymous hash containing the column information.  Store this
-  # information for the COMMON table initially.
-  my $columns;
-  $columns->{$tables[0]} = $self->get_columns( $tables[0], $dbh );
-
-  my %dict = $self->create_dictionary;
-  my $observations;
-
-  for my $inst ( $self->instruments ) {
-
-    print "Inserting data for [$inst] Date [". $date->ymd ."]\n";
-
-    $tables[1] = $inst;
-
-    $columns->{$inst} = $self->get_columns( $inst, $dbh );
-    $columns->{FILES} = $self->get_columns( 'FILES', $dbh );
-
-    # Retrieve observations from disk.  An Info::Obs object will be returned for
-    # each subscan in the observation.  No need to retrieve associated obslog
-    # comments. That's <no. of subsystems used> * <no. of subscans objects
-    # returned per observation>.
-    my $grp = OMP::Info::ObsGroup->new( instrument => $inst,
-                                        date => $date,
-                                        nocomments => 1,
-                                        retainhdr => 1,
-                                        ignorebad => 1,
-                                      );
-
-    my @obs = $grp->obs;
-
-    if (! $obs[0]) {
-      print "\tNo observations found for instrument $inst\n\n";
-      next;
+      warn 'clearing file cache' ;
+      undef %touched;
     }
 
-    # Need to create a hash with keys corresponding to the observation number
-    # (an array won't be very efficient since observations can be missing and
-    # run numbers can be large). The values in this hash have to be a reference
-    # to an array of Info::Obs objects representing each subsystem. We need to
-    # construct new Obs objects based on the subsystem number.
-    # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
+    $old_date = $date;
 
-    for my $obs (@obs) {
-      my @subhdrs = $obs->subsystems;
-      $observations->{$obs->runnr} = \@subhdrs;
+    # Tables of interest.  All instruments reference the COMMON table, so it is
+    # first on the array.  Actual instrument table will be the second element.
+    my @tables = qw/COMMON/;
+
+    my $db = OMP::DBbackend::Archive->new;
+    my $dbh = $db->handle;
+
+    # The %columns hash will contain a key for each table, each key's value
+    # being an anonymous hash containing the column information.  Store this
+    # information for the COMMON table initially.
+    my $columns;
+    $columns->{$tables[0]} = $self->get_columns( $tables[0], $dbh );
+
+    my %dict = $self->create_dictionary;
+    my ( $observations, $updated, $grp );
+
+    for my $inst ( $self->instruments ) {
+
+      print "Inserting data for [$inst] Date [". $date->ymd ."]\n";
+
+      $tables[1] = $inst;
+
+      $columns->{$inst} = $self->get_columns( $inst, $dbh );
+      $columns->{FILES} = $self->get_columns( 'FILES', $dbh );
+
+      # Retrieve observations from disk.  An Info::Obs object will be returned for
+      # each subscan in the observation.  No need to retrieve associated obslog
+      # comments. That's <no. of subsystems used> * <no. of subscans objects
+      # returned per observation>.
+      $grp = OMP::Info::ObsGroup->new( instrument => $inst,
+                                          date => $date,
+                                          nocomments => 1,
+                                          retainhdr => 1,
+                                          ignorebad => 1,
+                                        );
+
+      my @obs = $grp->obs;
+
+      if (! $obs[0]) {
+        print "\tNo observations found for instrument $inst\n\n";
+        next;
+      }
+
+      # Need to create a hash with keys corresponding to the observation number
+      # (an array won't be very efficient since observations can be missing and
+      # run numbers can be large). The values in this hash have to be a reference
+      # to an array of Info::Obs objects representing each subsystem. We need to
+      # construct new Obs objects based on the subsystem number.
+      # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
+
+      for my $obs (@obs) {
+        my @subhdrs = $obs->subsystems;
+        $observations->{$obs->runnr} = \@subhdrs;
+      }
+
+      $self->insert_obs( $dbh, $observations, $columns, \%dict )
+        and $updated++ ;
     }
 
-    $self->insert_obs( $dbh, $observations, $columns, \%dict );
+    return $updated;
   }
-
-  return;
-}
 
 =item B<insert_obs>
 
@@ -505,91 +518,102 @@ It is called by I<prepare_and_insert> method.
 
 =cut
 
-sub insert_obs {
+  sub insert_obs {
 
   my ( $self, $dbh, $obs, $cols, $dict ) = @_ ;
 
-  # For each observation:
-  # 1. Insert a row in the COMMON table.
-  # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
-  # 3. Insert a row in the FILES table for each subscan
-  #
-  # fails, the entire observation fails to go in to the DB.
+    # For each observation:
+    # 1. Insert a row in the COMMON table.
+    # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
+    # 3. Insert a row in the FILES table for each subscan
+    #
+    # fails, the entire observation fails to go in to the DB.
 
-  OBS: for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
+    OBS: for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
 
-    my $common_obs = $obs->{$runnr}->[0];
+      my $common_obs = $obs->{$runnr}->[0];
 
-    # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
-    # does not untie).  This is so that a single element array reference when
-    # assigned to one of the keys is assigned as reference (not as the element
-    # contained with in).
-    my $common_hdrs = { %{ $common_obs->hdrhash } };
+      my $file =  $common_obs->simple_filename ;
 
-    printf "\t[%s]... ", join ',', $common_obs->simple_filename;
+      if ( exists $touched{ $file } ) {
 
-    if (($common_hdrs->{SIMULATE})) {
-
-      print "simulation data. Skipping\n";
-      next;
-    }
-
-    my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs );
-    my %invalid = $verify->verify_headers;
-
-    for (keys %invalid) {
-
-      my $val = $invalid{$_}->[0];
-      if ( $val =~ /does not match/i ) {
-
-        print "$_ : $val\n";
-        undef $common_hdrs->{$_};
-      } elsif ( $val =~ /should not/i ) {
-
-        print "$_ : $val\n";
-        undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
+        warn 'already processed: ',  $file;
+        next;
       }
-    }
 
-    # Calculate RA/Dec (ICRS) extent and base position of observation.  Both
-    # subsystems are identical so we only have to do this with the first one
-    my $cstat = $self->calc_radec( $common_obs, $common_hdrs );
-    next unless $cstat;
+      $touched{ $file } = undef;
 
-    $dbh->begin_work if $self->load_header_db;
+      # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
+      # does not untie).  This is so that a single element array reference when
+      # assigned to one of the keys is assigned as reference (not as the element
+      # contained with in).
+      my $common_hdrs = { %{ $common_obs->hdrhash } };
 
-    $self->fill_headers_COMMON( $common_hdrs, $common_obs );
+      printf "\t[%s]... ", join ',', $file;
 
-    my $error =
-      $self->_update_or_insert( 'dbhandle' => $dbh,
-                                'table'   => 'COMMON',
-                                'headers' => $common_hdrs,
-                                'columns' => $cols,
-                                'dict'    => $dict,
-                              );
+      if (($common_hdrs->{SIMULATE})) {
 
-    if ($error) {
-
-      $dbh->rollback;
-      if ($error =~ /insert duplicate key row/i ) {
-
-        print "File metadata already present\n";
-      } else {
-
-        print "$error\n\n";
+        print "simulation data. Skipping\n";
+        next;
       }
-      next;
+
+      my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs );
+      my %invalid = $verify->verify_headers;
+
+      for (keys %invalid) {
+
+        my $val = $invalid{$_}->[0];
+        if ( $val =~ /does not match/i ) {
+
+          print "$_ : $val\n";
+          undef $common_hdrs->{$_};
+        } elsif ( $val =~ /should not/i ) {
+
+          print "$_ : $val\n";
+          undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
+        }
+      }
+
+      # Calculate RA/Dec (ICRS) extent and base position of observation.  Both
+      # subsystems are identical so we only have to do this with the first one
+      my $cstat = $self->calc_radec( $common_obs, $common_hdrs );
+      next unless $cstat;
+
+      $dbh->begin_work if $self->load_header_db;
+
+      $self->fill_headers_COMMON( $common_hdrs, $common_obs );
+
+      my $error =
+        $self->_update_or_insert( 'dbhandle' => $dbh,
+                                  'table'   => 'COMMON',
+                                  'headers' => $common_hdrs,
+                                  'columns' => $cols,
+                                  'dict'    => $dict,
+                                );
+
+      if ($error) {
+
+        $dbh->rollback;
+        if ($error =~ /insert duplicate key row/i ) {
+
+          print "File metadata already present\n";
+        } else {
+
+          print "$error\n\n";
+        }
+        next;
+      }
+
+      $self->add_subsys_obs( $dbh, $obs->{$runnr}, $cols, $dict )
+        or next ;
+
+      $dbh->commit if $self->load_header_db;
+
+      print "successful\n";
     }
 
-    $self->add_subsys_obs( $dbh, $obs->{$runnr}, $cols, $dict )
-      or next ;
-
-    $dbh->commit if $self->load_header_db;
-
-    print "successful\n";
+    return 1;
   }
-
-  return;
 }
 
 =item B<skip_obs>
@@ -1066,8 +1090,6 @@ BEGIN
                   or throw JSA::Error "'$table' is unknown\n";
 
     $filler = join '_', 'fill_headers', $filler;
-
-#warn $filler;
 
     return $self->$filler( $header, $obs );
   }
