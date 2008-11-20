@@ -43,37 +43,10 @@ data even if run after 2pm).
 
 =cut
 
-BEGIN {
-
-  $ENV{'SYBASE'} = '/local/progs/sybase'
-    unless exists $ENV{'SYBASE'} && length $ENV{'SYBASE'};
-
-  use constant OMPLIB =>
-    '/jac_sw/omp/msbserver'
-    #'/Users/timj/work/omp/msbserver'
-    #'/home/agarwal/src/scicom/trunk/omp/perl'
-    ;
-
-  $ENV{'OMP_CFG_DIR'} = OMPLIB . '/cfg';
-
-  $ENV{'OMP_SITE_CONFIG'} =
-    '/home/jcmtarch/enterdata-cfg/enterdata.cfg'
-    #'/Users/timj/enterdata.cfg'
-    #'/home/agarwal/src/scicom/trunk/archiving/jcmt/.enterdata-cfg/enterdata.cfg'
-    ;
-}
-
 use strict;
 use warnings;
 use FindBin;
 
-use lib OMPLIB;
-use lib
-  '/jac_sw/archiving/perlmods/JCMT-DataVerify/lib'
-  #'/home/agarwal/src/scicom/trunk/archiving/perlmods/JCMT-DataVerify/lib'
-  ;
-
-use Data::Dumper;
 use File::Temp;
 use List::Util qw[ first ];
 use Scalar::Util qw[ looks_like_number ];
@@ -630,6 +603,9 @@ given L<OMP::Info::Obs> object.
   $skip = $enter->skip_obs( $obs );
 
   $skip = $enter->skip_obs( $obs, $header );
+
+C<JSA::Error> execption is thrown if header hash (reference) is
+undefined.
 
 =cut
 
