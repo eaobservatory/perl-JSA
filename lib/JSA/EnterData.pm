@@ -507,7 +507,7 @@ It is called by I<prepare_and_insert> method.
 
 sub insert_obs {
 
- my ( $self, $dbh, $obs, $cols, $dict ) = @_ ;
+  my ( $self, $dbh, $obs, $cols, $dict ) = @_ ;
 
   # For each observation:
   # 1. Insert a row in the COMMON table.
