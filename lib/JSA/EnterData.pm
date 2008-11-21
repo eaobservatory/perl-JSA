@@ -94,6 +94,10 @@ BEGIN {
       # NOTE: This should go in to the OMP config system at some point
       'dict' =>  '/jac_sw/archiving/jcmt/import/data.dictionary',
 
+      # If false, then nothing is printed (other than fatal messages).
+      # Else, messages are printed with increasing verbosity.
+      'verbosity' => 1,
+
       # Debugging.  Set to true to turn on.  Debugging means interact
       # with the database, but don't actually do any inserts, and be
       # very verbose.
@@ -171,6 +175,10 @@ Currently it does not do anything.
 
 When the value is true, I<force-disk> is marked false.
 
+=item I<verbosity> C< 0 | 1 | 2 | 3 ... >
+
+An integer value indicating message verbosity.
+
 =item I<load-header-db> C<1 | 0>
 
 A truth value to control loading of header database.  Default is true.
@@ -211,7 +219,6 @@ In insert mode, nothing is inserted in "FILES" table.
 
     return $obj;
   }
-
 
 =item B<instruments>
 
@@ -386,6 +393,18 @@ table.
 
   $enter->update_mode( 0 );
 
+=item B<verbosity>
+
+Returns integer value to indicate message verbosity, if no arguments
+are given.
+
+  $ok = $enter->verbosity;
+
+Else, sets the value for later use; returns nothing.
+
+  # Silence messages.
+  $enter->verbosity( 0 );
+
 =cut
 
 =item B<get_dict>
@@ -433,7 +452,9 @@ set.
 
     if ( defined $old_date && $date->ymd ne $old_date->ymd ) {
 
-      warn 'clearing file cache' ;
+      $self->_print_text( "clearing file cache\n" )
+        if 1 < $self->verbosity;
+
       undef %touched;
     }
 
@@ -457,7 +478,7 @@ set.
 
     for my $inst ( $self->instruments ) {
 
-      print "Inserting data for [$inst] Date [". $date->ymd ."]\n";
+      $self->_print_text( "Inserting data for [$inst] Date [".  $date->ymd ."]\n" );
 
       $tables[1] = $inst;
 
@@ -478,7 +499,8 @@ set.
       my @obs = $grp->obs;
 
       if (! $obs[0]) {
-        print "\tNo observations found for instrument $inst\n\n";
+
+        $self->_print_text( "\tNo observations found for instrument $inst\n\n" );
         next;
       }
 
@@ -537,7 +559,9 @@ It is called by I<prepare_and_insert> method.
 
       if ( exists $touched{ $file } ) {
 
-        warn 'already processed: ',  $file;
+        $self->_print_text( "\talready processed: $file\n" )
+          if 1 < $self->verbosity;
+
         next;
       }
 
@@ -549,11 +573,11 @@ It is called by I<prepare_and_insert> method.
       # contained with in).
       my $common_hdrs = { %{ $common_obs->hdrhash } };
 
-      printf "\t[%s]... ", join ',', $file;
+      $self->_print_text( sprintf "\t[%s]... ", join ',', $file );
 
       if (($common_hdrs->{SIMULATE})) {
 
-        print "simulation data. Skipping\n";
+        $self->_print_text( "simulation data. Skipping\n" );
         next;
       }
 
@@ -565,11 +589,11 @@ It is called by I<prepare_and_insert> method.
         my $val = $invalid{$_}->[0];
         if ( $val =~ /does not match/i ) {
 
-          print "$_ : $val\n";
+          $self->_print_text( "$_ : $val\n" );
           undef $common_hdrs->{$_};
         } elsif ( $val =~ /should not/i ) {
 
-          print "$_ : $val\n";
+          $self->_print_text( "$_ : $val\n" );
           undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
         }
       }
@@ -596,10 +620,10 @@ It is called by I<prepare_and_insert> method.
         $dbh->rollback;
         if ($error =~ /insert duplicate key row/i ) {
 
-          print "File metadata already present\n";
+          $self->_print_text( "File metadata already present\n" );
         } else {
 
-          print "$error\n\n";
+          $self->_print_text( print "$error\n\n" );
         }
         next;
       }
@@ -609,7 +633,7 @@ It is called by I<prepare_and_insert> method.
 
       $dbh->commit if $self->load_header_db;
 
-      print "successful\n";
+      $self->_print_text( "successful\n" );
     }
 
     return 1;
@@ -678,7 +702,7 @@ sub add_subsys_obs {
   for my $subsys_obs ( @{ $obs } ) {
 
     $subsysnr++;
-    print "Processing subsysnr $subsysnr of $totsub\n";
+    $self->_print_text( "Processing subsysnr $subsysnr of $totsub\n" );
 
     # Obtain instrument table values from this Obs object.  Break hash tie.
     my $subsys_hdrs = { %{ $subsys_obs->hdrhash } };
@@ -699,7 +723,7 @@ sub add_subsys_obs {
     if ($error) {
 
       $dbh->rollback if $self->load_header_db;
-      print "$error\n\n";
+      $self->_print_text( "$error\n\n" );
       return;
     }
 
@@ -726,7 +750,7 @@ sub add_subsys_obs {
     if ($error) {
 
       $dbh->rollback;
-      print "$error\n\n";
+      $self->_print_text( "$error\n\n" );
       return;
     }
   }
@@ -923,7 +947,7 @@ sub update_hash {
             if ($diff > 0.000001) {
 
               $differ{$key} = $new;
-              # print "$key :Floating point $new != $old ($diff)\n";
+              # $self->_print_text( "$key :Floating point $new != $old ($diff)\n" );
             }
           } elsif ($new != $old) {
 
@@ -975,7 +999,7 @@ sub update_hash {
 
   if ( $self->debug ) {
 
-    print "$sql\n";
+    $self->_print_text( "$sql\n" );
     return 1;
   }
 
@@ -1028,13 +1052,15 @@ sub transform_value {
 
       if ($data_type eq 'datetime' and $val =~ /T/) {
 
-        # print "$column <---- ----> [$val]\n";
+        # $self->_print_text( "$column <---- ----> [$val]\n" );
 
         # Convert date to sybase compatible
         my $date = Time::Piece->strptime($val,'%Y-%m-%dT%H:%M:%S');
         $values->{$column} = $date->strftime($self->sybase_date_format);
 
-        printf "Converted date [%s] to [%s] for column [%s]\n", $val, $values->{$column}, $column
+        $self->_print_text( sprintf "Converted date [%s] to [%s] for column [%s]\n",
+                              $val, $values->{$column}, $column
+                          )
           if $self->debug;
 
       } elsif (exists $transform_data{$data_type}) {
@@ -1045,7 +1071,9 @@ sub transform_value {
           # defined in the %transform_data hash
           $values->{$column} = $transform_data{$data_type}{$val};
 
-          printf "Transformed value [%s] to [%s] for column [%s]\n", $val, $values->{$column}, $column
+          $self->_print_text( sprintf "Transformed value [%s] to [%s] for column [%s]\n",
+                                $val, $values->{$column}, $column
+                            )
             if $self->debug;
         }
       } elsif ($column eq 'lststart' or $column eq 'lstend') {
@@ -1054,7 +1082,9 @@ sub transform_value {
         my $ha = new Astro::Coords::Angle::Hour($val, units => 'sex');
         $values->{$column} = $ha->hours;
 
-        printf "Converted time [%s] to [%s] for column [%s]\n", $val, $values->{$column}, $column
+        $self->_print_text( sprintf "Converted time [%s] to [%s] for column [%s]\n",
+                              $val, $values->{$column}, $column
+                          )
           if $self->debug;
       }
     }
@@ -1137,14 +1167,18 @@ sub fill_headers_COMMON {
   }
   $header->{'release_date'} = $release_date->strftime($self->sybase_date_format);
 
-  printf "Created header [release_date] with value [%s]\n", $header->{'release_date'}
+  $self->_print_text( sprintf "Created header [release_date] with value [%s]\n",
+                        $header->{'release_date'}
+                    )
     if $self->debug;
 
   # Create last_modified
   my $today = gmtime;
   $header->{'last_modified'} = $today->strftime($self->sybase_date_format);
 
-  printf "Created header [last_modified] with value [%s]\n", $header->{'last_modified'}
+  $self->_print_text( sprintf "Created header [last_modified] with value [%s]\n",
+                        $header->{'last_modified'}
+                    )
     if $self->debug;
 
   return;
@@ -1187,7 +1221,9 @@ sub fill_headers_FILES {
     }
   }
 
-  printf "Created header [file_id] with value [%s]\n", join ',', @{ $header->{'file_id'} }
+  $self->_print_text( sprintf "Created header [file_id] with value [%s]\n",
+                        join ',', @{ $header->{'file_id'} }
+                    )
     if $self->debug;
 
   return $self->_fill_headers_obsid_subsys( $header, $obsid );
@@ -1212,7 +1248,9 @@ sub fill_headers_ACSIS {
   my @subscans = $obs->simple_filename;
   $header->{'max_subscan'} = scalar @subscans;
 
-  printf "Created header [max_subscan] with value [%s]\n", $header->{'max_subscan'}
+  $self->_print_text( sprintf "Created header [max_subscan] with value [%s]\n",
+                        $header->{'max_subscan'}
+                    )
     if $self->debug;
 
   return $self->_fill_headers_obsid_subsys( $header, $obsid );
@@ -1226,7 +1264,9 @@ sub _fill_headers_obsid_subsys {
   # Create obsid_subsysnr
   $header->{'obsid_subsysnr'} = join '_', $obsid,  $header->{'SUBSYSNR'};
 
-  printf "Created header [obsid_subsysnr] with value [%s]\n", $header->{'obsid_subsysnr'}
+  $self->_print_text( sprintf "Created header [obsid_subsysnr] with value [%s]\n",
+                        $header->{'obsid_subsysnr'}
+                    )
     if $self->debug;
 
   return;
@@ -1296,11 +1336,11 @@ sub get_insert_values {
         my $alias = $dictionary->{lc($header)};
         $values{$alias} = $hdrhash->{$header};
 
-        print "Mapped header [$header] to column [$alias]\n"
+        $self->_print_text( "Mapped header [$header] to column [$alias]\n" )
           if $self->debug;
       }
     }
-    print "Could not find alias for header [$header]. Skipped.\n"
+    $self->_print_text( "Could not find alias for header [$header].  Skipped.\n" )
       if $self->debug and ! exists $values{lc($header)};
   }
 
@@ -1653,10 +1693,11 @@ sub _show_insert_sql {
     }
   }
 
-  printf "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
-      $table,
-      join( ', ', @{ $fields } ),
-      join( ', ', @{ $values } );
+  $self->_print_text( sprintf "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
+                        $table,
+                        join( ', ', @{ $fields } ),
+                        join( ', ', @{ $values } )
+                    );
 
   return;
 }
@@ -1748,6 +1789,25 @@ sub _verify_file_name {
 
   throw JSA::Error sprintf "Bad file name%s: %s\n",
                     ( $size > 1 ? 's' : '' ), join ', ' , @bad ;
+}
+
+=item B<_print_text>
+
+Prints a given string on currently selected file handle (standard
+output normally) if I<verbosity> attribute is true.
+
+=cut
+
+sub _print_text {
+
+  my ( $self, $text ) = @_;
+
+  return
+    unless $self->verbosity
+        && defined $text;
+
+  print $text;
+  return;
 }
 
 1;
