@@ -1,9 +1,9 @@
 #!perl
 
-use Test::More tests => 19;
+use Test::More tests => 22;
 use Data::Dumper;
 
-my @surveys = qw/ NGS Telescope GBS SLS /;
+my @surveys = qw/ NGS GBS SLS /;
 my $config = "testdata/default.ini";
 
 use_ok( "JSA::QA" );
@@ -35,7 +35,7 @@ isa_ok( $result, 'JSA::QA::Result' );
 is( $result->pass, 0, 'Default fail on RMS test' );
 
 $result = $qa->analyse_timeseries_rms( \%rms,
-                                          survey => 'GBS' );
+                                       survey => 'GBS' );
 is( $result->pass, 0, 'GBS fails RMS test' );
 
 $result = $qa->analyse_timeseries_rms( \%rms,
@@ -51,8 +51,8 @@ my %tsys = ( 'H00' => 261.49,
              'H05' => 226.36,
              'H06' => 315.17,
              'H07' => 276.93,
-             'H08' => 238.73,
-             'H09' => 678.75,
+             'H08' => 338.73,
+             'H09' => 608.75,
              'H10' => 332.89,
              'H11' => 310.12,
              'H12' => 299.83,
@@ -76,13 +76,37 @@ is( $result->pass, 1, "default tsysvar test passed" );
 # Now variance in Tsys. Only the GBS survey should fail.
 foreach my $survey ( @surveys ) {
   $result = $qa->analyse_tsysvar( \%tsys, 'survey' => $survey );
-  is( $result->pass, 1, "Survey $survey successfully passed tsysvar test" );
+  if( $survey eq 'GBS' ) {
+    is( $result->pass, 0, "Survey $survey successfully failed tsysvar test" );
+  } else {
+    is( $result->pass, 1, "Survey $survey successfully passed tsysvar test" );
+  }
 }
 
+# Test GBS C18O. Should pass the Tsys variance test.
+$result = $qa->analyse_tsysvar( \%tsys, 'survey' => 'GBS',
+                                molecule => 'C18O',
+                              );
+is( $result->pass, 1, "Survey GBS, molecule C18O successfully passed tsysvar test" );
+
+# Test absolute Tsys numbers.
 $result = $qa->analyse_tsys( \%tsys );
 is( $result->pass, 1, "default tsys test passed" );
+
+# ...and for the surveys. Again, only GBS should fail.
 foreach my $survey ( @surveys ) {
   $result = $qa->analyse_tsys( \%tsys, 'survey' => $survey );
-  is( $result->pass, 1, "Survey $survey successfully passed tsys test" );
+  if( $survey eq 'GBS' ) {
+    is( $result->pass, 0, "Survey $survey successfully failed tsys test" );
+  } else {
+    is( $result->pass, 1, "Survey $survey successfully passed tsys test" );
+  }
 }
-print Dumper $result;
+
+# Run Tsys test again, this time using iteration to eliminate
+# high-Tsys receptors one by one until pass.
+$result = $qa->analyse_tsys( \%tsys, survey => 'GBS',
+                             iterate => 1 );
+is( $result->pass, 1, "GBS passes after high-Tsys receptors are removed" );
+
+

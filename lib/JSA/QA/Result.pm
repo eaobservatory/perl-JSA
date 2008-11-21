@@ -17,8 +17,8 @@ sub new {
                        'BAD_RECEPTORS' => [],
                        'FAIL_REASONS' => [],
                        'NOTES' => [],
-                       'RMS_STATS' => (),
-                       'TSYS_STATS' => (),
+                       'RMS_STATS' => {},
+                       'TSYS_STATS' => {},
                      }, $class;
 
   $result->_configure( @_ ) if @_;
@@ -118,8 +118,11 @@ Merge two sets of QA results.
 
   $merged = $first->merge( $second );
 
-This method only merges the pass(), bad_receptors(), notes() and
-fail_reasons() values.
+This method only merges the bad_receptors(), notes() and
+fail_reasons() values. pass() is determined by AND'ing the pass()
+values for the two sets of QA results. rms_stats() and tsys_stats()
+are taken from the first set of QA results, unless the respective
+value is undefined and the value from the second set is defined.
 
 Returns a JSA::QA::Result object. The input JSA::QA::Result objects
 are unchanged.
@@ -127,20 +130,32 @@ are unchanged.
 =cut
 
 sub merge {
-  my $self = shift;
+  my $first = shift;
   my $second = shift;
 
   my $merged = new JSA::QA::Result;
-  $merged->pass( $self->pass && $second->pass );
+  $merged->pass( $first->pass && $second->pass );
 
-  $merged->add_fail_reason( $self->fail_reasons );
+  $merged->add_fail_reason( $first->fail_reasons );
   $merged->add_fail_reason( $second->fail_reasons );
 
-  $merged->add_bad_receptor( $self->bad_receptors );
+  $merged->add_bad_receptor( $first->bad_receptors );
   $merged->add_bad_receptor( $second->bad_receptors );
 
-  $merged->add_note( $self->notes );
+  $merged->add_note( $first->notes );
   $merged->add_note( $second->notes );
+
+  if( ( scalar keys %{$first->rms_stats} ) > 1 ) {
+    $merged->rms_stats( $first->rms_stats );
+  } elsif( ( scalar keys %{$second->rms_stats} ) > 1 ) {
+    $merged->rms_stats( $second->rms_stats );
+  }
+
+  if( ( scalar keys %{$first->tsys_stats} ) > 1 ) {
+    $merged->tsys_stats( $first->tsys_stats );
+  } elsif( ( scalar keys %{$second->tsys_stats} ) > 1 ) {
+    $merged->tsys_stats( $second->tsys_stats );
+  }
 
   return $merged;
 }

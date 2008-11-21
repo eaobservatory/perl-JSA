@@ -90,14 +90,33 @@ The only mandatory argument is 'key'.
 Optional arguments are:
 
  - survey: the survey for which the given QA constant applies.
- - molecule: the molecule for which the given QA constant applies. Of the form "13CO". Can have dashes separating atoms or isotope number (i.e. "13-C-O").
+
+ - molecule: the molecule for which the given QA constant applies. Of
+ the form "13CO". Can have dashes separating atoms or isotope number
+ (i.e. "13-C-O").
+
  - frequency: the frequency, in GHz, for which the QA constant applies.
 
 Optional arguments are handled as follows:
 
- - if 'survey' alone is given, then the requested QA constant is returned. If no such QA constant is defined in the configuration file for that survey, then the default QA constant is returned.
- - if 'molecule' is given, that takes priority over 'frequency'. If the given survey has the molecule defined, then that QA constant is returned. If not, then the default QA constant for that survey is returned. If that is not defined, then the default QA constant for that molecule is returned. If that is not defined, then the default QA constant is returned.
- - if 'frequency' is given, and the given survey has a defined range containing that frequency, then that QA constant is returned. If not, but the survey is defined, then the default QA constant for that survey is returned. If that is not defined, then the default QA constant for the frequency range containing the given frequency is returned. If that is not defined, then the default QA constant is returned.
+ - if 'survey' alone is given, then the requested QA constant is
+ returned. If no such QA constant is defined in the configuration file
+ for that survey, then the default QA constant is returned.
+
+ - if 'molecule' is given, that takes priority over 'frequency'. If
+ the given survey has the molecule defined, then that QA constant is
+ returned. If not, then the default QA constant for that survey is
+ returned. If that is not defined, then the default QA constant for
+ that molecule is returned. If that is not defined, then the default
+ QA constant is returned.
+
+ - if 'frequency' is given, and the given survey has a defined range
+ containing that frequency, then that QA constant is returned. If not,
+ but the survey is defined, then the default QA constant for that
+ survey is returned. If that is not defined, then the default QA
+ constant for the frequency range containing the given frequency is
+ returned. If that is not defined, then the default QA constant is
+ returned.
 
 No translation between molecule and frequency is done.
 
@@ -145,7 +164,10 @@ sub get_data {
     # Bodge together the survey and the molecule name.
     my $str = "$survey $molecule";
 
-    # First search for this combination. If it doesn't exist, fall back to survey. If that doesn't exist, search for the default value for this molecule. If that doesn't exist, fall back to the default.
+    # First search for this combination. If it doesn't exist, fall
+    # back to survey. If that doesn't exist, search for the default
+    # value for this molecule. If that doesn't exist, fall back to the
+    # default.
     if( exists( $self->{'CONFIG'}->{$str} ) &&
         exists( $self->{'CONFIG'}->{$str}->{$key} ) ) {
       return $self->{'CONFIG'}->{$str}->{$key};
@@ -160,8 +182,8 @@ sub get_data {
     }
   }
 
-  # Now for frequencies.
-  # Get config keys that have the requested survey and a colon.
+  # Now for frequencies.  Get config keys that have the requested
+  # survey and a colon.
   my $frequency = $opts{'frequency'};
   my @config_keys = grep { /:/ } grep { /$survey/ } keys %{$self->{'CONFIG'}};
   foreach my $config_key ( @config_keys ) {
@@ -172,12 +194,16 @@ sub get_data {
       return $self->{'CONFIG'}->{$config_key}->{$key};
     }
   }
-  # If we made it here, there isn't an entry matching this frequency for this survey. Fall back to the survey default.
+
+  # If we made it here, there isn't an entry matching this frequency
+  # for this survey. Fall back to the survey default.
   if( exists( $self->{'CONFIG'}->{$survey} ) &&
       exists( $self->{'CONFIG'}->{$survey}->{$key} ) ) {
     return $self->{'CONFIG'}->{$survey}->{$key};
   }
-  # If we made it here, there isn't an entry for this survey. Try the default, looking for frequency ranges.
+
+  # If we made it here, there isn't an entry for this survey. Try the
+  # default, looking for frequency ranges.
   @config_keys = grep { /:/ } grep { /default/ } keys %{$self->{'CONFIG'}};
   foreach my $config_key ( @config_keys ) {
     $config_key =~ /(\d+):(\d+)/;
@@ -187,6 +213,7 @@ sub get_data {
       return $self->{'CONFIG'}->{$config_key}->{$key};
     }
   }
+
   # If we made it here, just return the default.
   return $self->{'CONFIG'}->{'default'}->{$key};
 
@@ -219,7 +246,12 @@ should be tested:
 
  $result = $qa->analyse_timeseries_rms( $rms, 'survey' => 'GBS' );
 
-Other allowed parameters are 'molecule', 'frequency', and 'iterate'. 'molecule' and 'frequency' define a specific molecule or frequency (in GHz) to use. If 'iterate' is true, then the analysis will trim out failing receptors until either the number of remaining good receptors is below the GOODRECEP value for the given survey/frequency/molecule, or the test passes.
+Other allowed parameters are 'molecule', 'frequency', and
+'iterate'. 'molecule' and 'frequency' define a specific molecule or
+frequency (in GHz) to use. If 'iterate' is true, then the analysis
+will trim out failing receptors until either the number of remaining
+good receptors is below the GOODRECEP value for the given
+survey/frequency/molecule, or the test passes.
 
 This function returns a JLS::QA::Result object.
 
@@ -296,7 +328,7 @@ sub analyse_timeseries_rms {
 
     if( $result->pass ) {
       $result->clear_fail_reasons;
-      my $note = "Receptor-to-receptor RMS value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's' : '' ) . " " . join ',', sort @receptors_removed;
+      my $note = "Receptor-to-receptor RMS value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed;
       $result->add_note( $note );
     } else {
       my $fail_reason = sprintf( "Receptor-to-receptor RMS values varied by more than %d%% after removing high-RMS receptors.\n", int( $rmsvar_rcp * 100 ) );
@@ -364,15 +396,9 @@ sub analyse_tsys {
   }
 
   my $tresult = $self->analyse_tsysvar( \%temp_tsys, %opts );
+  my $merged = $result->merge( $tresult );
 
-  $result->tsys_stats( $tresult->tsys_stats );
-
-  if( ! $tresult->pass ) {
-    $result->pass( 0 );
-    $result->add_fail_reason( @{$tresult->fail_reasons} );
-  }
-
-  return $result;
+  return $merged;
 
 }
 
@@ -456,6 +482,8 @@ sub analyse_tsysvar {
   my $tsys = shift;
   my %opts = @_;
 
+  my $iterate = ( defined( $opts{'iterate'} ) ? $opts{'iterate'} : 0 );
+
   my $result;
 
   my $tsysvar_const = 'TSYSVAR';
@@ -485,6 +513,7 @@ sub analyse_tsysvar {
 
     $result->add_fail_reason( $fail_reason );
   }
+
   if( defined( $mmm_return->{mean} ) &&
       $mmm_return->{mean} > $tsysmax ) {
     $result->pass( 0 );
@@ -493,6 +522,57 @@ sub analyse_tsysvar {
                                $tsysmax
                                );
     $result->add_fail_reason( $fail_reason );
+  }
+
+  # Iterate, if requested, and if we failed the first time through.
+  if( ! $result->pass && $iterate ) {
+
+    # First, find out how many good receptors we can have.
+    my $goodrecep_const = 'GOODRECEP';
+    my $goodrecep = $self->get_data( key => $goodrecep_const, %opts );
+
+    # Count the number of good receptors.
+    my $numgood = grep { !/bad/ } values %$tsys;
+
+    my $newtsys = $tsys;
+    my $mmm2;
+    my @receptors_removed;
+
+    while( $numgood > $goodrecep ) {
+
+      # Find the highest Tsys, knock it out.
+      my $highest_recep = _highest( $newtsys );
+      push @receptors_removed, $highest_recep;
+      delete $newtsys->{$highest_recep};
+      $result->add_bad_receptor( $highest_recep );
+
+      #Get stats on the remaining receptors.
+      $mmm2 = _min_max_mean( [ values %$newtsys ] );
+
+      # Check to see if we pass now.
+      if( defined( $mmm2->{min} ) &&
+          defined( $mmm2->{mean} ) &&
+          ( $mmm2->{min} > $mmm2->{mean} * ( 1 - $tsysvar ) ) &&
+          ( $mmm2->{max} < $mmm2->{mean} * ( 1 + $tsysvar ) ) &&
+          ( $mmm2->{mean} < $tsysmax ) ) {
+        $result->pass( 1 );
+        last;
+      } else {
+        $numgood--;
+      }
+    }
+
+    $result->tsys_stats( $mmm2 );
+
+    if( $result->pass ) {
+      $result->clear_fail_reasons;
+      my $note = "Receptor-to-receptor Tsys value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed;
+      $result->add_note( $note );
+    } else {
+      my $fail_reason = "Receptor-to-receptor Tsys value test still failed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed;
+      $result->add_fail_reason( $fail_reason );
+    }
+
   }
 
   return $result;
