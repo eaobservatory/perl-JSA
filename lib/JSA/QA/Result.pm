@@ -151,9 +151,11 @@ sub merge {
     $merged->rms_stats( $second->rms_stats );
   }
 
-  if( ( scalar keys %{$first->tsys_stats} ) > 1 ) {
+  if( defined( $first->tsys_stats ) &&
+      ( scalar keys %{$first->tsys_stats} ) > 1 ) {
     $merged->tsys_stats( $first->tsys_stats );
-  } elsif( ( scalar keys %{$second->tsys_stats} ) > 1 ) {
+  } elsif( defined( $second->tsys_stats ) &&
+           ( scalar keys %{$second->tsys_stats} ) > 1 ) {
     $merged->tsys_stats( $second->tsys_stats );
   }
 
