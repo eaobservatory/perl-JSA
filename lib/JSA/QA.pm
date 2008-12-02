@@ -303,44 +303,49 @@ sub analyse_timeseries_rms {
     my $mmm2;
     my @receptors_removed;
 
-    while( $numgood > $goodrecep ) {
-
-      # Find the highest RMS, knock it out.
-      my $highest_recep = _highest( $newrms );
-      push @receptors_removed, $highest_recep;
-      delete $newrms->{$highest_recep};
-      $result->add_bad_receptor( $highest_recep );
-      # Get the stats on the remaining receptors.
-      $mmm2 = _min_max_mean( [ values %$newrms ] );
-
-      # Check to see if we pass now.
-      if( defined( $mmm2->{min} ) &&
-          ( $mmm2->{min} > $mmm2->{mean} * ( 1 - $rmsvar_rcp ) ) &&
-          ( $mmm2->{max} < $mmm2->{mean} * ( 1 + $rmsvar_rcp ) ) ) {
-        $result->pass( 1 );
-        last;
-      } else {
-        $numgood--;
-      }
-    }
-
-    $result->rms_stats( $mmm2 );
-
-    if( $result->pass ) {
-      $result->clear_fail_reasons;
-      my $note = "Receptor-to-receptor RMS value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed;
+    if( $numgood <= $goodrecep ) {
+      my $note = "Cannot iterate by removing high-RMS receptors as there are $numgood good receptors and requested number of good receptors is $goodrecep.";
       $result->add_note( $note );
     } else {
-      my $fail_reason = sprintf( "Receptor-to-receptor RMS values varied by more than %d%% after removing high-RMS receptors.\n", int( $rmsvar_rcp * 100 ) );
-      $fail_reason .= sprintf( "  [min=%.2f (-%.2f%% of mean) max=%.2f (+%.2f%% of mean) mean=%.2f]\n",
-                               $mmm2->{min},
-                               abs( $mmm2->{min} - $mmm2->{mean} ) / $mmm2->{mean} * 100,
-                               $mmm2->{max},
-                               abs( $mmm2->{max} - $mmm2->{mean} ) / $mmm2->{mean} * 100,
-                               $mmm2->{mean}
-                             );
-      $fail_reason .= "  Receptors removed: " . join ',', @receptors_removed;
-      $result->add_fail_reason( $fail_reason );
+
+      while( $numgood > $goodrecep ) {
+
+        # Find the highest RMS, knock it out.
+        my $highest_recep = _highest( $newrms );
+        push @receptors_removed, $highest_recep;
+        delete $newrms->{$highest_recep};
+        $result->add_bad_receptor( $highest_recep );
+        # Get the stats on the remaining receptors.
+        $mmm2 = _min_max_mean( [ values %$newrms ] );
+
+        # Check to see if we pass now.
+        if( defined( $mmm2->{min} ) &&
+            ( $mmm2->{min} > $mmm2->{mean} * ( 1 - $rmsvar_rcp ) ) &&
+            ( $mmm2->{max} < $mmm2->{mean} * ( 1 + $rmsvar_rcp ) ) ) {
+          $result->pass( 1 );
+          $result->rms_stats( $mmm2 );
+          last;
+        } else {
+          $numgood--;
+        }
+      }
+
+      if( $result->pass ) {
+        $result->clear_fail_reasons;
+        my $note = "Receptor-to-receptor RMS value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed;
+        $result->add_note( $note );
+      } else {
+        my $fail_reason = sprintf( "Receptor-to-receptor RMS values varied by more than %d%% after removing high-RMS receptors.\n", int( $rmsvar_rcp * 100 ) );
+        $fail_reason .= sprintf( "  [min=%.2f (-%.2f%% of mean) max=%.2f (+%.2f%% of mean) mean=%.2f]\n",
+                                 $mmm2->{min},
+                                 abs( $mmm2->{min} - $mmm2->{mean} ) / $mmm2->{mean} * 100,
+                                 $mmm2->{max},
+                                 abs( $mmm2->{max} - $mmm2->{mean} ) / $mmm2->{mean} * 100,
+                                 $mmm2->{mean}
+                               );
+        $fail_reason .= "  Receptors removed: " . join ',', @receptors_removed;
+        $result->add_fail_reason( $fail_reason );
+      }
     }
   }
 
@@ -538,41 +543,45 @@ sub analyse_tsysvar {
     my $mmm2;
     my @receptors_removed;
 
-    while( $numgood > $goodrecep ) {
-
-      # Find the highest Tsys, knock it out.
-      my $highest_recep = _highest( $newtsys );
-      push @receptors_removed, $highest_recep;
-      delete $newtsys->{$highest_recep};
-      $result->add_bad_receptor( $highest_recep );
-
-      #Get stats on the remaining receptors.
-      $mmm2 = _min_max_mean( [ values %$newtsys ] );
-
-      # Check to see if we pass now.
-      if( defined( $mmm2->{min} ) &&
-          defined( $mmm2->{mean} ) &&
-          ( $mmm2->{min} > $mmm2->{mean} * ( 1 - $tsysvar ) ) &&
-          ( $mmm2->{max} < $mmm2->{mean} * ( 1 + $tsysvar ) ) &&
-          ( $mmm2->{mean} < $tsysmax ) ) {
-        $result->pass( 1 );
-        last;
-      } else {
-        $numgood--;
-      }
-    }
-
-    $result->tsys_stats( $mmm2 );
-
-    if( $result->pass ) {
-      $result->clear_fail_reasons;
-      my $note = "Receptor-to-receptor Tsys value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed;
+    if( $numgood <= $goodrecep ) {
+      my $note = "Cannot iterate by removing high-Tsys receptors as there are $numgood good receptors and requested number of good receptors is $goodrecep.";
       $result->add_note( $note );
     } else {
-      my $fail_reason = "Receptor-to-receptor Tsys value test still failed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed;
-      $result->add_fail_reason( $fail_reason );
-    }
 
+      while( $numgood > $goodrecep ) {
+
+        # Find the highest Tsys, knock it out.
+        my $highest_recep = _highest( $newtsys );
+        push @receptors_removed, $highest_recep;
+        delete $newtsys->{$highest_recep};
+        $result->add_bad_receptor( $highest_recep );
+
+        #Get stats on the remaining receptors.
+        $mmm2 = _min_max_mean( [ values %$newtsys ] );
+
+        # Check to see if we pass now.
+        if( defined( $mmm2->{min} ) &&
+            defined( $mmm2->{mean} ) &&
+            ( $mmm2->{min} > $mmm2->{mean} * ( 1 - $tsysvar ) ) &&
+            ( $mmm2->{max} < $mmm2->{mean} * ( 1 + $tsysvar ) ) &&
+            ( $mmm2->{mean} < $tsysmax ) ) {
+          $result->pass( 1 );
+          $result->tsys_stats( $mmm2 );
+          last;
+        } else {
+          $numgood--;
+        }
+      }
+
+      if( $result->pass ) {
+        $result->clear_fail_reasons;
+        my $note = "Receptor-to-receptor Tsys value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed . ".";
+        $result->add_note( $note );
+      } else {
+        my $fail_reason = "Receptor-to-receptor Tsys value test still failed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed . ".";
+        $result->add_fail_reason( $fail_reason );
+      }
+    }
   }
 
   return $result;
