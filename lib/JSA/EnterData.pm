@@ -1445,6 +1445,7 @@ sub calc_radec {
               'system=ICRS',
               'out=!',
               'pixsize=1',
+              'polbinsize=!',  # do not care about POL
               'autogrid=no',
               'msg_filter=quiet',
               (defined $pa ? "crota=$pa" : () ),
