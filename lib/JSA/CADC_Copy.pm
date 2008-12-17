@@ -19,7 +19,14 @@ BEGIN {
     (
       'ACSIS' =>
         {
-          'ok-regex' => qr[^\. a \d{8} _ (\d{5}) \.ok$]x,
+          'ok-regex' =>
+            qr[^\. a
+                \d{8}   # Date.
+                _
+                (\d{5}) # Observation number.
+                \.ok$
+              ]x,
+
           'root' =>
             #'/jcmtdata/raw/acsis/spectra',
             '/home/agarwal/src/scicom/trunk/archiving/jcmt/.acsis/spectra',
@@ -32,6 +39,25 @@ BEGIN {
         }
     );
 
+  $inst{'ACSIS'}->{'path-regex'} =
+    qr{ ^
+        ( .+?
+          /
+          # Date.
+          \d{8}
+        )
+        [/\d]+?
+        # Base file name.
+        (
+          ([ah])
+          \d{8} _
+          # Observation number.
+          ( \d{5} )
+          _ \d{2} _ \d{4} [.]sdf
+        )
+        $
+      }x;
+
   # Instruments to loop through
   my @inst = sort { lc $a cmp lc $b } keys %inst;
 
@@ -42,9 +68,9 @@ BEGIN {
     return @inst;
   }
 
-  # Make instrument_root() & instrument_ok_regex() accessors with rudimentary
-  # checking.
-  for my $prop ( qw[ root ok-regex ] ) {
+  # Make instrument_root(), instrument_ok_regex(), instrument_path_regex
+  # accessors with rudimentary checking.
+  for my $prop ( keys %{ $inst{'ACSIS'} } ) {
 
     ( my $sub = $prop ) =~ tr/-/_/;
 
@@ -224,52 +250,39 @@ sub upload_per_instrument {
     # The current date in the loop
     my $inst_start = $starts->{ $inst };
 
-    # Hash of file id as key (undef as value).
-    my $file_ids =
-      $self
-      ->get_file_ids(
-                      $inst_start->strftime( $format ),
-                      join ' ', $end->strftime( $format ), '23:59:59'
-                    );
+    my $start = $inst_start->strftime( $format );
+    my $end   = join ' ', $end->strftime( $format ), '23:59:59';
+
+    # Used to filter out the files for which there is no *.ok file elsewhere.
+    my $file_ids = $self->get_file_ids( $start, $end );
 
     unless ( defined $file_ids ) {
 
-      if ( $self->verbose ) {
-
-        printf "Nothing found between %s - %s for instrument %s.\n",
-          $inst_start->strftime( $format ),
-          join( ' ', $end->strftime( $format ), '23:59:59' ),
-          $inst;
-      }
+      $self->verbose
+        and printf "Nothing found between $start - $end for instrument $inst.\n";
 
       next;
     }
 
-    my %file_id = map { $_->[0], undef } @{ $file_ids };
-
-    my $ok_re = $self->instrument_ok_regex( $inst );
-
     while ( $inst_start->epoch <= $end->epoch ) {
 
       my $ymd = $inst_start->strftime( $format );
-      my $src_dir = File::Spec->catdir( $self->instrument_root( $inst ), $ymd );
+      my $src = $self->make_inst_date_path( $inst, $ymd );
 
-      if ( -e $src_dir ) {
+      if ( -e $src ) {
 
-        # Slurp up the .ok files if we didn't do so earlier while obtaining
-        # the start date
-        if ( ! exists $okfiles->{ $inst }->{ $ymd } ) {
+        # Slurp up the *.ok files if we didn't do so earlier while obtaining the
+        # start date.
+        unless ( exists $okfiles->{ $inst }->{ $ymd } ) {
 
-          my $return = __PACKAGE__->read_okfiles( $src_dir );
-          $okfiles->{ $inst }->{ $ymd } = $return->{'ok'};
-
+          my $return = __PACKAGE__->read_okfiles( $src );
+          $okfiles->{ $inst }->{ $ymd } = $return->{'ok'}
         }
 
-        $self->upload_make_cadc_ok( \%file_id,
-                                    $ok_re,
-                                    { 'ok' => $okfiles->{ $inst }->{ $ymd },
-                                      'source-dir' => $src_dir,
-                                    }
+        $self->upload_make_cadc_ok( 'instrument' => $inst,
+                                    'source-dir' => $src,
+                                    'okfiles' => $okfiles->{ $inst }->{ $ymd },
+                                    'file-ids' => $file_ids,
                                   );
       }
 
@@ -291,7 +304,7 @@ sub get_file_ids {
     and $start =~ /^\d{8}$/
     and $end   =~ /^ \d{8} [ T] \d{2}:\d{2}:\d{2} $/x
     ;
-    
+
   ( my $sql =
     q[ SELECT f.file_id
         FROM COMMON c, FILES f
@@ -348,21 +361,34 @@ sub read_okfiles {
 }
 
 # Loop through normal .ok files, and create links for data files that
-# do not have a corresponding .cadc_ok file.
+# do not have a corresponding .cadc_ok file.  It takes argument as a hash ...
+#   instrument => ACSIS | SCUBA2
+#   source-dir => /inst/date/dir
+#   obs-date   => 20080820        -- used to generate source directory name
+#   okfiles    => \@okfiles_per_inst_per_date
+#   file-ids   => \@file_id_in_db
 sub upload_make_cadc_ok {
 
-  my ( $self, $file_ids, $ok_re, $files ) = @_;
+  my ( $self, %args ) = @_;
 
-  for my $ok ( @{ $files->{'ok'} } ) {
+  my $inst = $args{'instrument'}
+    or throw JSA::Error::BadArgs "No instrument given.\n";
 
-    my ( $cadc_ok, $obsnum );
-    for ( $ok ) {
+  throw JSA::Error::BadArgs "Neither source directory nor obs date given\n"
+    unless $args{'source-dir'}
+    and $args{'obs-date'} ;
 
-      ( $obsnum ) = $_ =~ /$ok_re/;
-      ( $cadc_ok = $_ ) =~ s/\.ok/\.cadc_ok/;
-    }
+  my $inst_date =
+    $args{'source-dir'}
+    || $self->make_inst_date_path( $inst, $args{'obs-date'} );
+    ;
 
-    $cadc_ok = File::Spec->catfile( $files->{'source-dir'}, $cadc_ok );
+  my %file_id = map { $_ ? ( $_ => undef ) : () } @{ $args{'file-ids'} };
+
+  for my $ok ( @{ $args{'okfiles'} } ) {
+
+    my $cadc_ok = __PACKAGE__->make_cadc_ok_path( $ok, $inst_date );
+
     if ( -e $cadc_ok && ! $self->force ) {
 
       $self->verbose and print "$cadc_ok exists. Skipping.\n";
@@ -370,58 +396,84 @@ sub upload_make_cadc_ok {
       next;
     }
 
-    $obsnum
-      or throw JSA::Error::FatalError "File name [$ok] does not match regexp.";
+    my $obsnum = $self->make_obsnum_path( $inst, $inst_date, $ok );
 
-    my $obs = File::Spec->catdir( $files->{'source-dir'}, $obsnum );
+    my @files = @{ __PACKAGE__->filter_files( $obsnum, \%file_id ) };
+    if ( scalar @files ) {
 
-    my @files = @{ __PACKAGE__->filter_files( $obs, $file_ids ) };
+      $self->make_symlink( $obsnum, "$_" ) for @files;
 
-    for my $base ( @files ) {
-
-      $self->make_symlink( $obs, $self->cadc_dir, $base );
+      $self->make_empty_file( $cadc_ok );
     }
-
-    # XXX - Need to touch .cadc_ok in the sub directory containing the files,
-    # instead of the parent directory.
-    $self->make_empty_file( $cadc_ok ) if scalar @files;
   }
 
   return;
+}
+
+# Returns the UT date directory path given the instrument name.
+sub make_inst_date_path {
+
+  my ( $self, $inst, $date ) = @_;
+  return File::Spec->catdir( $self->instrument_root( $inst ), $date );
+}
+
+# Returns a *.cadc_ok file name given a *.ok base name & the parent directory.
+sub make_cadc_ok_path {
+
+  my ( $class, $ok, $parent ) = @_;
+
+  ( my $cadc_ok = $ok ) =~ s/\.ok/\.cadc_ok/
+    or throw JSA::Error::FatalError "Failed to genetate '*.cadc_ok' from '$ok'\n";
+
+  return File::Spec->catfile( $parent, $cadc_ok );
+}
+
+# Returns a observation directory name given a *.ok base name; the parent
+# directory; and the intrument name (to extract observation number from a
+# F<*.ok> file).
+sub make_obsnum_path {
+
+  my ( $self, $inst, $parent, $ok ) = @_;
+
+  my $re = $self->instrument_ok_regex( $inst ) ;
+  my ( $obsnum ) = $ok =~ /$re/
+    or throw JSA::Error::FatalError "File name, $ok, does not match regexp.\n";
+
+  return File::Spec->catdir( $parent, $obsnum );
 }
 
 # Returns the files in the given directory that have been replicated to the CADC
 # mirror db specified by the hash reference.
 sub filter_files {
 
-  my ( $class, $dir, $replicated ) = @_;
+  my ( $class, $dir, $db_ok ) = @_;
 
   opendir my $dh, $dir
     or throw JSA::Error::FatalError
         sprintf "Could not open directory [%s]: %s\n", $dir, $!;
 
-  my @files = grep { exists $replicated->{ $_ } } readdir $dh;
+  my @files = grep { exists $db_ok->{ $_ } } readdir $dh;
 
   closedir $dh;
 
   return \@files;
 }
 
-# Makes a symbolic link for given base file name & source directory in the
-# destination directory.
+# Makes a symbolic link for given source directory and the observation number
+# string.
 sub make_symlink {
 
-  my ( $self, $src, $dest, $base ) = @_;
+  my ( $self, $obsnum, $base ) = @_;
 
-  my $path = File::Spec->catfile( $src, $base );
-  my $link = File::Spec->catfile( $dest, $base );
+  my $link;
+  ( $obsnum, $link) =
+      map { File::Spec->catfile( "$_", $base ) } $obsnum, $self->cadc_dir ;
 
-  symlink $path, $link
+  symlink $obsnum, $link
     or throw JSA::Error::FatalError
-        sprintf "Can't create symlink to %s in directory %s: %s.",
-          $path, $dest, $!;
+        sprintf "Can't create symlink %s to %s: %s.\n", $link, $obsnum, $!;
 
-  $self->verbose and print "Created link: $path -> $link\n";
+  $self->verbose and print "Created link: $link -> $obsnum\n";
 
   return;
 }
@@ -505,7 +557,7 @@ sub find_start_dates {
         if $days >= 30 ;
 
       my $ymd = $date->strftime( $self->get_date_format );
-      my $src_dir = File::Spec->catdir( $self->instrument_root( $inst ), $ymd );
+      my $src_dir = $self->make_inst_date_path( $self->instrument_root( $inst ), $ymd );
 
       if ( -e $src_dir ) {
 
@@ -708,6 +760,16 @@ Returns a case insensitive sorted list of instrument names.
   @inst = $copy->instrument_list;
 
 
+=item B<make_cadc_ok_path>
+
+Returns a F<*.cadc_ok> file name given a F<*.ok> base name & the
+parent directory.
+
+  $cadc_ok = JSA::CADC_Copy->make_cadc_ok_path( '.a_20080920_0123.ok',
+                                                 '/parent'
+                                                );
+
+
 =item B<make_empty_file>
 
 Given a file path, creates an empty file.  Nothing is done if the path
@@ -720,13 +782,12 @@ Throws JSA::Error::FatalError if the file cannot be created.
 
 =item B<make_symlink>
 
-Given parent observation directory, parent directory for CADC files,
-and base file name, creates the link from file with the base name in
-observation directory to file in CADC directory.
+Creates the link in CADC staging area, given observation number
+direcotry path and the base file name in there.
 
 Throws JSA::Error::FatalError if the symbolic link cannot be created.
 
-  $copy->make_symlink( '/obs/dir', '/cadc/dir', 'a-123.sdf' );
+  $copy->make_symlink( '/path/to/obs', 'a_20080820_00820_08_020.sdf' );
 
 
 =item B<read_okfiles>
@@ -824,8 +885,8 @@ Throws JSA::Error::FatalError if there is a problem with database
 query.
 
   $file_ids = $self->get_file_ids( '2008-08-20',
-                                            '2008-08-21'
-                                          );
+                                    '2008-08-21'
+                                  );
 
 
 =item B<instrument_ok_regex>
@@ -835,10 +896,25 @@ instrument name is given.
 
   $regex = $copy->instrument_ok_regex( 'ACSIS' );
 
-Sets the regular expression  when regular expression is also given
+Sets the regular expression when regular expression is also given
 along with instrument name; returns nothing.
 
   $copy->instrument_ok_regex( 'ACSIS', qr{^\.a\d{8}_(\d{5})\.ok$} );
+
+
+=item B<instrument_path_regex>
+
+Returns the instrument specific regular expression matching the path
+for observation file(s) if only the instrument name is given.
+
+  $regex = $copy->instrument_path_regex( 'ACSIS' );
+
+Sets the regular expression when regular expression is also given
+along with instrument name; returns nothing.
+
+  $copy->instrument_path_regex( 'ACSIS',
+                                qr{^/raw/path/(\d{8})/(\d{5})\b}
+                              );
 
 
 =item B<instrument_root>
@@ -852,6 +928,28 @@ Sets the instrument directory  when directory is also given along
 with instrument name; returns nothing.
 
   $copy->instrument_root( 'ACSIS', '/path/to/jcmt/acsis/spectra' );
+
+
+=item B<make_inst_date_path>
+
+Returns the UT date directory path given the instrument name.
+
+  $acsis_ut = $copy->make_inst_date_path( 'ACSIS', '20080820' );
+
+
+=item B<make_obsnum_path>
+
+Returns a observation directory name given a *.ok base name; the
+parent directory; and a hash reference either with a regular
+expression as the value & 'regex' as key, or instrument name as the
+value & 'instrument' as the key (see I<instrument_ok_regex> method).
+
+  # Returns '/parent/0123'.
+  $obsnum_dir =
+    $copy->make_obsnum_path( '.a_20080920_0123.ok',
+                              '/parent',
+                              { 'regex' => qr{ \d{8} _ (\d{4}) \.ok $}x }
+                            );
 
 
 =item B<okfiles>
@@ -893,33 +991,46 @@ ignored in the future.
 
 For every F<*.ok> file name, makes a symbolic link in CADC upload
 directory and creates a corresponding F<*.cadc_ok> file (in the
-directory name given by I<cadc_dir> method), given ...
+directory name given by I<cadc_dir> method), given a hash of ...
 
 =over 4
 
-=item *
+=item I<file-ids> as key
 
-a hash reference with file ids to be uploaded as keys;
+A array refernece of file ids as present in database as value.
 
-=item *
+=item I<instrument>
 
-a regular expression to extract observation number from every F<*.ok>
-file name;
+Instrument name involved.
 
-=item *
+If missing, then L<JSA::Error::BadArgs> exception is thrown.
 
-a hash with C<ok> & C<source-dir> as keys and array reference of
-F<*.ok> file names & source directory name as respective values.
+=item I<obs-date>
+
+UT date for an observation, used to generate source directory path.
+
+If both this and I<source-dir> are missing, then
+L<JSA::Error::BadArgs> exception is thrown.
+
+=item I<okfiles>
+
+Array reference of F<*.ok> file names.
+
+=item I<source-dir>
+
+Directory name where to find observation data for a given date &
+observation number.
+
+If missing, then I<obs-date> is used to generate the path.
 
 =back
 
-  $copy->upload_make_cadc_ok( \%file_id,
-                              $obsnum_regex,
-                              {
-                                'ok' => \@okfiles,
-                                'source-dir' => '/instrument/date/src'
-                              }
+  $self->upload_make_cadc_ok( 'file-ids'   => \%file_id,
+                              'instrument' => $inst,
+                              'okfiles'   => $okfiles->{ $inst }->{ $ymd },
+                              'source-dir' => '/insturment/date/path',
                             );
+
 
 
 =item B<verbose>
