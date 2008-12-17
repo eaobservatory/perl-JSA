@@ -474,7 +474,8 @@ set.
     $columns->{$tables[0]} = $self->get_columns( $tables[0], $dbh );
 
     my %dict = $self->create_dictionary;
-    my ( $observations, $updated, $grp );
+
+    my ( $observations, $grp, @files_added );
 
     for my $inst ( $self->instruments ) {
 
@@ -516,11 +517,13 @@ set.
         $observations->{$obs->runnr} = \@subhdrs;
       }
 
-      $self->insert_obs( $dbh, $observations, $columns, \%dict )
-        and $updated++ ;
+      my $added = $self->insert_obs( $dbh, $observations, $columns, \%dict );
+      push @files_added, @{ $added }
+        if $added && scalar @{ $added };
+      
     }
 
-    return $updated;
+    return \@files_added;
   }
 
 =item B<insert_obs>
@@ -540,18 +543,19 @@ It is called by I<prepare_and_insert> method.
 
 =cut
 
+  # For each observation:
+  # 1. Insert a row in the COMMON table.
+  # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
+  # 3. Insert a row in the FILES table for each subscan
+  #
+  # fails, the entire observation fails to go in to the DB.
   sub insert_obs {
 
   my ( $self, $dbh, $obs, $cols, $dict ) = @_ ;
 
-    # For each observation:
-    # 1. Insert a row in the COMMON table.
-    # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
-    # 3. Insert a row in the FILES table for each subscan
-    #
-    # fails, the entire observation fails to go in to the DB.
+    my ( @success );
 
-    OBS: for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
+    for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
 
       my $common_obs = $obs->{$runnr}->[0];
 
@@ -633,10 +637,12 @@ It is called by I<prepare_and_insert> method.
 
       $dbh->commit if $self->load_header_db;
 
+      push @success, $common_obs->filename;
+
       $self->_print_text( "successful\n" );
     }
 
-    return 1;
+    return \@success;
   }
 }
 
