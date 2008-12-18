@@ -250,16 +250,17 @@ sub upload_per_instrument {
     # The current date in the loop
     my $inst_start = $starts->{ $inst };
 
-    my $start = $inst_start->strftime( $format );
-    my $end   = join ' ', $end->strftime( $format ), '23:59:59';
+    my @bound = ( $inst_start->strftime( $format ),
+                  join ' ', $end->strftime( $format ), '23:59:59'
+                );
 
     # Used to filter out the files for which there is no *.ok file elsewhere.
-    my $file_ids = $self->get_file_ids( $start, $end );
+    my $file_ids = $self->get_file_ids( @bound );
 
     unless ( defined $file_ids ) {
 
       $self->verbose
-        and printf "Nothing found between $start - $end for instrument $inst.\n";
+        and printf "Nothing found between $bound[0] - $bound[1] for instrument $inst.\n";
 
       next;
     }
@@ -376,7 +377,7 @@ sub upload_make_cadc_ok {
 
   throw JSA::Error::BadArgs "Neither source directory nor obs date given\n"
     unless $args{'source-dir'}
-    and $args{'obs-date'} ;
+    or $args{'obs-date'} ;
 
   my $inst_date =
     $args{'source-dir'}
