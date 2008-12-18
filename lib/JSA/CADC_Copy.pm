@@ -40,9 +40,9 @@ BEGIN {
 
   $inst{'ACSIS'}->{'path-regex'} =
     qr{ ^
+        # Parent instrument directory with date.
         ( .+?
           /
-          # Date.
           \d{8}
         )
         [/\d]+?
@@ -913,11 +913,32 @@ for observation file(s) if only the instrument name is given.
 
   $regex = $copy->instrument_path_regex( 'ACSIS' );
 
+Default for I<ACSIS> is ...
+
+  qr{ ^
+      # Parent instrument directory with date.
+      ( .+?
+        /
+        \d{8}
+      )
+      [/\d]+?
+      # Base file name.
+      (
+        ([ah])
+        \d{8} _
+        # Observation number.
+        ( \d{5} )
+        _ \d{2} _ \d{4} [.]sdf
+      )
+      $
+    }x;
+
+
 Sets the regular expression when regular expression is also given
 along with instrument name; returns nothing.
 
   $copy->instrument_path_regex( 'ACSIS',
-                                qr{^/raw/path/(\d{8})/(\d{5})\b}
+                                qr{^(/raw/path/\d{8})/.+?/(([.])[_\d]+\.sdf)$}
                               );
 
 
