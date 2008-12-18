@@ -257,7 +257,7 @@ sub upload_per_instrument {
     # Used to filter out the files for which there is no *.ok file elsewhere.
     my $file_ids = $self->get_file_ids( @bound );
 
-    unless ( defined $file_ids ) {
+    unless ( $file_ids ) {
 
       $self->verbose
         and printf "Nothing found between $bound[0] - $bound[1] for instrument $inst.\n";
@@ -294,7 +294,8 @@ sub upload_per_instrument {
   return;
 }
 
-# Get list of files that have been uploaded to the db.
+# Returns an array reference of array references containing base file names (aka
+# file ids).  Returns nothing if SQL query finds nothing.
 sub get_file_ids {
 
   my ( $self, $start, $end ) = @_;
@@ -331,9 +332,13 @@ sub get_file_ids {
 
   $dbh->trace( $trace );
 
-  return $dbh->selectall_arrayref( $sql, {}, $start, $end )
+  my $files = $dbh->selectall_arrayref( $sql, {}, $start, $end )
     or throw JSA::Error::FatalError
         sprintf "Could not perform DB query: %s\n", $dbh->errstr;
+
+  return unless $files or scalar @{ $files };
+
+  return [ map { @$_ } @{ $files } ];
 }
 
 # Returns a hash reference with the keys 'ok' and 'cadc_ok', where the value of
