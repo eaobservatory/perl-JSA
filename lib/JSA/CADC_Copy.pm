@@ -28,8 +28,7 @@ BEGIN {
               ]x,
 
           'root' =>
-            #'/jcmtdata/raw/acsis/spectra',
-            '/home/agarwal/src/scicom/trunk/archiving/jcmt/.acsis/spectra',
+            '/jcmtdata/raw/acsis/spectra',
         },
 
       'SCUBA2' =>
@@ -118,8 +117,7 @@ BEGIN {
       'force' => undef,
 
       'cadc-dir' =>
-        #"/jcmtdata/cadc/new",
-        '/home/agarwal/src/scicom/trunk/archiving/jcmt/.cadc/new/',
+        '/jcmtdata/cadc/new',
     ) ;
 
   # Make cadc_dir(), force(), verbose() accessors.
