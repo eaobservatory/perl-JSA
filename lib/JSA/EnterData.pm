@@ -555,21 +555,25 @@ It is called by I<prepare_and_insert> method.
 
     my ( @success );
 
+    RUN:
     for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
 
       my $common_obs = $obs->{$runnr}->[0];
 
-      my $file =  $common_obs->simple_filename ;
+      my @file =  $common_obs->simple_filename ;
 
-      if ( exists $touched{ $file } ) {
+      for ( @file ) {
+      
+        if ( exists $touched{ $_ } ) {
 
-        $self->_print_text( "\talready processed: $file\n" )
-          if 1 < $self->verbosity;
+          $self->_print_text( "\talready processed: $_\n" )
+            if 1 < $self->verbosity;
 
-        next;
+          next RUN;
+        }
       }
 
-      $touched{ $file } = undef;
+      $touched{ $_ } = undef for @file;
 
       # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
       # does not untie).  This is so that a single element array reference when
@@ -577,12 +581,12 @@ It is called by I<prepare_and_insert> method.
       # contained with in).
       my $common_hdrs = { %{ $common_obs->hdrhash } };
 
-      $self->_print_text( sprintf "\t[%s]... ", join ',', $file );
+      $self->_print_text( sprintf "\t[%s]... ", join ',', @file );
 
       if (($common_hdrs->{SIMULATE})) {
 
         $self->_print_text( "simulation data. Skipping\n" );
-        next;
+        next RUN;
       }
 
       my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs );
@@ -605,7 +609,7 @@ It is called by I<prepare_and_insert> method.
       # Calculate RA/Dec (ICRS) extent and base position of observation.  Both
       # subsystems are identical so we only have to do this with the first one
       my $cstat = $self->calc_radec( $common_obs, $common_hdrs );
-      next unless $cstat;
+      next RUN unless $cstat;
 
       $dbh->begin_work if $self->load_header_db;
 
@@ -629,11 +633,11 @@ It is called by I<prepare_and_insert> method.
 
           $self->_print_text( print "$error\n\n" );
         }
-        next;
+        next RUN;
       }
 
       $self->add_subsys_obs( $dbh, $obs->{$runnr}, $cols, $dict )
-        or next ;
+        or next RUN ;
 
       $dbh->commit if $self->load_header_db;
 
