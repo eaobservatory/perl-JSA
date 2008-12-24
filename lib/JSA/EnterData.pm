@@ -405,8 +405,6 @@ Else, sets the value for later use; returns nothing.
   # Silence messages.
   $enter->verbosity( 0 );
 
-=cut
-
 =item B<get_dict>
 
 Returns the file name for the data dictionary.
@@ -553,16 +551,16 @@ It is called by I<prepare_and_insert> method.
 
   my ( $self, $dbh, $obs, $cols, $dict ) = @_ ;
 
-    my ( @success );
+    my ( @success, @sub_obs, @base );
 
     RUN:
     for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
 
-      my $common_obs = $obs->{$runnr}->[0];
+      @sub_obs =  grep { $_ } @{ $obs->{ $runnr } };
 
-      my @file =  $common_obs->simple_filename ;
+      @base = map { $_->simple_filename } @sub_obs;
 
-      for ( @file ) {
+      for ( @base ) {
       
         if ( exists $touched{ $_ } ) {
 
@@ -573,7 +571,9 @@ It is called by I<prepare_and_insert> method.
         }
       }
 
-      $touched{ $_ } = undef for @file;
+      $touched{ $_ } = undef for @base;
+
+      my $common_obs = $obs->{$runnr}->[0];
 
       # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
       # does not untie).  This is so that a single element array reference when
@@ -581,9 +581,9 @@ It is called by I<prepare_and_insert> method.
       # contained with in).
       my $common_hdrs = { %{ $common_obs->hdrhash } };
 
-      $self->_print_text( sprintf "\t[%s]... ", join ',', @file );
+      $self->_print_text( sprintf "\t[%s]... ", join ', ', @base );
 
-      if (($common_hdrs->{SIMULATE})) {
+      if ( $common_hdrs->{SIMULATE} ) {
 
         $self->_print_text( "simulation data. Skipping\n" );
         next RUN;
@@ -641,7 +641,7 @@ It is called by I<prepare_and_insert> method.
 
       $dbh->commit if $self->load_header_db;
 
-      push @success, $common_obs->filename;
+      push @success, map { $_->filename } @sub_obs;
 
       $self->_print_text( "successful\n" );
     }
