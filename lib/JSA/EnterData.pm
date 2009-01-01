@@ -518,7 +518,7 @@ set.
       my $added = $self->insert_obs( $dbh, $observations, $columns, \%dict );
       push @files_added, @{ $added }
         if $added && scalar @{ $added };
-      
+
     }
 
     return \@files_added;
@@ -561,7 +561,7 @@ It is called by I<prepare_and_insert> method.
       @base = map { $_->simple_filename } @sub_obs;
 
       for ( @base ) {
-      
+
         if ( exists $touched{ $_ } ) {
 
           $self->_print_text( "\talready processed: $_\n" )
@@ -1711,7 +1711,7 @@ sub _show_insert_sql {
   $self->_print_text( sprintf "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
                         $table,
                         join( ', ', @{ $fields } ),
-                        join( ', ', @val } )
+                        join( ', ', @val )
                     );
 
   return;
