@@ -1691,8 +1691,12 @@ sub _show_insert_sql {
 
   my ( $self, $table, $fields, $values ) = @_;
 
+  # Copy so that given reference can be continually used by the caller without
+  # any ill effects.
+  my @val = @{ $values };
+
   # print out some SQL that is not going to be executed
-  for ( @{ $values } ) {
+  for ( @val ) {
 
     unless ( defined $_ ) {
 
@@ -1707,7 +1711,7 @@ sub _show_insert_sql {
   $self->_print_text( sprintf "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
                         $table,
                         join( ', ', @{ $fields } ),
-                        join( ', ', @{ $values } )
+                        join( ', ', @val } )
                     );
 
   return;
