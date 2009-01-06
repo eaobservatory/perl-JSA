@@ -49,10 +49,11 @@ use FindBin;
 
 use File::Temp;
 use List::Util qw[ first ];
-use Scalar::Util qw[ looks_like_number ];
+use Scalar::Util qw[ blessed looks_like_number ];
 
 use Astro::Coords::Angle::Hour;
 
+use JSA::EnterData::ACSIS;
 use JSA::Error qw[ :try ];
 use JSA::Files qw[ looks_like_rawfile ];
 use JCMT::DataVerify;
@@ -88,7 +89,7 @@ BEGIN {
       # Only table update (no insert).
       'update-mode'    => 0,
 
-      'instruments' => [ qw[ ACSIS ] ],
+      'instruments' => [ JSA::EnterData::ACSIS->new ],
 
       # Location of data dictionary
       # NOTE: This should go in to the OMP config system at some point
@@ -222,8 +223,8 @@ In insert mode, nothing is inserted in "FILES" table.
 
 =item B<instruments>
 
-Returns a list of instruments when no arguments given.  Else, the list
-of given instruments is verified and accepted for further use.
+Returns a list of instrument objects when no arguments given.  Else,
+the list of given instrument objects is accepted for further use.
 
   # Currently set.
   $instruments = $enter->instruments;
@@ -243,13 +244,13 @@ of given instruments is verified and accepted for further use.
 
       my $inst = $self->{'instruments'};
       return
-        defined $inst && ref $inst ? @{ $inst } : () ;
+        defined $inst ? @{ $inst } : () ;
     }
 
     for my $inst ( @_ ) {
 
       throw JSA::Error "Instrument '$inst' is unknown."
-        unless first { $inst eq $_ } @{ $default{'instruments'} };
+        unless first { blessed $_ eq blessed $inst } @{ $default{'instruments'} };
     }
 
     $self->{'instruments'} = [ @_ ];
@@ -473,22 +474,26 @@ set.
 
     my %dict = $self->create_dictionary;
 
-    my ( $observations, $grp, @files_added );
+    my ( $observations, $grp, $name, @files_added );
 
     for my $inst ( $self->instruments ) {
 
-      $self->_print_text( "Inserting data for [$inst] Date [".  $date->ymd ."]\n" );
+      $name = $inst->name;
 
-      $tables[1] = $inst;
+      $self->_print_text( sprintf "Inserting data for %s. Date [%s]\n",
+                            $name, $date->ymd
+                        );
 
-      $columns->{$inst} = $self->get_columns( $inst, $dbh );
+      $tables[1] = $inst->table;
+
+      $columns->{$name} = $self->get_columns( $inst->table, $dbh );
       $columns->{FILES} = $self->get_columns( 'FILES', $dbh );
 
       # Retrieve observations from disk.  An Info::Obs object will be returned for
       # each subscan in the observation.  No need to retrieve associated obslog
       # comments. That's <no. of subsystems used> * <no. of subscans objects
       # returned per observation>.
-      $grp = OMP::Info::ObsGroup->new( instrument => $inst,
+      $grp = OMP::Info::ObsGroup->new( instrument => $name,
                                           date => $date,
                                           nocomments => 1,
                                           retainhdr => 1,
@@ -499,7 +504,7 @@ set.
 
       if (! $obs[0]) {
 
-        $self->_print_text( "\tNo observations found for instrument $inst\n\n" );
+        $self->_print_text( "\tNo observations found for instrument $name\n\n" );
         next;
       }
 
@@ -515,7 +520,7 @@ set.
         $observations->{$obs->runnr} = \@subhdrs;
       }
 
-      my $added = $self->insert_obs( $dbh, $observations, $columns, \%dict );
+      my $added = $self->insert_obs( $dbh, $inst, $observations, $columns, \%dict );
       push @files_added, @{ $added }
         if $added && scalar @{ $added };
 
@@ -530,12 +535,13 @@ Inserts a row  in "FILES", "COMMON", and instrument related tables for
 each observation for each subscan and subsystem used.  Every insert
 per observation is done in one transaction.
 
-It takes a database handle; hash reference of observations (run number
-as keys, array reference of sub headers as values); a hash reference
-of columns (see I<get_columns>); and a hash reference of dictionary
-(see I<create_dictionary>).
+It takes a database handle; an instrument object
+(I<JSA::EnterData::ACSIS> or I<JSA::EnterData::SCUBA2>); hash
+reference of observations (run number as keys, array reference of sub
+headers as values); a hash reference of columns (see I<get_columns>);
+and a hash reference of dictionary (see I<create_dictionary>).
 
-  $enter->insert_obs( $dbh, \%obs, \%cols, \%dict );
+  $enter->insert_obs( $dbh, $inst, \%obs, \%cols, \%dict );
 
 It is called by I<prepare_and_insert> method.
 
@@ -549,7 +555,7 @@ It is called by I<prepare_and_insert> method.
   # fails, the entire observation fails to go in to the DB.
   sub insert_obs {
 
-  my ( $self, $dbh, $obs, $cols, $dict ) = @_ ;
+  my ( $self, $dbh, $inst, $obs, $cols, $dict ) = @_ ;
 
     my ( @success, @sub_obs, @base );
 
@@ -608,7 +614,7 @@ It is called by I<prepare_and_insert> method.
 
       # Calculate RA/Dec (ICRS) extent and base position of observation.  Both
       # subsystems are identical so we only have to do this with the first one
-      my $cstat = $self->calc_radec( $common_obs, $common_hdrs );
+      my $cstat = $self->calc_radec( $inst, $common_obs, $common_hdrs );
       next RUN unless $cstat;
 
       $dbh->begin_work if $self->load_header_db;
@@ -636,7 +642,7 @@ It is called by I<prepare_and_insert> method.
         next RUN;
       }
 
-      $self->add_subsys_obs( $dbh, $obs->{$runnr}, $cols, $dict )
+      $self->add_subsys_obs( $dbh, $inst, $obs->{$runnr}, $cols, $dict )
         or next RUN ;
 
       $dbh->commit if $self->load_header_db;
@@ -658,9 +664,9 @@ L<OMP::Info::Obs> object.  If optional header hash reference (see
 L<OMP::Info::Obs/hdrhash>) is not given, it will be retreived from the
 given L<OMP::Info::Obs> object.
 
-  $skip = $enter->skip_obs( $obs );
+  $skip = $enter->skip_obs( $inst, $obs );
 
-  $skip = $enter->skip_obs( $obs, $header );
+  $skip = $enter->skip_obs( $inst, $obs, $header );
 
 C<JSA::Error> execption is thrown if header hash (reference) is
 undefined.
@@ -669,7 +675,7 @@ undefined.
 
 sub skip_obs {
 
-  my ( $self, $obs, $header ) = @_;
+  my ( $self, $inst, $obs, $header ) = @_;
 
   $header = $obs->hdrhash unless defined $header;
 
@@ -680,7 +686,7 @@ sub skip_obs {
   # Tests are the same which control database changes.
   return
        ( exists $header->{'SIMULATE'} && !! $header->{'SIMULATE'} )
-    || ! $self->calc_radec( $obs, $header );
+    || ! $self->calc_radec( $inst, $obs, $header );
 }
 
 =item B<add_subsys_obs>
@@ -696,7 +702,7 @@ a database related error.
 
 Returns true on success, false on failure.
 
-  $ok = $enter->add_subsys_obs( $dbh, \%obs, \%cols, \%dict );
+  $ok = $enter->add_subsys_obs( $dbh, $inst, \%obs, \%cols, \%dict );
 
 It is called by I<insert_obs> method.
 
@@ -704,7 +710,7 @@ It is called by I<insert_obs> method.
 
 sub add_subsys_obs {
 
-  my ( $self, $dbh, $obs, $cols, $dict ) = @_;
+  my ( $self, $dbh, $inst, $obs, $cols, $dict ) = @_;
 
   my $subsysnr = 0;
   my $totsub = scalar @{ $obs };
@@ -720,11 +726,13 @@ sub add_subsys_obs {
     # Need to calculate the frequency information
     $self->calc_freq( $subsys_obs, $subsys_hdrs );
 
-    $self->fill_headers_ACSIS( $subsys_hdrs, $subsys_obs );
+    $inst->fill_headers( $subsys_hdrs, $subsys_obs );
+    $self->_fill_headers_obsid_subsys( $subsys_hdrs, $subsys_obs->obsid );
 
     my $error =
       $self->_update_or_insert( 'dbhandle' => $dbh,
-                                'table'   => 'ACSIS',
+                                'instrument' => $inst,
+                                'table'   => $inst->table,
                                 'headers' => $subsys_hdrs,
                                 'columns' => $cols,
                                 'dict'    => $dict,
@@ -841,8 +849,8 @@ sub insert_hash {
   my @fields = sort keys %{$insert_hashes[0]}; # sort required
   my $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
               $table,
-              join( ', ', @fields),
-              join( ', ', ('?') x scalar @fields )
+              join( "\n, ", @fields),
+              join( "\n, ", ('?') x scalar @fields )
               ;
 
   # cache the SQL statement
@@ -1102,39 +1110,6 @@ sub transform_value {
   return 1;
 }
 
-=item B<create_headers>
-
-Create any headers that need to go into the database, but don't exist.
-Currently these headers are:
-
-  decj2000, decj2000_int, filename, idkey, raj2000, raj2000_int,
-  ut_dmf, (and sometimes) RUN, UTDATE EXPOSED (out of date)
-
-These arguments should be provided in this order: name of the table to
-receive the headers, an L<OMP::Info::Obs> object, and a reference to the
-header hash.
-
-  $enter->create_headers( $common_table, $obs, \%headers );
-
-=cut
-
-BEGIN
-{
-  my @db_table = qw[ COMMON FILES ACSIS ];
-
-  sub create_headers {
-
-    my ( $self, $table, $obs, $header ) = @_;
-
-    my $filler = first { $table eq $_ } @db_table
-                  or throw JSA::Error "'$table' is unknown\n";
-
-    $filler = join '_', 'fill_headers', $filler;
-
-    return $self->$filler( $header, $obs );
-  }
-}
-
 =item B<fill_headers_COMMON>
 
 Fills in the headers for C<COMMON> database table, given a headers
@@ -1239,33 +1214,6 @@ sub fill_headers_FILES {
   return $self->_fill_headers_obsid_subsys( $header, $obsid );
 }
 
-=item B<fill_headers_ACSIS>
-
-Fills in the headers for C<ACSIS> database table, given a headers
-hash reference and an L<OMP::Info::Obs> object.
-
-  $enter->fill_headers_ACSIS( \%header, $obs );
-
-=cut
-
-sub fill_headers_ACSIS {
-
-  my ( $self, $header, $obs ) = @_;
-
-  my $obsid = $obs->obsid;
-
-  # Create max_subscan
-  my @subscans = $obs->simple_filename;
-  $header->{'max_subscan'} = scalar @subscans;
-
-  $self->_print_text( sprintf "Created header [max_subscan] with value [%s]\n",
-                        $header->{'max_subscan'}
-                    )
-    if $self->debug;
-
-  return $self->_fill_headers_obsid_subsys( $header, $obsid );
-}
-
 # Create obsid_subsysnr
 sub _fill_headers_obsid_subsys {
 
@@ -1332,6 +1280,7 @@ sub get_insert_values {
   # Map headers to columns, translating from the dictionary as
   # necessary.
   my %values;
+
   for my $header (keys %$hdrhash) {
     if (exists $columns->{$table}{lc($header)}) {
 
@@ -1427,19 +1376,19 @@ Calculate RA/Dec extent (ICRS) of the observation and the base
 position.  It populates header with corners of grid (in decimal
 degrees).  Status is perl status: 1 is good, 0 bad.
 
-  $status = $enter->calc_radec( $obs, $header );
+  $status = $enter->calc_radec( $inst, $obs, $header );
 
 =cut
 
 sub calc_radec {
 
-  my ( $self, $obs, $headerref ) = @_;
+  my ( $self, $inst, $obs, $headerref ) = @_;
 
   # Filenames for a subsystem
   my @filenames = $obs->filename;
 
   # Now need to write these files to  temp file
-  my $fh = new File::Temp();
+  my $fh = File::Temp->new;
   print $fh map { $_ ."\n" } @filenames;
   close($fh);
 
@@ -1447,20 +1396,8 @@ sub calc_radec {
   my $pa = $headerref->{MAP_PA};
   $pa *= -1 if defined $pa;
 
-  # command depends on ACSIS or SCUBA-2
-  # turn off autogrid - only rotate raster maps. Just need bounds.
-  my $systat =
-    system( '/star/bin/smurf/makecube',
-              "in=^$fh",
-              'system=ICRS',
-              'out=!',
-              'pixsize=1',
-              'polbinsize=!',  # do not care about POL
-              'autogrid=no',
-              'msg_filter=quiet',
-              (defined $pa ? "crota=$pa" : () ),
-              'reset'
-          );
+  my @command = $inst->get_bound_check_command( $fh, $pa );
+  my $systat = system( @command );
 
   if ($systat == 256) {
 
@@ -1691,8 +1628,6 @@ sub _show_insert_sql {
 
   my ( $self, $table, $fields, $values ) = @_;
 
-  # Copy so that given reference can be continually used by the caller without
-  # any ill effects.
   my @val = @{ $values };
 
   # print out some SQL that is not going to be executed
@@ -1735,9 +1670,6 @@ methods.
 sub _update_or_insert {
 
   my ( $self, %args ) = @_;
-
-  # Create missing headers.
-  #$self->create_headers( @args{qw/ table obs headers /} );
 
   my $run = $self->update_mode ? 'update_hash' : 'insert_hash';
 

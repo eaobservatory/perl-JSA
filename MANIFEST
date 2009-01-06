@@ -3,6 +3,8 @@ lib/JSA/CADC_Copy.pm
 lib/JSA/Command.pm
 lib/JSA/Convert.pm
 lib/JSA/EnterData.pm
+lib/JSA/EnterData/ACSIS.pm
+lib/JSA/EnterData/SCUBA2.pm
 lib/JSA/Error.pm
 lib/JSA/Files.pm
 lib/JSA/Headers.pm
