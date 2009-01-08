@@ -3,8 +3,6 @@ package JSA::EnterData::SCUBA2;
 use strict;
 use warnings;
 
-use JSA::Error qw[ :try ];
-
 =head1 NAME
 
 JSA::EnterData::SCUBA2 - SCUBA2 specific methods.
@@ -45,13 +43,12 @@ Currently, no extra arguments are handled.
 
 =cut
 
-  sub new {
+sub new {
 
-    my ( $class ) = @_;
+  my ( $class ) = @_;
 
-    my $obj = bless { }, $class;
-    return $obj;
-  }
+  my $obj = bless { }, $class;
+  return $obj;
 }
 
 
