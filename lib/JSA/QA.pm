@@ -575,10 +575,10 @@ sub analyse_tsysvar {
 
       if( $result->pass ) {
         $result->clear_fail_reasons;
-        my $note = "Receptor-to-receptor Tsys value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed . ".";
+        my $note = "Receptor-to-receptor Tsys value test passed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . ( join ',', sort @receptors_removed ) . ".";
         $result->add_note( $note );
       } else {
-        my $fail_reason = "Receptor-to-receptor Tsys value test still failed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . join ',', sort @receptors_removed . ".";
+        my $fail_reason = "Receptor-to-receptor Tsys value test still failed after removing receptor" . ( scalar( @receptors_removed ) > 1 ? 's ' : ' ' ) . ( join ',', sort @receptors_removed ) . ".";
         $result->add_fail_reason( $fail_reason );
       }
     }
