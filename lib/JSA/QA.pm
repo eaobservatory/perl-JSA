@@ -386,10 +386,10 @@ sub analyse_tsys {
   my $result = $self->analyse_tsysmax( $tsys, %opts );
 
   # We now have a list of bad receptors that didn't pass the Tsys
-  # threshold test, so create a
-  # new Tsys hash with the survey-specific thresholded receptors set
-  # to BAD_VALUE, and come up with the receptor to receptor variance
-  # pass/fail, using only the good receptors.
+  # threshold test, so create a new Tsys hash with the survey-specific
+  # thresholded receptors set to BAD_VALUE, and come up with the
+  # receptor to receptor variance pass/fail, using only the good
+  # receptors.
   my %bad_receptors = map { $_, 1 } @{$result->bad_receptors};
 
   # Create the temporary Tsys values, excluding the bad receptors.
@@ -400,7 +400,21 @@ sub analyse_tsys {
     $temp_tsys{$receptor} = $tsys->{$receptor};
   }
 
-  my $tresult = $self->analyse_tsysvar( \%temp_tsys, %opts );
+  my $tresult;
+  if( scalar keys %temp_tsys == 0 ) {
+    $tresult = new JSA::QA::Result( 'pass' => 0 );
+
+    my $tsysbad_const = 'TSYSBAD';
+
+    my $tsysbad = $self->get_data( key => $tsysbad_const, %opts );
+
+    my $fail_reason = "All receptors have Tsys greater than $tsysbad";
+    $tresult->add_fail_reason( $fail_reason );
+
+  } else {
+    $tresult = $self->analyse_tsysvar( \%temp_tsys, %opts );
+  }
+
   my $merged = $result->merge( $tresult );
 
   return $merged;
