@@ -61,10 +61,13 @@ sub new {
 
   my $qa = {};
 
-  if( exists( $opts{'file'} ) &&
-      -e $opts{'file'} ) {
-    tie my %cfg, 'Config::IniFiles', ( -file => $opts{'file'} );
-    $qa->{CONFIG} = \%cfg;
+  if( exists( $opts{'file'} ) ) {
+    if( -e $opts{'file'} ) {
+      tie my %cfg, 'Config::IniFiles', ( -file => $opts{'file'} );
+      $qa->{CONFIG} = \%cfg;
+    } else {
+      croak "Cannot find config file $opts{'file'}";
+    }
   }
 
   bless( $qa, $class );
