@@ -459,7 +459,8 @@ sub analyse_tsysmax {
 
   my @bad_receptors;
   foreach my $receptor ( keys %$tsys ) {
-    if( $tsys->{$receptor} eq BAD_VALUE or
+    if( defined( $tsys->{$receptor} ) &&
+        $tsys->{$receptor} eq BAD_VALUE or
         $tsys->{$receptor} > $tsysbad ) {
       $result->add_bad_receptor( $receptor );
     }
