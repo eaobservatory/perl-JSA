@@ -204,6 +204,8 @@ sub prov_update_parent_path {
   looks_like_drfile($file)
     or JSA::Error::BadFile->throw( "File '$file' does not look like it came from the DR");
 
+  print "Updating parent provenance path for file $file\n" if $DEBUG;
+
   # Grab the base directory.
   my( $filename, $basedir, $suffix ) = fileparse( $file );
 
@@ -239,6 +241,7 @@ sub prov_update_parent_path {
     }
 
     print "Validated: ". join(" ", @validated)."\n" if $DEBUG;
+    print "Removed: " . join( " ", @rejected ) . "\n" if $DEBUG;
 
     # Get the parent indices again. These should all be valid
     @parind = _get_prov_parents( $indf, 0, $status );
@@ -467,7 +470,7 @@ sub _check_parent_product {
   print "PATH=$path $_[0]\n" if $DEBUG;
   my @rejected;
   my @isok;
-
+  print "Testing index $index\n" if $DEBUG;
   # now test it. If the parent looks like a CADC file already
   # then we assume that it is okay
   if ($_[0] == &NDF::SAI__OK) {

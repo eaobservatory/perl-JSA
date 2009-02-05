@@ -231,6 +231,8 @@ sub convert_dr_files {
     if ( can_convert_to_fits( $href->{$file} ) &&
          looks_like_drfile( $file ) ) {
 
+      print "Converting file $file\n" if $DEBUG;
+
       my $assoc = $href->{$file}->value( "ASN_TYPE" );
 
       # Copy the file to the temporary directory, if necessary.
