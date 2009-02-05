@@ -166,10 +166,15 @@ foreach my $indir ( @INDIRS ) {
   my %drhdrs = read_headers( sort keys %files );
 
   # Convert the files.
-  convert_dr_files( \%drhdrs, { indir => $indir,
-                                outdir => $transdir,
-                                tempdir => $tempdir,
-                              } );
+  convert_dr_files( \%drhdrs );
+
+  # Call dpCapture with the correct arguments.
+  my @args; # = qw/ -persist /;
+  if( defined( $transdir ) ) {
+    push @args, "-transdir", $transdir;
+  }
+
+  run_command( "dpCapture", @args );
 
 }
 
