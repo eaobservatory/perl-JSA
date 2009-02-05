@@ -306,12 +306,12 @@ sub analyse_timeseries_rms {
     my $mmm2;
     my @receptors_removed;
 
-    if( $numgood <= $goodrecep ) {
+    if( $numgood < $goodrecep ) {
       my $note = "Cannot iterate by removing high-RMS receptors as there are $numgood good receptors and requested number of good receptors is $goodrecep.";
       $result->add_note( $note );
     } else {
 
-      while( $numgood > $goodrecep ) {
+      while( $numgood >= $goodrecep ) {
 
         # Find the highest RMS, knock it out.
         my $highest_recep = _highest( $newrms );
@@ -561,12 +561,12 @@ sub analyse_tsysvar {
     my $mmm2;
     my @receptors_removed;
 
-    if( $numgood <= $goodrecep ) {
+    if( $numgood < $goodrecep ) {
       my $note = "Cannot iterate by removing high-Tsys receptors as there are $numgood good receptors and requested number of good receptors is $goodrecep.";
       $result->add_note( $note );
     } else {
 
-      while( $numgood > $goodrecep ) {
+      while( $numgood >= $goodrecep ) {
 
         # Find the highest Tsys, knock it out.
         my $highest_recep = _highest( $newtsys );
