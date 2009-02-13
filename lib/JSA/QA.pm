@@ -212,7 +212,8 @@ sub get_data {
     $config_key =~ /(\d+):(\d+)/;
     my $lower = $1;
     my $upper = $2;
-    if( $lower < $frequency && $frequency < $upper ) {
+    if( $lower < $frequency && $frequency < $upper &&
+        defined( $self->{'CONFIG'}->{$config_key}->{$key} ) ) {
       return $self->{'CONFIG'}->{$config_key}->{$key};
     }
   }
