@@ -392,36 +392,40 @@ sub analyse_tsys {
   # threshold test, so create a new Tsys hash with the survey-specific
   # thresholded receptors set to BAD_VALUE, and come up with the
   # receptor to receptor variance pass/fail, using only the good
-  # receptors.
-  my %bad_receptors = map { $_, 1 } @{$result->bad_receptors};
+  # receptors, but only if we actually passed.
+  if( $result->pass ) {
 
-  # Create the temporary Tsys values, excluding the bad receptors.
-  my %temp_tsys;
-  foreach my $receptor ( sort keys %$tsys ) {
-    next if $tsys->{$receptor} eq BAD_VALUE;
-    next if exists $bad_receptors{$receptor};
-    $temp_tsys{$receptor} = $tsys->{$receptor};
-  }
+    my %bad_receptors = map { $_, 1 } @{$result->bad_receptors};
 
-  my $tresult;
-  if( scalar keys %temp_tsys == 0 ) {
-    $tresult = new JSA::QA::Result( 'pass' => 0 );
+    # Create the temporary Tsys values, excluding the bad receptors.
+    my %temp_tsys;
+    foreach my $receptor ( sort keys %$tsys ) {
+      next if $tsys->{$receptor} eq BAD_VALUE;
+      next if exists $bad_receptors{$receptor};
+      $temp_tsys{$receptor} = $tsys->{$receptor};
+    }
 
-    my $tsysbad_const = 'TSYSBAD';
+    my $tresult;
+    if( scalar keys %temp_tsys == 0 ) {
+      $tresult = new JSA::QA::Result( 'pass' => 0 );
 
-    my $tsysbad = $self->get_data( key => $tsysbad_const, %opts );
+      my $tsysbad_const = 'TSYSBAD';
 
-    my $fail_reason = "All receptors have Tsys greater than $tsysbad";
-    $tresult->add_fail_reason( $fail_reason );
+      my $tsysbad = $self->get_data( key => $tsysbad_const, %opts );
 
+      my $fail_reason = "All receptors have Tsys greater than $tsysbad";
+      $tresult->add_fail_reason( $fail_reason );
+
+    } else {
+      $tresult = $self->analyse_tsysvar( \%temp_tsys, %opts );
+    }
+
+    my $merged = $result->merge( $tresult );
+
+    return $merged;
   } else {
-    $tresult = $self->analyse_tsysvar( \%temp_tsys, %opts );
+    return $result;
   }
-
-  my $merged = $result->merge( $tresult );
-
-  return $merged;
-
 }
 
 =item B<analyse_tsysmax>
@@ -468,6 +472,18 @@ sub analyse_tsysmax {
       $result->add_bad_receptor( $receptor );
     }
   }
+
+  # Check the number of good receptors against the allowed number of
+  # good receptors.
+  my $numgood = ( scalar keys %$tsys ) - ( scalar @{$result->bad_receptors()} );
+  my $goodrecep_const = 'GOODRECEP';
+  my $goodrecep = $self->get_data( key => $goodrecep_const, %opts );
+  if( $numgood < $goodrecep ) {
+    $result->pass( 0 );
+    my $reason = "Requested number of good receptors below ${tsysbad}K is $goodrecep, but only $numgood receptors were below this threshold.";
+    $result->add_fail_reason( $reason );
+  }
+
   return $result;
 }
 
