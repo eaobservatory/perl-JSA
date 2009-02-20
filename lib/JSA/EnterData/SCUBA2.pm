@@ -98,7 +98,6 @@ sub get_bound_check_command {
       'pixsize=1',
       # Do not care about POL.
       'polbinsize=!',
-      # Turn off autogrid - only rotate raster maps. Just need bounds.
       'msg_filter=quiet',
       ( defined $pos_angle ? "crota=$pos_angle" : () ),
       'reset'
