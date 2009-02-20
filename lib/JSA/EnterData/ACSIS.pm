@@ -3,6 +3,8 @@ package JSA::EnterData::ACSIS;
 use strict;
 use warnings;
 
+use base 'JSA::EnterData';
+
 =head1 NAME
 
 JSA::EnterData::ACSIS - ACSIS specific methods.
@@ -50,28 +52,6 @@ sub new {
   my $obj = bless { }, $class;
   return $obj;
 }
-
-
-=item B<fill_headers>
-
-Fills in the headers for C<ACSIS> database table, given a headers
-hash reference and an L<OMP::Info::Obs> object.
-
-  $enter->fill_headers( \%header, $obs );
-
-=cut
-
-sub fill_headers {
-
-  my ( $self, $header, $obs ) = @_;
-
-  my $obsid = $obs->obsid;
-  my @subscans = $obs->simple_filename;
-  $header->{'max_subscan'} = scalar @subscans;
-
-  return;
-}
-
 
 =item B<get_bound_check_command>
 

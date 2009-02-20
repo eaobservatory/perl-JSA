@@ -3,6 +3,8 @@ package JSA::EnterData::SCUBA2;
 use strict;
 use warnings;
 
+use base 'JSA::EnterData';
+
 =head1 NAME
 
 JSA::EnterData::SCUBA2 - SCUBA2 specific methods.
@@ -64,28 +66,6 @@ sub calc_freq {
   return;
 }
 
-
-=item B<fill_headers>
-
-Fills in the headers for C<SCUBA2> database table, given a headers
-hash reference and an L<OMP::Info::Obs> object.
-
-  $enter->fill_headers( \%header, $obs );
-
-=cut
-
-sub fill_headers {
-
-  my ( $self, $header, $obs ) = @_;
-
-  my $obsid = $obs->obsid;
-  my @subscans = $obs->simple_filename;
-  $header->{'max_subscan'} = scalar @subscans;
-
-  return;
-}
-
-
 =item B<get_bound_check_command>
 
 Returns a list of command and its argument to be executed to
@@ -127,6 +107,20 @@ Returns the name of the instrument involved.
 sub name { return 'SCUBA-2' ; }
 
 
+=item B<name_is_scuba2>
+
+=cut
+
+# There could be a better place for this method than here.
+sub name_is_scuba2 {
+
+  my ( $class, $name ) = @_;
+
+  my $re = qr{^scuba-?2$}i;
+
+  return $name =~ $re;
+}
+
 =item B<table>
 
 Returns the database table related to the instrument.
@@ -137,6 +131,278 @@ Returns the database table related to the instrument.
 
 sub table { return 'SCUBA2'; }
 
+=item B<transform_header>
+
+=cut
+
+BEGIN {
+
+  my $obsidss_re = qr{^ obsidss $}xi;
+  my $subarray_re = qr{^ subarray (?:_[a-d])? $}xi;
+
+  sub transform_header {
+
+    my ( $self, $header ) = @_;
+
+    my @fields = keys %{ $header };
+
+    my $header_val =
+      sub {
+        my ( $filter ) = @_;
+        return ( map { /$filter/ ? $header->{ $_ } : () } @fields )[0];
+      };
+
+    my $subh = $header->{'SUBHEADERS'};
+
+    $self->transform_subheader( $subh, $header_val->( $obsidss_re ) );
+
+    my %new;
+    for my $k ( @fields ) {
+
+      next if lc $k eq 'subheaders';
+      $new{ $k } = $header->{ $k };
+    }
+
+    $self->push_range_headers_to_main( \%new, $subh );
+
+    my $grouped =
+      $self->groub_by_subarray( $subh, $header_val->( $subarray_re ) );
+
+    my @new;
+    for my $sa ( keys %{ $grouped } ) {
+
+      push @new, { %{ $grouped->{ $sa } } , %new };
+    }
+
+    return ( @new );
+  }
+}
+
+sub transform_subheader {
+
+  my ( $self, $subheaders, $header_obsidss ) = @_;
+
+  for my $subh ( @{ $subheaders } ) {
+
+    # Prefix _[a-d] after some of the keys to match column names.
+    $self->append_array_column( $subh );
+
+    $subh->{'obsid_subsysnr'} ||= $subh->{'OBSIDSS'} || $header_obsidss;
+  }
+
+  return;
+}
+
+BEGIN {
+
+  my @start =
+    qw[
+        AMSTART ATSTART AZSTART
+        BKLEGTST BPSTART
+        DATE-OBS
+        FRLEGTST
+        HSTSTART HUMSTART
+        SEEDATST SEEINGST SEQSTART
+        TAU225ST TAUDATST
+        WNDDIRST WNDSPDST WVMDATST WVMTAUST
+    ];
+
+  my @end =
+    qw[
+        AMEND ATEND AZEND
+        BKLEGTEN BPEND
+        DATE-END
+        FRLEGTEN
+        HSTEND HUMEND
+        SEEDATEN SEEINGEN SEQEND
+        TAU225EN TAUDATEN
+        WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
+      ];
+
+  my $start_re = join '|' , @start;
+  my $end_re = join '|', @end;
+  $_ = qr{(?:$_)}ix for $start_re, $end_re;
+
+  sub push_range_headers_to_main {
+
+    my ( $self, $header, $subhead ) = @_;
+
+    return if 1 >= scalar @{ $subhead };
+
+    my $extract =
+    sub {
+      my ( $sub, $re ) = @_;
+      for my $key ( keys %{ $sub } ) {
+
+        next unless $key =~ $re;
+
+        if ( exists $header->{ $key } ) {
+
+          delete $sub->{ $key };
+          next;
+        }
+
+        $header->{ $key } = $sub->{ $key };
+        delete $sub->{ $key };
+      }
+      return;
+    };
+
+    my ( $start, $end ) = $self->get_end_subheaders( $subhead );
+
+    $extract->( $start, $start_re ) if $start;
+    $extract->( $end, $end_re ) if $end;
+
+    return;
+  }
+}
+
+=item B<get_end_subheaders>
+
+Given an array reference of subheader hash refereneces, returns two hash
+references defining starting and ending subheaders
+
+  ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders );
+
+=cut
+
+sub get_end_subheaders {
+
+  my ( $self, $subheaders ) = @_;
+
+  my @key = qw[ SEQSTART SEQEND ];
+
+  my ( $init, $start, $end );
+  for my $h ( @{ $subheaders } ) {
+
+    next
+      unless exists $h->{ $key[0] }
+      && exists $h->{ $key[1] };
+
+    my ( $k_start, $k_end ) = map { $h->{ $_ } } @key;
+
+    unless ( $init ) {
+
+      $end = $start = $h;
+      $init++;
+      next;
+    }
+
+    $start = $h if $start->{ $key[0] } >  $k_start;
+    $end   = $h if $end->{ $key[1] }   <= $k_end;
+  }
+
+  return ( $start, $end );
+}
+
+sub groub_by_subarray {
+
+  my ( $self, $subheaders, $header_arr ) = @_;
+
+  my $group = {};
+
+  my $array_re = qr{^( s[48] .? )$}ix;
+
+  my $array = $header_arr;
+  for my $sub ( @{ $subheaders } ) {
+
+    my @keys = keys %{ $sub };
+
+    unless ( $header_arr ) {
+      for ( @keys ) {
+
+        next if -1 == index lc $_, 'subarray';
+
+        ( $array ) = ( $sub->{ $_ } =~ $array_re )
+          and last;
+      }
+    }
+
+    throw JSA::Error "Failed to find subarray type."
+      unless $array;
+
+    for ( @keys ) {
+
+      $group->{ $array }{ $_ } ||= $sub->{ $_ };
+    }
+  }
+
+  return $group;
+}
+
+
+#  transform_header() takes care of the obsid_subsynr value.
+sub _fill_headers_obsid_subsys { }
+
+sub append_array_column {
+
+  my ( $self, $header ) = @_;
+
+  return unless  $header->{'SUBARRAY'} ;
+
+  # Table column names suffixed by with [a-d].
+  my @variation =
+    qw[ ARRAYID
+        DETBIAS
+        FLAT
+        PIXHEAT
+        SUBARRAY
+      ];
+
+  my $subarray_col = qr{([a-d])}i;
+  my ( $col ) = $header->{'SUBARRAY'} =~ $subarray_col
+    or throw JSA::Error "No match found for subarray";
+
+  for my $field ( @variation ) {
+
+    next unless exists $header->{ $field };
+
+    $header->{ join '_', $field, $col } = $header->{ $field };
+    delete $header->{ $field };
+  }
+
+  return;
+}
+
+
+=item B<fill_headers_FILES>
+
+Fills in the headers for C<FILES> database table, given a headers
+hash reference and an L<OMP::Info::Obs> object.
+
+  $enter->fill_headers_FILES( \%header, $obs );
+
+=cut
+
+sub fill_headers_FILES {
+
+  my ( $self, $header, $obs, $inst ) = @_;
+
+  $self->SUPER::fill_headers_FILES( $header, $obs, $inst );
+
+  # Add 'nsubscan' field.
+  my $nsub = () = $header->{'NSUBSCAN'};
+
+  my @file = @{ $header->{'file_id'} };
+
+  if ( $nsub < scalar @file ) {
+
+    $header->{'nsubscan'} =
+      [ map { /_(\d+)[.]sdf$/ ? 0 + $1 : ()  } @{ $header->{'file_id'} } ];
+  }
+
+  # Add 'subsysnr' field.
+  my $parse = qr{^ (s[48]) [a-d] }xi;
+
+  for my $i ( 0 .. scalar @file - 1 ) {
+
+    next if $header->{'subsysnr'}[ $i ];
+
+    ( $header->{'subsysnr'}[ $i ] ) = $file[ $i ] =~ $parse;
+  }
+
+  return;
+}
 
 1;
 

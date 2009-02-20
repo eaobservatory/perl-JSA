@@ -54,6 +54,7 @@ use Scalar::Util qw[ blessed looks_like_number ];
 use Astro::Coords::Angle::Hour;
 
 use JSA::EnterData::ACSIS;
+use JSA::EnterData::SCUBA2;
 use JSA::Error qw[ :try ];
 use JSA::Files qw[ looks_like_rawfile ];
 use JCMT::DataVerify;
@@ -89,11 +90,16 @@ BEGIN {
       # Only table update (no insert).
       'update-mode'    => 0,
 
-      'instruments' => [ JSA::EnterData::ACSIS->new ],
+      'instruments' =>
+        [ JSA::EnterData::ACSIS->new,
+          JSA::EnterData::SCUBA2->new,
+        ],
 
       # Location of data dictionary
       # NOTE: This should go in to the OMP config system at some point
-      'dict' =>  '/jac_sw/archiving/jcmt/import/data.dictionary',
+      'dict' =>
+        '/jac_sw/archiving/jcmt/import/data.dictionary',
+        #'/home/agarwal/src/jac-git/archiving/jcmt/import/data.dictionary',
 
       # If false, then nothing is printed (other than fatal messages).
       # Else, messages are printed with increasing verbosity.
@@ -250,7 +256,10 @@ the list of given instrument objects is accepted for further use.
     for my $inst ( @_ ) {
 
       throw JSA::Error "Instrument '$inst' is unknown."
-        unless first { blessed $_ eq blessed $inst } @{ $default{'instruments'} };
+        unless first { blessed $_ eq blessed $inst }
+                ( JSA::EnterData::ACSIS->new,
+                  JSA::EnterData::SCUBA2->new
+                ) ;
     }
 
     $self->{'instruments'} = [ @_ ];
@@ -595,27 +604,27 @@ It is called by I<prepare_and_insert> method.
         next RUN;
       }
 
-      my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs );
-      my %invalid = $verify->verify_headers;
+      # XXX Skip badly needed data verification for scuba2 until implemented.
+      unless ( JSA::EnterData::SCUBA2->name_is_scuba2( $inst->name ) ) {
 
-      for (keys %invalid) {
+        my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs );
 
-        my $val = $invalid{$_}->[0];
-        if ( $val =~ /does not match/i ) {
+        my %invalid = $verify->verify_headers;
 
-          $self->_print_text( "$_ : $val\n" );
-          undef $common_hdrs->{$_};
-        } elsif ( $val =~ /should not/i ) {
+        for (keys %invalid) {
 
-          $self->_print_text( "$_ : $val\n" );
-          undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
+          my $val = $invalid{$_}->[0];
+          if ( $val =~ /does not match/i ) {
+
+            $self->_print_text( "$_ : $val\n" );
+            undef $common_hdrs->{$_};
+          } elsif ( $val =~ /should not/i ) {
+
+            $self->_print_text( "$_ : $val\n" );
+            undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
+          }
         }
       }
-
-      # Calculate RA/Dec (ICRS) extent and base position of observation.  Both
-      # subsystems are identical so we only have to do this with the first one
-      my $cstat = $self->calc_radec( $inst, $common_obs, $common_hdrs );
-      next RUN unless $cstat;
 
       $dbh->begin_work if $self->load_header_db;
 
@@ -627,6 +636,7 @@ It is called by I<prepare_and_insert> method.
                                   'headers' => $common_hdrs,
                                   'columns' => $cols,
                                   'dict'    => $dict,
+                                  'instrument' => $inst,
                                 );
 
       if ($error) {
@@ -724,52 +734,71 @@ sub add_subsys_obs {
     my $subsys_hdrs = { %{ $subsys_obs->hdrhash } };
 
     # Need to calculate the frequency information
-    $self->calc_freq( $subsys_obs, $subsys_hdrs );
+    $inst->calc_freq( $subsys_obs, $subsys_hdrs );
 
     $inst->fill_headers( $subsys_hdrs, $subsys_obs );
-    $self->_fill_headers_obsid_subsys( $subsys_hdrs, $subsys_obs->obsid );
 
-    my $error =
-      $self->_update_or_insert( 'dbhandle' => $dbh,
-                                'instrument' => $inst,
-                                'table'   => $inst->table,
-                                'headers' => $subsys_hdrs,
-                                'columns' => $cols,
-                                'dict'    => $dict,
-                              );
+    my @edited =
+      $inst->can( 'transform_header' )
+      ? $inst->transform_header( $subsys_hdrs )
+      : ( $subsys_hdrs )
+      ;
 
-    if ($error) {
+    my $added_files;
 
-      $dbh->rollback if $self->load_header_db;
-      $self->_print_text( "$error\n\n" );
-      return;
-    }
+    for my $subh ( @edited ) {
 
-    # Create headers that don't exist
-    $self->fill_headers_FILES( $subsys_hdrs, $subsys_obs );
+      $inst->_fill_headers_obsid_subsys( $subh, $subsys_obs->obsid );
 
-    my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subsys_hdrs );
+      my $error =
+        $self->_update_or_insert( 'dbhandle' => $dbh,
+                                  'instrument' => $inst,
+                                  'table'   => $inst->table,
+                                  'headers' => $subh,
+                                  'columns' => $cols,
+                                  'dict'    => $dict,
+                                );
 
-    if ( ! $self->update_mode ) {
+      if ($error) {
 
-      try {
-
-        _verify_file_name( $insert_ref->{'file_id'} );
-
-        $self->insert_hash( 'FILES', $dbh, $insert_ref )
-          or $error = $dbh->errstr;
+        $dbh->rollback if $self->load_header_db;
+        $self->_print_text( "$error\n\n" );
+        return;
       }
-      catch JSA::Error with {
 
-        $error = shift @_;
-      };
-    }
+      unless ( $added_files ) {
 
-    if ($error) {
+        $added_files++;
 
-      $dbh->rollback;
-      $self->_print_text( "$error\n\n" );
-      return;
+        # Create headers that don't exist
+        $inst->fill_headers_FILES( $subh, $subsys_obs, $inst );
+
+        my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subh );
+
+        if ( ! $self->update_mode ) {
+
+          try {
+
+            _verify_file_name( $insert_ref->{'file_id'} );
+
+            my $hash = $self->prepare_insert_hash( 'FILES', $insert_ref );
+            $self->insert_hash( 'FILES', $dbh, $hash )
+              or $error = $dbh->errstr;
+          }
+          catch JSA::Error with {
+
+            $error = shift @_;
+          };
+        }
+
+        if ($error) {
+
+          $dbh->rollback;
+          $self->_print_text( "$error\n\n" );
+          return;
+        }
+      }
+
     }
   }
 
@@ -790,9 +819,12 @@ row has an array reference the size of those arrays must be identical.
 
 =cut
 
-sub insert_hash {
+sub prepare_insert_hash {
 
-  my ( $self, $table, $dbh, $field_values ) = @_;
+  my ( $self, $table, $field_values ) = @_;
+
+  throw JSA::Error "Empty hash reference was given to insert."
+    unless scalar keys %{ $field_values };
 
   # Go through the hash and work out whether we have multiple inserts
   my @have_ref;
@@ -842,9 +874,18 @@ sub insert_hash {
     }
   }
 
+  return \@insert_hashes;
+}
+
+sub insert_hash {
+
+  my ( $self, $table, $dbh, $insert ) = @_;
+
   # Get the fields in sorted order (so that we can match with values)
   # and create a template SQL statement. This can be done with the
   # first hash from @insert_hashes
+
+  my @insert_hashes = @{ $insert };
 
   my @fields = sort keys %{$insert_hashes[0]}; # sort required
   my $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
@@ -902,7 +943,7 @@ sub update_hash {
   if ($table eq 'COMMON') {
 
     $unique_key = "obsid";
-  } elsif ($table eq 'ACSIS' || $table eq 'FILES') {
+  } elsif ( grep { $table eq $_ } qw( ACSIS SCUBA2 FILES ) ) {
 
     $unique_key = "obsid_subsysnr";
   } else {
@@ -1110,6 +1151,26 @@ sub transform_value {
   return 1;
 }
 
+=item B<fill_headers>
+
+Fills in the headers for C<ACSIS> or C<SCUBA2> database tables, given a headers
+hash reference and an L<OMP::Info::Obs> object.
+
+  $enter->fill_headers( \%header, $obs );
+
+=cut
+
+sub fill_headers {
+
+  my ( $self, $header, $obs ) = @_;
+
+  my $obsid = $obs->obsid;
+  my @subscans = $obs->simple_filename;
+  $header->{'max_subscan'} = scalar @subscans;
+
+  return;
+}
+
 =item B<fill_headers_COMMON>
 
 Fills in the headers for C<COMMON> database table, given a headers
@@ -1180,7 +1241,7 @@ hash reference and an L<OMP::Info::Obs> object.
 
 sub fill_headers_FILES {
 
-  my ( $self, $header, $obs ) = @_;
+  my ( $self, $header, $obs, $inst ) = @_;
 
   my $obsid = $obs->obsid;
 
@@ -1211,7 +1272,7 @@ sub fill_headers_FILES {
                     )
     if $self->debug;
 
-  return $self->_fill_headers_obsid_subsys( $header, $obsid );
+  return $inst->_fill_headers_obsid_subsys( $header, $obsid );
 }
 
 # Create obsid_subsysnr
@@ -1277,34 +1338,55 @@ sub get_insert_values {
 
   my ( $self, $table, $columns, $dictionary, $hdrhash ) = @_;
 
-  # Map headers to columns, translating from the dictionary as
-  # necessary.
-  my %values;
+  for ( qw[ SCUBA-2 ] ) {
 
-  for my $header (keys %$hdrhash) {
-    if (exists $columns->{$table}{lc($header)}) {
-
-      # Column exists, no need to translate
-      $values{lc($header)} = $hdrhash->{$header};
-    } else {
-
-      # Header not found, try translating
-      if (exists $dictionary->{lc($header)} and exists $columns->{$table}{$dictionary->{lc($header)}}) {
-
-        # Found header alias in dictionary and column exists in table
-        my $alias = $dictionary->{lc($header)};
-        $values{$alias} = $hdrhash->{$header};
-
-        $self->_print_text( "Mapped header [$header] to column [$alias]\n" )
-          if $self->debug;
-      }
-    }
-    $self->_print_text( "Could not find alias for header [$header].  Skipped.\n" )
-      if $self->debug and ! exists $values{lc($header)};
+    $columns->{ $table } = $columns->{ $_ }
+      if 'scuba2' eq lc $table
+      && ! exists $columns->{ $table }
+      && exists $columns->{ $_ }
+      ;
   }
 
+  # Map headers to columns, translating from the dictionary as
+  # necessary.
+
+  my $main =
+    $self->extract_column_headers( $table, $columns, $dictionary, $hdrhash );
+
   # Do value transformation
-  $self->transform_value($table, $columns, \%values);
+  $self->transform_value($table, $columns, $main);
+
+  return $main;
+}
+
+sub extract_column_headers {
+
+  my ( $self, $table, $columns, $dict, $hdrhash ) = @_;
+
+  my %values;
+
+  for my $header (sort { lc $a cmp lc $b } keys %$hdrhash) {
+
+    my $alt_head = lc $header;
+
+    if (exists $columns->{$table}{ $alt_head }) {
+
+      $values{ $alt_head } = $hdrhash->{$header};
+    }
+    elsif ( exists $dict->{ $alt_head }
+            && exists $columns->{ $table }{ $dict->{ $alt_head } } ) {
+
+      # Found header alias in dictionary and column exists in table
+      my $alias = $dict->{ $alt_head };
+      $values{$alias} = $hdrhash->{$header};
+
+      $self->_print_text( "Mapped header [$header] to column [$alias]\n" )
+        if $self->debug;
+    }
+
+    $self->_print_text( "Could not find alias for header [$header].  Skipped.\n" )
+      if $self->debug and ! exists $values{ $alt_head };
+  }
 
   return \%values;
 }
@@ -1376,7 +1458,7 @@ Calculate RA/Dec extent (ICRS) of the observation and the base
 position.  It populates header with corners of grid (in decimal
 degrees).  Status is perl status: 1 is good, 0 bad.
 
-  $status = $enter->calc_radec( $inst, $obs, $header );
+  $status = JSA::EnterData->calc_radec( $inst, $obs, $header );
 
 =cut
 
@@ -1465,7 +1547,7 @@ sub calc_radec {
 
 Calculate frequency properties, updates given hash reference.
 
-  $enter->calc_freq( $obs, $headerref );
+  JSA::EnterData->calc_freq( $obs, $headerref );
 
 It Calculates:
     zsource, restfreq
@@ -1538,12 +1620,12 @@ supplied list of JCMTSTATE components (can be empty).
 
 Returns hash of JCMTSTATE information and the Starlink::AST object.
 
-  ($wcs, %state) = $enter->read_ndf( $file, @state );
+  ($wcs, %state) = JSA::EnterData->read_ndf( $file, @state );
 
 returns empty list on error.  In scalar context just returns WCS
 frameset...
 
-  $wcs = $enter->read_ndf( $file );
+  $wcs = JSA::EnterData->read_ndf( $file );
 
 =cut
 
@@ -1671,12 +1753,18 @@ sub _update_or_insert {
 
   my ( $self, %args ) = @_;
 
-  my $run = $self->update_mode ? 'update_hash' : 'insert_hash';
+  my $vals = $self->get_insert_values( @args{qw/ table columns dict headers /});
 
-  my $ok =
-    $self->$run( @args{qw/ table dbhandle /},
-                  $self->get_insert_values( @args{qw/ table columns dict headers /} )
-                );
+  my $ok;
+  if ( $self->update_mode ) {
+
+    $ok = $self->update_hash( @args{qw/ table dbhandle /}, $vals )
+  }
+  else {
+
+    $vals = $args{'instrument'}->prepare_insert_hash( $args{'table'}, $vals );
+    $ok = $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
+  }
 
   return $args{'dbhandle'}->errstr;
 }
