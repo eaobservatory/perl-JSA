@@ -219,6 +219,14 @@ sub convert_dr_files {
       if( defined( $opts->{tempdir} ) ) {
         unlink $tfile;
       }
+    } else {
+      if ($DEBUG) {
+        my $can_send = can_send_to_cadc( $href->{$file} );
+        my $isdr = looks_like_drfile( $file );
+        print "File $file not suitable for conversion (is ".
+          ( $can_send ? "" : "not ") . "valid product) (is ".
+            ( $isdr ? "" : "not ") . "valid DR filename)\n";
+      }
     }
   }
 }
