@@ -27,7 +27,6 @@ use Proc::SafeExec;
 
 # Need NDG support in NDF
 use NDF 1.47;
-use Astro::FITS::Header::NDF;
 
 # find out where starlink is located
 use Starlink::Config qw/ :override /;
@@ -36,6 +35,7 @@ use JSA::Command qw/ run_command /;
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ looks_like_drfile looks_like_cadcfile drfilename_to_cadc dissect_drfile
                    construct_rawfile looks_like_rawfile can_send_to_cadc /;
+use JSA::Headers qw/ read_header /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ check_star_env
@@ -268,7 +268,7 @@ sub prov_update_parent_path {
         }
 
         # We need the header
-        my $hdr = eval { Astro::FITS::Header::NDF->new(File => $path) };
+        my $hdr = read_header( $path );
 
         # We need to know if there is a product. There are two ways of doing this.
         # 1. Look at the filename.
@@ -484,25 +484,20 @@ sub _check_parent_product {
       @isok = ($index);
 
     } elsif (looks_like_drfile($path)) {
-      # Rather than read the file header (which may cost a lot of time)
-      # parse the filename
+      # Reading the header may take a lot longer than parsing the
+      # filename but for now we do that since that is required
+      # if we do not wish to reimplement the logic in can_send_to_cadc.
       print "Looks like DR\n" if $DEBUG;
 
       # Open up the header, send it to can_send_to_cadc() to find
       # out if this file is a suitable one to send to CADC.
-      my $hdr;
-      my $msg;
-      try {
-        $hdr = Astro::FITS::Header::NDF->new( File => $path );
-      } catch JSA::Error with {
-        my $err = shift;
-        $err->throw();
-      } otherwise {
-        my $E = shift;
-        $msg = "$E";
-      };
-      throw JSA::Error::DataRead( "Unable to read FITS header from $path: $msg" )
-        unless defined $hdr;
+      my $hdr = read_header( $path );
+      if (!defined $hdr) {
+        if ($_[0] == &NDF::SAI__OK()) {
+          $_[0] = &NDF::SAI__ERROR();
+          err_rep( " ", "Unable to read FITS header from $path", $_[0] );
+        }
+      }
 
       if ( can_send_to_cadc( $hdr ) ) {
         # we are good
@@ -549,7 +544,7 @@ Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>,
 
 =head1 COPYRIGHT
 
-Copyright (C) 2008 Science and Technology Facilities Council.
+Copyright (C) 2008-2009 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under

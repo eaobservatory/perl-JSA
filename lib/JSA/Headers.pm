@@ -23,6 +23,7 @@ use warnings::register;
 use Astro::FITS::CFITSIO;
 use Astro::FITS::HdrTrans;
 use Astro::FITS::Header::NDF;
+use Astro::FITS::Header::CFITSIO;
 use Carp;
 use NDF 1.47;
 use Starlink::Config qw/ :override /;
@@ -31,7 +32,7 @@ use JSA::Files qw/ drfilename_to_cadc /;
 use JSA::Starlink qw/ check_star_env run_star_command /;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/ read_headers get_header_value get_orac_instrument
+our @EXPORT_OK = qw/ read_headers read_header get_header_value get_orac_instrument
                      update_fits_headers update_fits_product /;
 
 =head1 FUNCTIONS
@@ -151,16 +152,32 @@ sub read_headers {
 
   my %headers;
   for my $f (@files) {
-    my $hdr;
-    if ($f =~ /\.f.*$/) {
-      $hdr = eval { Astro::FITS::Header::CFITSIO->new( File => $f )};
-    } else {
-      $hdr = eval { Astro::FITS::Header::NDF->new( File => $f )};
-    }
+    my $hdr = read_header( $f );
     $headers{$f} = $hdr if defined $hdr;
   }
 
   return %headers;
+}
+
+=item B<read_header>
+
+Read header as Astro::FITS::Header object from a single file.
+
+  $hdr = read_header( $file );
+
+Can be FITS or NDF.
+
+=cut
+
+sub read_header {
+  my $f = shift;
+  my $hdr;
+  if ($f =~ /\.f.*$/) {
+    $hdr = eval { Astro::FITS::Header::CFITSIO->new( File => $f )};
+  } else {
+    $hdr = eval { Astro::FITS::Header::NDF->new( File => $f )};
+  }
+  return $hdr;
 }
 
 =item B<update_fits_headers>

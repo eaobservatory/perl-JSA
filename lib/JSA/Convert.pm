@@ -25,8 +25,6 @@ use strict;
 use warnings;
 use warnings::register;
 
-use Astro::FITS::Header;
-use Astro::FITS::Header::NDF;
 use Carp;
 use File::Copy;
 use File::Spec;
@@ -35,7 +33,7 @@ use Starlink::Config qw/ :override /;
 use Starlink::Versions qw/ starversion_lt starversion_string/;
 
 use JSA::Error qw/ :try /;
-use JSA::Headers qw/ update_fits_headers update_fits_product /;
+use JSA::Headers qw/ update_fits_headers update_fits_product read_header /;
 use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
@@ -75,26 +73,15 @@ sub convert_to_fits {
   # Do a quick check before we read the header
   return unless looks_like_drfile( $ndf );
 
-  # Read the header so that we can obtain the ASN_TYPE
-  # value
-  my $hdr;
-  my $msg;
-  try {
-    $hdr = Astro::FITS::Header::NDF->new( File => $ndf );
-  } catch JSA::Error with {
-    # should not be possible
-    my $err = shift;
-    $err->throw();
-  } otherwise {
-    my $E = shift;
-    $msg = "$E";
-  };
-  throw JSA::Error::DataRead( "Unable to read FITS header from $ndf: $msg" )
+  # Read the header so that we can obtain the ASN_TYPE value
+  my $hdr = read_header( $ndf );
+  throw JSA::Error::DataRead( "Unable to read FITS header from $ndf" )
     unless defined $hdr;
 
   # Look for a ASN_TYPE header
   my $type = $hdr->value( "ASN_TYPE" );
   my $outfile;
+  my $msg;
   try {
     $outfile = drfilename_to_cadc( $ndf, ASN_TYPE => $type );
   } catch JSA::Error with {
