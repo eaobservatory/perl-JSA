@@ -16,9 +16,29 @@ files that can be injested by the CADC.
 
 =head1 ARGUMENTS
 
-If not arguments are given the entire current directory is scanned for
+If no arguments are given the entire current directory is scanned for
 compatible files. If file names are supplied on the command line only those
 files will be considered.
+
+=over 4
+
+=item B<-debug>
+
+Enable debug messages.
+
+=item B<-help>
+
+Print help information.
+
+=item B<-man>
+
+Print full manual.
+
+=item B<-version>
+
+Print version information.
+
+=back
 
 =head1 ENVIRONMENT
 
@@ -57,10 +77,32 @@ USA.
 
 use strict;
 use warnings;
+use Getopt::Long;
+use Pod::Usage;
 
 use JSA::Convert qw/ convert_dr_files /;
 use JSA::Files qw/ scan_dir /;
 use JSA::Headers qw/ read_headers /;
+
+my ($help, $version, $man, $debug);
+my $status = GetOptions( "help" => \$help,
+                         "version" => \$version,
+                         "man" => \$man,
+                         "debug" => \$debug,
+                       );
+
+pod2usage(1) if $help;
+pod2usage(-exitstatus => 0, -verbose => 2) if $man;
+if ($version) {
+  print "convert_dr_files - Convert a directory of files to CADC JSA compliant files\n";
+  exit;
+}
+
+if ($debug) {
+  $JSA::Convert::DEBUG = 1;
+  $JSA::Files::DEBUG = 1;
+  $JSA::Starlink::DEBUG = 1;
+}
 
 my @files;
 if (@ARGV) {
@@ -70,7 +112,12 @@ if (@ARGV) {
   @files = sort keys %files;
 }
 
+print "Opening ".@files." files\n" if $debug;
 my %drhdrs = read_headers( @files );
+if ($debug) {
+  my @files = keys %drhdrs;
+  print "Read ".@files." headers\n";
+}
 convert_dr_files( \%drhdrs );
 
 exit;
