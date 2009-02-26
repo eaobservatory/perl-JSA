@@ -401,6 +401,11 @@ Returns empty list if there are no further parents. Uses inherited status.
 
 =cut
 
+# Note that $status is never shifted off the argument stack.
+# This is done so that the value will be changed in the caller
+# version of $status. A lexical variable $status would not propagate
+# badness to the caller.
+
 sub _get_prov_parents {
   my $indf = shift;
   my $index = shift;
@@ -440,6 +445,11 @@ If the current parent index is okay it will be the only value stored in the firs
 array and the second array will be empty.
 
 =cut
+
+# Note that $status is never shifted off the argument stack.
+# This is done so that the value will be changed in the caller
+# version of $status. A lexical variable $status would not propagate
+# badness to the caller.
 
 sub _check_parent_product {
   my $indf = shift;
