@@ -35,7 +35,7 @@ use Starlink::Config qw/ :override /;
 use JSA::Command qw/ run_command /;
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ looks_like_drfile looks_like_cadcfile drfilename_to_cadc dissect_drfile
-                 construct_rawfile looks_like_rawfile /;
+                   construct_rawfile looks_like_rawfile can_send_to_cadc /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ check_star_env
@@ -166,39 +166,30 @@ sub run_star_command {
 
 =item B<prov_update_parent_path>
 
-Rename the provenance entries in the supplied file to match the
-CADC filenaming convention rather than the CADC naming scheme.
+Rename the provenance entries in the supplied file to match the CADC
+filenaming convention rather than the CADC naming scheme.
 
   prov_update_parent_path( $file );
 
-Note that this command only works if the parent file actually
-exists, since in many cases the ASN_TYPE header is required
-to determine the CADC filename. "Obs" products can be special
-cased (and are special-cased in the drfilename_to_cadc routine).
+Note that this command only works if the parent file actually exists,
+since in many cases the ASN_TYPE header is required to determine the
+CADC filename. "Obs" products can be special cased (and are
+special-cased in the drfilename_to_cadc routine).
 
 Only the immediate parents are processed.
 
-If the parent refers to a product that is not to be archived,
-it will be removed from the provenance hierarchy and the new parents
-will be processed. If they are also not to be archived, the process
-will repeat until a root ancestor is found. We do not simply remove all
-invalid parents but try to retain as much provenance information as possible
-by removing only those entries required to give us a valid parent.
-
-The allowed product names can be provided as a second argument
-
-  prov_update_parent_path( $file, @products );
-
-If no list is provided all products are assumed to be allowed.
+If the parent refers to a product that is not to be archived, it will
+be removed from the provenance hierarchy and the new parents will be
+processed. If they are also not to be archived, the process will
+repeat until a root ancestor is found. We do not simply remove all
+invalid parents but try to retain as much provenance information as
+possible by removing only those entries required to give us a valid
+parent.
 
 =cut
 
 sub prov_update_parent_path {
   my $file = shift;
-  my @products = @_;
-
-  # map to a hash
-  my %prod = map { $_ => undef } @products;
 
   # first see if this is a valid NDF
   looks_like_drfile($file)
@@ -228,7 +219,7 @@ sub prov_update_parent_path {
     my @rejected;
     for my $i (@parind) {
       print "Checking parent $i\n" if $DEBUG;
-      my ($ok, $rej) = _check_parent_product( $indf, $i, \%prod, $status );
+      my ($ok, $rej) = _check_parent_product( $indf, $i, $status );
       push(@validated, @$ok);
       push(@rejected, @$rej);
     }
@@ -439,7 +430,7 @@ Get the product for this parent and compare it with the allowed list.
 If it does not match the allowed product name, the parent of that item
 is checked until a match is found.
 
-  ($ok, $rej) = _check_parent_product( $indf, $index, \%productlist, $status);
+  ($ok, $rej) = _check_parent_product( $indf, $index, $status );
 
 Returns the results as references to arrays. The first is an array of indices
 that have valid products. The second is an array of indices that were checked and
@@ -453,7 +444,6 @@ array and the second array will be empty.
 sub _check_parent_product {
   my $indf = shift;
   my $index = shift;
-  my $prod = shift;
 
   # Note that we do not use a lexical for status since we want to
   # emulate the interface used for the NDF module
@@ -487,9 +477,24 @@ sub _check_parent_product {
       # Rather than read the file header (which may cost a lot of time)
       # parse the filename
       print "Looks like DR\n" if $DEBUG;
-      my @parts = dissect_drfile( $path );
 
-      if (exists $prod->{$parts[5]}) {
+      # Open up the header, send it to can_send_to_cadc() to find
+      # out if this file is a suitable one to send to CADC.
+      my $hdr;
+      my $msg;
+      try {
+        $hdr = Astro::FITS::Header::NDF->new( File => $path );
+      } catch JSA::Error with {
+        my $err = shift;
+        $err->throw();
+      } otherwise {
+        my $E = shift;
+        $msg = "$E";
+      };
+      throw JSA::Error::DataRead( "Unable to read FITS header from $path: $msg" )
+        unless defined $hdr;
+
+      if ( can_send_to_cadc( $hdr ) ) {
         # we are good
         print "Product match\n" if $DEBUG;
         @isok = ($index);
@@ -507,7 +512,7 @@ sub _check_parent_product {
       if (@parents) {
         push(@rejected, $index);
         for my $i (@parents) {
-          my ($ok, $rej) = _check_parent_product($indf, $i, $prod, $_[0] );
+          my ($ok, $rej) = _check_parent_product( $indf, $i, $_[0] );
           push(@isok, @$ok);
           push(@rejected, @$rej);
         }

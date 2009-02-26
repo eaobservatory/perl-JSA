@@ -31,7 +31,8 @@ our @EXPORT_OK = qw( uri_to_file file_to_uri drfilename_to_cadc
                      dissect_drfile dissect_cadcfile
                      cadc_to_drfilename looks_like_drfile looks_like_cadcfile
                      looks_like_rawfile
-                     compare_file_lists scan_dir construct_rawfile );
+                     compare_file_lists scan_dir construct_rawfile
+                     can_send_to_cadc );
 
 our $DEBUG = 0;
 
@@ -50,9 +51,68 @@ while ( my ($k,$v) = each(%PRODUCT_TYPES) ) {
   $FILE_ABBREV_TO_PROD_TYPE{$v} = $k;
 }
 
+# Products and associations to look for.
+our @ASSOCS = qw/ obs night project public /;
+our @PRODUCTS = qw/ reduced rimg rsp /;
+our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
+
+# Set up a hash.
+our %PRODS = map { $_ => { map { $_ => undef } @PRODUCTS } } @ASSOCS;
+
+for my $assoc (keys %EXTRA_PRODUCTS) {
+  for my $prod (@{$EXTRA_PRODUCTS{$assoc}}) {
+    $PRODS{$assoc}{$prod} = undef;
+  }
+}
+
 =head1 FUNCTIONS
 
 =over 4
+
+=item B<can_send_to_cadc>
+
+Determine whether or not an NDF can be converted to a FITS file for
+injest by CADC.
+
+  $convert = can_send_to_cadc( $header );
+
+A file can be converted if it is a science observation and its product
+type is listed in the association type array.
+
+The only argument is an C<Astro::FITS::Header> item created from the
+NDF.
+
+=cut
+
+sub can_send_to_cadc {
+  my $header = shift;
+
+  return 0 if ( ! UNIVERSAL::isa( $header, "Astro::FITS::Header" ) );
+
+  # if there is a SIMULATE header it should be False
+  my $simitem = $header->itembyname("SIMULATE");
+  return 0 if (defined $simitem && $simitem->value());
+
+  my $inst = $header->value( "INSTRUME" );
+
+  # For SCUBA there is no obs_type header but we simply want
+  # to harvest all files with matching product
+  if ($inst ne "SCUBA") {
+
+    my $obstype = $header->value( "OBS_TYPE" );
+    return 0 if ( ! defined $obstype || $obstype !~ /science/i );
+  }
+
+  my $assoc = $header->value( "ASN_TYPE" );
+  my $product = $header->value( "PRODUCT" );
+
+  return 0 if( ! defined $assoc || ! defined $product );
+
+  return 1 if ( exists $PRODS{$assoc}{$product} );
+
+  return 0;
+
+}
 
 =item B<uri_to_file>
 

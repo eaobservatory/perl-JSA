@@ -39,75 +39,17 @@ use JSA::Headers qw/ update_fits_headers update_fits_product /;
 use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
-                   looks_like_drfile looks_like_cadcfile /;
+                   looks_like_drfile looks_like_cadcfile
+                   can_send_to_cadc /;
 
 use Exporter 'import';
-our @EXPORT_OK = qw( convert_to_fits convert_to_ndf convert_dr_files );
-
-# Products and associations to look for.
-our @ASSOCS = qw/ obs night project public /;
-our @PRODUCTS = qw/ reduced rimg rsp /;
-our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
-
-# Set up a hash.
-our %PRODS = map { $_ => { map { $_ => undef } @PRODUCTS } } @ASSOCS;
-
-for my $assoc (keys %EXTRA_PRODUCTS) {
-  for my $prod (@{$EXTRA_PRODUCTS{$assoc}}) {
-    $PRODS{$assoc}{$prod} = undef;
-  }
-}
+our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf convert_dr_files /;
 
 our $DEBUG = 0;
 
 =head1 FUNCTIONS
 
 =over 4
-
-=item B<can_convert_to_fits>
-
-Determine whether or not an NDF can be converted to a FITS file for
-injest by CADC.
-
-  $convert = can_convert_to_fits( $header );
-
-A file can be converted if it is a science observation and its product
-type is listed in the association type array.
-
-The only argument is an C<Astro::FITS::Header> item created from the
-NDF.
-
-=cut
-
-sub can_convert_to_fits {
-  my $header = shift;
-
-  return 0 if ( ! UNIVERSAL::isa( $header, "Astro::FITS::Header" ) );
-
-  # if there is a SIMULATE header it should be False
-  my $simitem = $header->itembyname("SIMULATE");
-  return 0 if (defined $simitem && $simitem->value());
-
-  my $inst = $header->value( "INSTRUME" );
-
-  # For SCUBA there is no obs_type header but we simply want
-  # to harvest all files with matching product
-  if ($inst ne "SCUBA") {
-
-    my $obstype = $header->value( "OBS_TYPE" );
-    return 0 if ( ! defined $obstype || $obstype !~ /science/i );
-  }
-
-  my $assoc = $header->value( "ASN_TYPE" );
-  my $product = $header->value( "PRODUCT" );
-
-  return 0 if( ! defined $assoc || ! defined $product );
-
-  return 1 if ( exists $PRODS{$assoc}{$product} );
-
-  return 0;
-
-}
 
 =item B<convert_to_fits>
 
@@ -228,7 +170,7 @@ sub convert_dr_files {
 
   for my $file ( sort keys %$href ) {
 
-    if ( can_convert_to_fits( $href->{$file} ) &&
+    if ( can_send_to_cadc( $href->{$file} ) &&
          looks_like_drfile( $file ) ) {
 
       print "Converting file $file\n" if $DEBUG;
@@ -251,7 +193,7 @@ sub convert_dr_files {
       # is exportable so first fix up provenance
       my $skip = 0;      
       try {
-        prov_update_parent_path( $tfile, keys %{$PRODS{$assoc}} );
+        prov_update_parent_path( $tfile );
       } catch JSA::Error with {
         # Just skip this file for now.
         $skip = 1;
