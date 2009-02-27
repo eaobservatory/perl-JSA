@@ -13,6 +13,7 @@ lib/JSA/EnterData/SCUBA2.pm
 lib/JSA/Error.pm
 lib/JSA/Files.pm
 lib/JSA/Headers.pm
+lib/JSA/Headers/Starlink.pm
 lib/JSA/QA/Result.pm
 lib/JSA/QA.pm
 lib/JSA/Starlink.pm

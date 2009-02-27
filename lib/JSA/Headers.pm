@@ -29,11 +29,10 @@ use NDF 1.47;
 use Starlink::Config qw/ :override /;
 
 use JSA::Files qw/ drfilename_to_cadc /;
-use JSA::Starlink qw/ check_star_env run_star_command /;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/ read_headers read_header get_header_value get_orac_instrument
-                     update_fits_headers update_fits_product /;
+our @EXPORT_OK = qw/ read_headers read_header get_header_value
+                     get_orac_instrument update_fits_product /;
 
 =head1 FUNCTIONS
 
@@ -180,41 +179,6 @@ sub read_header {
   return $hdr;
 }
 
-=item B<update_fits_headers>
-
-Update CADC-specific FITS headers in an NDF file.
-
-  update_fits_headers( $file );
-
-This function updates one FITS header:
-
- o INSTREAM: set to 'JCMT'
-
-This function takes one argument: the NDF file to be updated.
-
-This function does not return anything.
-
-=cut
-
-sub update_fits_headers {
-  my $file = shift;
-
-  # Make sure we actually need to do this. FITSMOD adds a new
-  # card even if it already exists.
-
-  check_star_env( "KAPPA", "fitsmod" );
-
-  my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "fitsmod"),
-               "NDF=$file",
-               "KEYWORD=INSTREAM",
-               "VALUE=JCMT",
-               "COMMENT=\!",
-               "EDIT=WRITE",
-               "POSITION=\!" );
-
-  run_star_command( @args );
-
-}
 
 =item B<update_fits_product>
 

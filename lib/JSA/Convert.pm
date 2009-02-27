@@ -33,7 +33,8 @@ use Starlink::Config qw/ :override /;
 use Starlink::Versions qw/ starversion_lt starversion_string/;
 
 use JSA::Error qw/ :try /;
-use JSA::Headers qw/ update_fits_headers update_fits_product read_header /;
+use JSA::Headers qw/ update_fits_product read_header /;
+use JSA::Headers::Starlink qw/ update_fits_headers /;
 use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
