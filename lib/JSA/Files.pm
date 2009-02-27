@@ -24,6 +24,7 @@ use warnings;
 use File::Spec;
 use warnings::register;
 
+use Astro::FITS::HdrTrans qw/ translate_from_FITS /;
 use JSA::Error;
 
 use Exporter 'import';
@@ -591,15 +592,17 @@ sub construct_rawfile {
     %hdr = @_;
   }
 
-  # No need for header translation at present (may be different if SCUBA is included)
-  my $ut = $hdr{UTDATE};
-  my $inst = $hdr{INSTRUME};
-  my $be = $hdr{BACKEND};
+  # Need header translation to handle SCUBA vs more modern instrumentation
+  my %trans = translate_from_FITS( \%hdr );
+
+  my $ut = $trans{UTDATE};
+  my $inst = $trans{INSTRUMENT};
+  my $be = $trans{BACKEND};
   my $nsub = $hdr{NSUBSCAN};
-  my $obs  = $hdr{OBSNUM};
+  my $obs  = $trans{OBSERVATION_NUMBER};
 
   my $file;
-  if ($be =~ /(DAS|ACSIS)/) {
+  if (defined $be && $be =~ /(DAS|ACSIS)/) {
     my $prefix;
     if ($be =~ /DAS/) {
       $prefix = "h";
