@@ -46,6 +46,8 @@ our @EXPORT_OK = qw/ check_star_env
 
 our $DEBUG = 0;
 
+our %PARENT_PRODUCT_CACHE = ();
+
 =head1 FUNCTIONS
 
 =over 4
@@ -217,11 +219,14 @@ sub prov_update_parent_path {
     # find valid product in hierarchy
     my @validated;
     my @rejected;
+    my %checked = ();
     for my $i (@parind) {
+      next if( $checked{$i} );
       print "Checking parent $i\n" if $DEBUG;
-      my ($ok, $rej) = _check_parent_product( $indf, $i, $status );
+      my ($ok, $rej) = _check_parent_product( $indf, $i, $file, $status );
       push(@validated, @$ok);
       push(@rejected, @$rej);
+      $checked{$i}++;
     }
 
     # Remove the rejected parents (in reverse order)
@@ -417,6 +422,8 @@ sub _get_prov_parents {
   # Get the 0th provenance entry
   ndg_gtprv( $indf, $index, my $provloc, $_[0] );
 
+  print "Retrieved 0th provenance entry.\n" if $DEBUG;
+
   # get the parent indices
   dat_there( $provloc, "PARENTS", my $haspar, $_[0]);
 
@@ -426,7 +433,11 @@ sub _get_prov_parents {
     cmp_getvi( $provloc, 'PARENTS', $size, @parind, my $el, $_[0] );
   }
   dat_annul( $provloc, $_[0]);
-  return @parind;
+
+  my %seen = ();
+  my @uniq_parind = grep { ! $seen{$_} ++ } @parind;
+
+  return @uniq_parind;
 }
 
 =item B<_check_parent_product>
@@ -435,7 +446,7 @@ Get the product for this parent and compare it with the allowed list.
 If it does not match the allowed product name, the parent of that item
 is checked until a match is found.
 
-  ($ok, $rej) = _check_parent_product( $indf, $index, $status );
+  ($ok, $rej) = _check_parent_product( $indf, $index, $file, $status );
 
 Returns the results as references to arrays. The first is an array of indices
 that have valid products. The second is an array of indices that were checked and
@@ -454,6 +465,13 @@ array and the second array will be empty.
 sub _check_parent_product {
   my $indf = shift;
   my $index = shift;
+  my $file = shift;
+
+  if( defined( $PARENT_PRODUCT_CACHE{$file}{$index}{'ok'} ) &&
+      defined( $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} ) ) {
+    return( $PARENT_PRODUCT_CACHE{$file}{$index}{'ok'},
+            $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} );
+  }
 
   # Note that we do not use a lexical for status since we want to
   # emulate the interface used for the NDF module
@@ -517,7 +535,7 @@ sub _check_parent_product {
       if (@parents) {
         push(@rejected, $index);
         for my $i (@parents) {
-          my ($ok, $rej) = _check_parent_product( $indf, $i, $_[0] );
+          my ($ok, $rej) = _check_parent_product( $indf, $i, $file, $_[0] );
           push(@isok, @$ok);
           push(@rejected, @$rej);
         }
@@ -531,7 +549,15 @@ sub _check_parent_product {
 
   }
 
-  return (\@isok, \@rejected);
+  my %seen = ();
+  my @isok_uniq = grep { ! $seen{$_} ++ } @isok;
+  %seen = ();
+  my @rejected_uniq = grep { ! $seen{$_} ++ } @rejected;
+
+  $PARENT_PRODUCT_CACHE{$file}{$index}{'ok'} = \@isok_uniq;
+  $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} = \@rejected_uniq;
+
+  return (\@isok_uniq, \@rejected_uniq);
 }
 
 =back
