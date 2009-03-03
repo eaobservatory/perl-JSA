@@ -33,7 +33,7 @@ our @EXPORT_OK = qw( uri_to_file file_to_uri drfilename_to_cadc
                      cadc_to_drfilename looks_like_drfile looks_like_cadcfile
                      looks_like_rawfile
                      compare_file_lists scan_dir construct_rawfile
-                     can_send_to_cadc );
+                     can_send_to_cadc can_send_to_cadc_guess );
 
 our $DEBUG = 0;
 
@@ -107,11 +107,45 @@ sub can_send_to_cadc {
   my $assoc = $header->value( "ASN_TYPE" );
   my $product = $header->value( "PRODUCT" );
 
-  return 0 if( ! defined $assoc || ! defined $product );
+  return _can_send_to_cadc_quick( $assoc, $product );
 
-  return 1 if ( exists $PRODS{$assoc}{$product} );
+}
 
-  return 0;
+=item B<can_send_to_cadc_guess>
+
+Determines whether a file should be sent to CADC solely based on the
+filename.
+
+ $can = can_send_to_cadc_guess( $filename );
+
+This is sometimes sufficient to determine whether something is suitable
+without having to open up the file. This will usually be valid if the
+PRODUCT header matches the product name embedded in the file. In some
+cases you want to be sure that a file is okay to ignore if it is
+missing but is listed in the provenance of another.
+
+Group observations that look like DR files are always assumed to be
+"night" products.
+
+=cut
+
+sub can_send_to_cadc_guess {
+  my $file = shift;
+print "FILE = $file\n";
+  my ($product, $asntype);
+  if (looks_like_drfile( $file ) ) {
+    my @parts = dissect_drfile( $file );
+    $product = $parts[5];
+    $asntype = ($parts[0] ? "night" : "obs" );
+  } elsif (looks_like_cadcfile( $file ) ) {
+    # do not simply assume that a cadc file can be sent to cadc(!!!)
+    my @parts = dissect_cadcfile( $file );
+    $product = $parts[4];
+    $asntype = $FILE_ABBREV_TO_PROD_TYPE{$parts[6]};
+  } elsif (looks_like_rawfile($file)) {
+    return 1;
+  }
+  return _can_send_to_cadc_quick( $asntype, $product );
 
 }
 
@@ -219,7 +253,7 @@ sub looks_like_drfile {
     # SCUBA-2
     return 1;
   } elsif ($filename =~ /^\d{8}_\d{4}_(resw|flat)\.sdf$/ ||
-           $filename =~ /^\d{8}_\d{4}_(sho|lon|p13|p20|p11)_\w+\.sdf$/ ||
+           $filename =~ /^\d{1,8}_\d{4}_(sho|lon|p13|p20|p11)_\w+\.sdf$/ ||
            $filename =~ /^\d{8}_grp_\d{4}_\w+_(long|short|p2000|p1100|p1350)\.sdf$/) {
     # SCUBA
     return 1;
@@ -288,7 +322,7 @@ sub dissect_drfile {
     $prodcount = $6;
     $prodcount = undef if (defined $prodcount && $prodcount eq '');
 
-  } elsif ($drfile =~ /^(\d{8})_(\d{4})_(resw|flat)\.sdf$/) {
+  } elsif ($drfile =~ /^(\d{1,8})_(\d{4})_(resw|flat)\.sdf$/) {
     # SCUBA reduce switch or flatfield
     $prefix = "s";
     $utdate = $1;
@@ -297,7 +331,7 @@ sub dissect_drfile {
     $product = $3;
     $isgroup = 0;
 
-  } elsif ($drfile =~ /^(\d{8})_(\d{4})_(sho|lon|p13|p20|p11)_(\w+)\.sdf$/) {
+  } elsif ($drfile =~ /^(\d{1,8})_(\d{4})_(sho|lon|p13|p20|p11)_(\w+)\.sdf$/) {
     # SCUBA obs products after sub instrument split
     $prefix = "s";
     $utdate = $1;
@@ -720,6 +754,24 @@ sub _strip_path {
   } else {
     return $file;
   }
+}
+
+=item B<_can_send_to_cadc_quick>
+
+Internal version of can_send_to_cadc* that simply tests
+product name and association type for validity with CADC
+rules.
+
+ $can = _can_send_to_cadc_quick( $assoc, $product );
+
+=cut
+
+sub _can_send_to_cadc_quick {
+  my $assoc = shift;
+  my $product = shift;
+  return 0 if( ! defined $assoc || ! defined $product );
+  return 1 if ( exists $PRODS{$assoc}{$product} );
+  return 0;
 }
 
 =back
