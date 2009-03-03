@@ -34,7 +34,7 @@ use Starlink::Config qw/ :override /;
 use JSA::Command qw/ run_command /;
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ looks_like_drfile looks_like_cadcfile drfilename_to_cadc dissect_drfile
-                   construct_rawfile looks_like_rawfile can_send_to_cadc /;
+                   construct_rawfile looks_like_rawfile can_send_to_cadc can_send_to_cadc_guess /;
 use JSA::Headers qw/ read_header /;
 
 use Exporter 'import';
@@ -345,9 +345,9 @@ sub prov_update_parent_path {
   ndf_end( $status );
 
   if ($status != &NDF::SAI__OK) {
-    my @errs = err_flush_to_string( $status );
+    my $err = err_flush_to_string( $status );
     err_end($status);
-    JSA::Error::Starlink->throw( join("\n",@errs) );
+    JSA::Error::Starlink->throw( $err );
   }
   err_end($status);
 
@@ -537,22 +537,29 @@ sub _check_parent_product {
       # Reading the header may take a lot longer than parsing the
       # filename but for now we do that since that is required
       # if we do not wish to reimplement the logic in can_send_to_cadc.
-      print "Looks like DR\n" if $DEBUG;
+      print "Looks like DR ($path)\n" if $DEBUG;
 
-      # Open up the header, send it to can_send_to_cadc() to find
-      # out if this file is a suitable one to send to CADC.
-      my $hdr = read_header( $path );
-      if (!defined $hdr) {
-        if ($_[0] == &NDF::SAI__OK()) {
-          $_[0] = &NDF::SAI__ERROR();
-          err_rep( " ", "Unable to read FITS header from $path", $_[0] );
+      # in some cases intermediate files have been deleted even
+      # though they match the dr file name test. We use a quick
+      # test to see if they are close to being relevant and if they
+      # are relevant we do an additional test with the header
+      if (can_send_to_cadc_guess( $path ) ) {
+
+        # Open up the header, send it to can_send_to_cadc() to find
+        # out if this file is a suitable one to send to CADC.
+        my $hdr = read_header( $path );
+        if (!defined $hdr) {
+          if ($_[0] == &NDF::SAI__OK()) {
+            $_[0] = &NDF::SAI__ERROR();
+            err_rep( " ", "Unable to read FITS header from $path", $_[0] );
+          }
         }
-      }
 
-      if ( can_send_to_cadc( $hdr ) ) {
-        # we are good
-        print "Product match\n" if $DEBUG;
-        @isok = ($index);
+        if ( can_send_to_cadc( $hdr ) ) {
+          # we are good
+          print "Product match\n" if $DEBUG;
+          @isok = ($index);
+        }
       }
     } elsif ( looks_like_rawfile( $path ) ) {
       print "Looks like raw\n" if $DEBUG;
