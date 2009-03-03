@@ -113,7 +113,7 @@ Returns the name of the instrument involved.
 
 =cut
 
-sub name { return 'SCUBA2' ; }
+sub name { return 'SCUBA-2' ; }
 
 
 =item B<table>
