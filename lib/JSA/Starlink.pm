@@ -378,10 +378,42 @@ sub set_wcs_attribs {
 
   check_star_env( "KAPPA", "wcsattrib" );
 
+  # Read the WCS from the file to see whether a specframe is present
+  my $status = &NDF::SAI__OK();
+  err_begin($status);
+  ndf_begin();
+
+  # Retrieve the WCS from the NDF.
+  ndf_find(&NDF::DAT__ROOT(), $file, my $indf, $status);
+  my $wcs = ndfGtwcs( $indf, $status );
+  ndf_annul($indf, $status);
+  my $errstr;
+  if ($status != &NDF::SAI__OK()) {
+    $errstr = &NDF::err_flush_to_string( $status );
+  }
+  ndf_end($status);
+  err_end($status);
+  throw JSA::Error::FatalError("Error reading WCS from file $file: $errstr")
+    if defined $errstr;
+
+  # See if we have a SpecFrame
+  my $template = Starlink::AST::SpecFrame->new( "MaxAxes=7" );
+  my $spf = $wcs->FindFrame( $template, " " );
+
+  # Form argument string
+  my @argstr = qw/ System(1)=FK5 /;
+  if (defined $spf) {
+    push(@argstr, qw/ System(3)=FREQ StdOfRest=BARY / );
+  }
+
+  print "Forcing attributes of file $file to ".join( " ",@argstr)."\n"
+    if $DEBUG;
+
+  # Now set the attributes
   my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "wcsattrib" ),
                "NDF=$file",
                "MODE=MSet",
-               "SETTING='System(3)=FREQ,StdOfRest=BARY,System(1)=FK5'",
+               "SETTING='".join(",",@argstr)."'",
              );
 
   run_star_command( @args );
