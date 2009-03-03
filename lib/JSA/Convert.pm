@@ -184,6 +184,9 @@ sub convert_dr_files {
         prov_update_parent_path( $tfile );
       } catch JSA::Error with {
         # Just skip this file for now.
+        my $E = shift;
+        chomp($E);
+        print "$E\n --- skipping\n";
         $skip = 1;
       };
       next if $skip;
