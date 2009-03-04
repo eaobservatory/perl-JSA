@@ -51,6 +51,19 @@ sub new {
   return $obj;
 }
 
+=item B<calc_freq>
+
+Noop currently.
+
+=cut
+
+sub calc_freq {
+
+  my ( $self ) = @_;
+
+  return;
+}
+
 
 =item B<fill_headers>
 
