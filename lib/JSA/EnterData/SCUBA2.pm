@@ -96,8 +96,6 @@ sub get_bound_check_command {
       'system=ICRS',
       'out=!',
       'pixsize=1',
-      # Do not care about POL.
-      'polbinsize=!',
       'msg_filter=quiet',
       ( defined $pos_angle ? "crota=$pos_angle" : () ),
       'reset'
