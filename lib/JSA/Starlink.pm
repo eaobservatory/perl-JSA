@@ -231,10 +231,9 @@ sub prov_update_parent_path {
 
     # Remove the rejected parents (in reverse order)
     my %seen = ();
-    for my $i (sort { $b <=> $a } grep { ! $seen{$_} ++ } @rejected) {
-      print "Removing $i\n" if $DEBUG;
-      ndg_rmprv( $indf, $i, $status);
-    }
+    my @toremove = sort { $b <=> $a } grep { ! $seen{$_} ++ } @rejected;
+    print "Removing ". @toremove . " unused ancestors\n";
+    ndgRmprvs( $indf, \@toremove, $status );
 
     print "Validated: ". join(" ", @validated)."\n" if $DEBUG;
     print "Removed: " . join( " ", @rejected ) . "\n" if $DEBUG;
