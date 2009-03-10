@@ -451,19 +451,17 @@ sub _get_prov_parents {
   return () if $_[0] != &NDF::SAI__OK;
 
   # Get the 0th provenance entry
-  ndg_gtprv( $indf, $index, my $provloc, $_[0] );
+  my $km = ndgGtprvk( $indf, $index, $_[0] );
 
   print "Retrieved 0th provenance entry.\n" if $DEBUG;
 
   # get the parent indices
-  dat_there( $provloc, "PARENTS", my $haspar, $_[0]);
+  my $haspar = $km->MapHasKey( "PARENTS" );
 
   my @parind;
   if ($haspar) {
-    cmp_size( $provloc, 'PARENTS',my $size, $_[0] );
-    cmp_getvi( $provloc, 'PARENTS', $size, @parind, my $el, $_[0] );
+    @parind = $km->MapGet1I( "PARENTS" );
   }
-  dat_annul( $provloc, $_[0]);
 
   my %seen = ();
   my @uniq_parind = grep { ! $seen{$_} ++ } @parind;
