@@ -30,6 +30,10 @@ Enable debug messages.
 
 Print help information.
 
+=item B<-list>
+
+List what would and would not be converted without actually doing the conversion.
+
 =item B<-man>
 
 Print full manual.
@@ -55,8 +59,8 @@ Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>
 
 =head1 COPYRIGHT
 
-Copyright (C) 2008 Science and Technology Facilities Council.  All
-Rights Reserved.
+Copyright (C) 2008, 2009 Science and Technology Facilities Council.
+All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -80,14 +84,15 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 
-use JSA::Convert qw/ convert_dr_files /;
+use JSA::Convert qw/ convert_dr_files list_convert_plan /;
 use JSA::Files qw/ scan_dir /;
 use JSA::Headers qw/ read_headers /;
 
-my ($help, $version, $man, $debug);
+my ($help, $version, $man, $debug, $list);
 my $status = GetOptions( "help" => \$help,
                          "version" => \$version,
                          "man" => \$man,
+                         "list" => \$list,
                          "debug" => \$debug,
                        );
 
@@ -118,6 +123,12 @@ if ($debug) {
   my @files = keys %drhdrs;
   print "Read ".@files." headers\n";
 }
-convert_dr_files( \%drhdrs );
+if ($list) {
+  # List what would happen (assuming headers are okay)
+  list_convert_plan( \%drhdrs );
+} else {
+  # Do the actual conversion
+  convert_dr_files( \%drhdrs );
+}
 
 exit;

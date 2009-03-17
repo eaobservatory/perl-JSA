@@ -42,7 +42,7 @@ use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    can_send_to_cadc /;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf convert_dr_files /;
+our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf convert_dr_files list_convert_plan /;
 
 our $DEBUG = 0;
 
@@ -231,6 +231,44 @@ sub convert_dr_files {
           ( $can_send ? "" : "not ") . "valid product) (is ".
             ( $isdr ? "" : "not ") . "valid DR filename)\n";
       }
+    }
+  }
+}
+
+=item B<list_convert_plan>
+
+Print to standard output information concerning which file will be converted
+to FITS and which will be ignored. Does not guarantee that a file would be
+converted successfully, just that it would be attempted.
+
+ list_convert_plan( \%headers );
+
+The only mandatory argument is a reference to a hash, keys being files
+to be converted and values being an Astro::FITS::Header object created
+from reading the header for the given filename. This is essentially a
+reference to a hash as returned by the C<JSA::Headers->read_headers()>
+method.
+
+=cut
+
+sub list_convert_plan {
+  my $href = shift;
+
+  my $opts = shift;
+
+  for my $file ( sort keys %$href ) {
+
+    if ( can_send_to_cadc( $href->{$file} ) &&
+         looks_like_drfile( $file ) ) {
+      my $assoc = $href->{$file}->value( "ASN_TYPE" );
+      my $outfile = drfilename_to_cadc( $file, ASN_TYPE => $assoc );
+      print "Converting file $file -> $outfile\n";
+    } else {
+      my $can_send = can_send_to_cadc( $href->{$file} );
+      my $isdr = looks_like_drfile( $file );
+      print "File $file not suitable for conversion (is ".
+        ( $can_send ? "" : "not ") . "valid product) (is ".
+          ( $isdr ? "" : "not ") . "valid DR filename)\n";
     }
   }
 }
