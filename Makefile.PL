@@ -33,6 +33,14 @@ WriteMakefile(
                                     'Astro::FITS::Header' => 3,
                                     'Astro::FITS::HdrTrans' => 1.0,
                                     'File::Temp' => 0.20,
+                                    'File::Remove' => 0,
+                                    'Config::IniFiles' => 0,
+                                    'DateTime' => 0,
+                                    'NDF' => 0,
+                                    'Starlink::Versions' => 0,
+                                    'Statistics::Descriptive' => 0,
+                                    'Time::Piece' => 0,
+                                    'URI' => 0,
                                    },
               EXE_FILES => [qw/
                                 dpRetrieve jsawrapdr dpCapture convert_dr_files cadc_drcopy.pl
