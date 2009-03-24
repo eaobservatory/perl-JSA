@@ -62,8 +62,8 @@ sub update_fits_headers {
                "NDF=$file",
                "KEYWORD=INSTREAM",
                "VALUE=JCMT",
-               "COMMENT=\!",
-               "EDIT=WRITE",
+               "COMMENT=\"Source of input stream\"",
+               "EDIT=AMEND",
                "POSITION=\!" );
 
   run_star_command( @args );
