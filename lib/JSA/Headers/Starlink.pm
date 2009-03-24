@@ -9,6 +9,7 @@ using Starlink tasks.
 
   use JSA::Headers::Starlink;
   update_fits_headers( $file );
+  add_fits_comments( $file, \@comments );
 
 =head1 DESCRIPTION
 
@@ -22,11 +23,12 @@ use warnings;
 use warnings::register;
 
 use File::Spec;
+use File::Temp;
 
 use JSA::Starlink qw/ check_star_env run_star_command /;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/ update_fits_headers /;
+our @EXPORT_OK = qw/ update_fits_headers add_fits_comments /;
 
 =head1 FUNCTIONS
 
@@ -66,6 +68,41 @@ sub update_fits_headers {
 
   run_star_command( @args );
 
+}
+
+=item B<add_fits_comments>
+
+Add the given text as a COMMENT block in the fits header of the
+supplied file.
+
+ add_fits_comments( $file, \@comments );
+
+Currently uses fitsmod rather than Astro::FITS::Header.
+
+=cut
+
+sub add_fits_comments {
+  my $file = shift;
+  my $com = shift;
+
+  check_star_env( "KAPPA", "fitsmod" );
+
+  # Fitsmod requires a text file
+  my $tmp = File::Temp->new();
+  for my $c (@$com) {
+    my $line = $c;
+    # escape leading "
+    $line =~ s/^\"/\"\"/;
+    print $tmp "W COMMENT . $line\n";
+  }
+  close($tmp);
+
+  my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "fitsmod"),
+               "NDF=$file",
+               "MODE=FILE",
+               "TABLE=$tmp" );
+
+  run_star_command( @args );
 }
 
 =back

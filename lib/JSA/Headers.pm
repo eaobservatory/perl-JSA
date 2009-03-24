@@ -32,7 +32,8 @@ use JSA::Files qw/ drfilename_to_cadc /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ read_headers read_header get_header_value
-                     get_orac_instrument update_fits_product /;
+                     get_orac_instrument update_fits_product
+                     cadc_ack /;
 
 =head1 FUNCTIONS
 
@@ -239,6 +240,21 @@ sub update_fits_product {
 
 }
 
+=item B<cadc_ack>
+
+Return the standard CADC acknowledgement text. Should be added as comment to output FITS
+header.
+
+  @text = cadc_ack();
+
+=cut
+
+sub cadc_ack {
+  my @text = <DATA>;
+  chomp(@text);
+  return @text;
+}
+
 =back
 
 =head1 AUTHORS
@@ -267,3 +283,28 @@ Place,Suite 330, Boston, MA  02111-1307, USA
 =cut
 
 1;
+
+__DATA__
+
+ACKNOWLEDGEMENTS:
+If you have used CADC facilities and products (such as these data)
+for your research, please include the following acknowledgement:
+
+"This research used the facilities of the Canadian Astronomy Data
+Centre operated by the the National Research Council of Canada with
+the support of the Canadian Space Agency."
+
+The following acknowledgement should appear at some point in any
+published papers containing data obtained with the JCMT:
+
+"The James Clerk Maxwell Telescope is operated by the
+Joint Astronomy Centre on behalf of
+the Science and Technology Facilities Council of the United Kingdom,
+the Netherlands Organisation for Scientific Research, and
+the National Research Council of Canada."
+
+Authors are also asked to give the identification number(s), i.e.
+"Program ID", of the program(s) under which their data were obtained,
+e.g. M07AU05, M07BC13, M07BN10, or M07AI24. We recommend that this
+reference to the Program ID be made in the acknowledgement section
+at the end of the paper or in the Observations section of the paper.
