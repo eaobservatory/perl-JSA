@@ -500,7 +500,7 @@ my $upper = ( $#$drstdout > 9 ? 10 : $#$drstdout+1 );
 log_message( join "\n", grep { defined } @$drstdout[-$upper..-1] );
 log_message( "\n*** All output from STDERR:\n" );
 log_message( join "\n", @$drstderr );
-die "Non-zero exit status: $drstatus" if $drstatus;
+die "Non-zero pipeline exit status: $drstatus" if $drstatus;
 
 # Process NDF data products and convert them into FITS
 #  - Need to filter provenance
