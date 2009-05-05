@@ -233,6 +233,8 @@ if (defined $drparameters) {
     } elsif ($drparameters !~ /^[A-Z]/) {
       die "DR parameters argument must start with a capital letter";
     }
+  } else {
+    $drparameters = undef;
   }
 }
 
