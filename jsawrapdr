@@ -223,11 +223,16 @@ check_star_env( "ORAC" );
 
 # Check recipe parameters
 if (defined $drparameters) {
+  $drparameters =~ s/^\s+//;
+  $drparameters =~ s/\s+$//;
+
   # a recipe name not an option
-  if ($drparameters =~ /\s/) {
-    die "DR parameters argument can not contain white space.";
-  } elsif ($drparameters !~ /^[A-Z]/) {
-    die "DR parameters argument must start with a capital letter";
+  if ($drparameters) {
+    if ($drparameters =~ /\s/) {
+      die "DR parameters argument can not contain white space.";
+    } elsif ($drparameters !~ /^[A-Z]/) {
+      die "DR parameters argument must start with a capital letter";
+    }
   }
 }
 
