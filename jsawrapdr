@@ -115,7 +115,7 @@ Mode to use when cleaning up files after execution. Options are:
   all  - cleanup all files on exit. No cleanup before dpCapture
 
 The main difference between cadc and all is that "cadc" triggers two
-cleanups.
+cleanups. Default is "cadc".
 
 
 =back
@@ -216,7 +216,7 @@ if( defined $ut && defined $instrument ) {
   $skipdp = 1;
 }
 
-$cleanup = "none" unless defined $cleanup;
+$cleanup = "cadc" unless defined $cleanup;
 
 # We require that STARLINK_DIR and ORAC_DIR are set
 check_star_env( "ORAC" );
