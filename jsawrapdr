@@ -274,7 +274,7 @@ if( ! $skipdp ) {
   # First thing we have to do is copy the files locally by calling the
   # dpRetrieve command. We hope it is in the path.
 
-  run_command("dpRetrieve","-id", $id, "-debug", $inputs);
+  run_command("dpRetrieve","--id=$id", "--debug", "--inputs=$inputs");
 
   # Now scan the directory again
   %post_retrieve = scan_dir();
@@ -499,7 +499,7 @@ convert_dr_files( \%drhdrs );
 # Call dpRetrieve with the correct arguments
 my @args;
 if( $persist ) {
-  push @args, "-persist";
+  push @args, "--persist";
 }
 if( defined( $transdir ) ) {
   push @args, "-transdir", $transdir;
@@ -507,7 +507,7 @@ if( defined( $transdir ) ) {
 
 log_message( "\n*** calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
 
-my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "-id", $id, @args);
+my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "-id=$id", "--archive=TEST", @args);
 
 # Clean up the output directory.
 remove \1, File::Spec->catfile( $outdir, "*.sdf" ),
