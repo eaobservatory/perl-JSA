@@ -551,8 +551,6 @@ if( defined( $transdir ) ) {
 log_message( "\n*** calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
 
 
-# for CADC fitsverify
-$ENV{LD_LIBRARY_PATH} = ":/opt/IBM/db2dev/sqllib/lib:/opt/sybase-15.0/DataAccess/ODBC/lib:/opt/sybase-15.0/OCS-15_0/lib:/opt/sybase-15.0/OCS-15_0/lib3p:/opt/sybase-15.0/ASE-15_0/lib:";
 my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", "--archive=TEST", @args);
 
 if ($cleanup ne 'none') {
