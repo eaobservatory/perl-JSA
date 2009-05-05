@@ -284,7 +284,7 @@ my %post_retrieve;
 
 # We need to scan for all files in the directory since dpCapture
 # really does not want anything there in CADC mode
-my %all_existing_files = scan_dir( qr/\w.*/ );
+my %all_existing_files = scan_dir( qr/.*/ );
 
 if( ! $skipdp ) {
 
@@ -555,9 +555,14 @@ my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", 
 
 if ($cleanup ne 'none') {
   # Clean up the output directory.
-  remove \1, File::Spec->catfile( $outdir, "*.sdf" ),
-    File::Spec->catfile( $outdir, ".orac*.log" ),
-	File::Spec->catfile( $outdir, "*.fits" );
+  # clean files one at a time making sure we do not remove
+  # a file that was already present
+  opendir (my $DH, $outdir) or die "Could not open the output directory!";
+  for my $f (readdir($DH)) {
+    if (!exists $all_existing_files{$f}) {
+      remove \1, File::Spec->catfile($outdir, $f );
+    }
+  }
 }
 
 exit;
