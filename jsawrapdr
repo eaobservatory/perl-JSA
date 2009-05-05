@@ -106,6 +106,18 @@ in. Supercedes -outdir.
 Reduce data for a given UT date. Skips call to dpRetrieve. Must be
 used in conjunction with the C<-ut> option.
 
+=item B<-cleanup=option>
+
+Mode to use when cleaning up files after execution. Options are:
+
+  none - no cleanup performed
+  cadc - cleanup all non-CADC products before calling dpCapture
+  all  - cleanup all files on exit. No cleanup before dpCapture
+
+The main difference between cadc and all is that "cadc" triggers two
+cleanups.
+
+
 =back
 
 =head1 QUESTIONS
@@ -162,7 +174,7 @@ BEGIN {
 
 # Options
 my ($help, $man, $version, $log, $persist, $id, $drparameters, $inputs, $outdir, $debug,
-   $tmpdir, $indir, $instrument, $ut, $transdir);
+   $tmpdir, $indir, $instrument, $ut, $transdir, $cleanup);
 my $status = GetOptions("help" => \$help,
                         "man" => \$man,
                         "version" => \$version,
@@ -178,6 +190,7 @@ my $status = GetOptions("help" => \$help,
                         "tmpdir=s" => \$tmpdir,
                         "transdir=s" => \$transdir,
                         "ut=s" => \$ut,
+                        "cleanup=s" => \$cleanup,
                        );
 
 pod2usage(1) if $help;
@@ -202,6 +215,8 @@ my $skipdp = 0;
 if( defined $ut && defined $instrument ) {
   $skipdp = 1;
 }
+
+$cleanup = "none" unless defined $cleanup;
 
 # We require that STARLINK_DIR and ORAC_DIR are set
 check_star_env( "ORAC" );
@@ -267,8 +282,13 @@ my $tmpfile = '';
 my @files;
 my %post_retrieve;
 
+# We need to scan for all files in the directory since dpCapture
+# really does not want anything there in CADC mode
+my %all_existing_files = scan_dir( qr/\w.*/ );
+
 if( ! $skipdp ) {
 
+  # make sure we do not delete these
   my %existing_files = scan_dir();
 
   # First thing we have to do is copy the files locally by calling the
@@ -496,6 +516,23 @@ my %drhdrs = read_headers( @drfiles );
 # And convert those files that have valid PRODUCT headers.
 convert_dr_files( \%drhdrs );
 
+# cleanup for CADC if required
+if ($cleanup eq 'cadc') {
+  # do not want to cleanup files that were present before the
+  # command began
+  my %post_all = scan_dir( qr/\w.*/ );
+
+  for my $file (keys %post_all) {
+    if (! exists $all_existing_files{$file}) {
+      # was not previously here
+      if (! looks_like_cadcfile( $file ) ) {
+	# does not look like a cadc file
+	remove \1, File::Spec->catfile( $outdir, $file );
+      }
+    }
+  }
+}
+
 # Call dpRetrieve with the correct arguments
 my @args;
 if( $persist ) {
@@ -507,12 +544,17 @@ if( defined( $transdir ) ) {
 
 log_message( "\n*** calling dpCapture -id $id " . ( join " ", @args ) . "\n" );
 
-my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "-id=$id", "--archive=TEST", @args);
 
-# Clean up the output directory.
-remove \1, File::Spec->catfile( $outdir, "*.sdf" ),
-           File::Spec->catfile( $outdir, ".orac*.log" ),
-           File::Spec->catfile( $outdir, "*.fits" );
+# for CADC fitsverify
+$ENV{LD_LIBRARY_PATH} = ":/opt/IBM/db2dev/sqllib/lib:/opt/sybase-15.0/DataAccess/ODBC/lib:/opt/sybase-15.0/OCS-15_0/lib:/opt/sybase-15.0/OCS-15_0/lib3p:/opt/sybase-15.0/ASE-15_0/lib:";
+my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", "--archive=TEST", @args);
+
+if ($cleanup ne 'none') {
+  # Clean up the output directory.
+  remove \1, File::Spec->catfile( $outdir, "*.sdf" ),
+    File::Spec->catfile( $outdir, ".orac*.log" ),
+	File::Spec->catfile( $outdir, "*.fits" );
+}
 
 exit;
 
