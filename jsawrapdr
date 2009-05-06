@@ -241,10 +241,28 @@ if (defined $drparameters) {
 # Get the current working directory
 my $curdir = File::Spec->rel2abs( File::Spec->curdir );
 
+# The grid processing engine at CADC will be configured such that
+# the wrapper is being started in $ENV{TMPDIR}
+
+my $in_grid_engine;
+if (exists $ENV{TMPDIR}) {
+  if (File::Spec->canonpath($curdir) eq File::Spec->canonpath($ENV{TMPDIR})) {
+    $in_grid_engine = 1;
+    print "Running in CADC Grid Engine environment\n";
+  }
+}
+
+# in grid engine mode we always use tmpdir mode
+$tmpdir = 1 if $in_grid_engine;
+
 # Make sure that inputs is corrected for -outdir
+# but we only fiddle with $inputs if we are not running
+# in grid engine. In grid engine dpRetrieve makes many assumptions
+# and does not want any path to be included
 if (defined $inputs) {
   $inputs = File::Spec->catfile( $curdir, $inputs )
-    unless File::Spec->file_name_is_absolute($inputs);
+    if (!$in_grid_engine &&
+	!File::Spec->file_name_is_absolute($inputs));
 } elsif( ! $skipdp ) {
   die "Must supply a -inputs file";
 }
