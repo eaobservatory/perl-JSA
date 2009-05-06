@@ -533,7 +533,7 @@ convert_dr_files( \%drhdrs );
 if ($cleanup eq 'cadc') {
   # do not want to cleanup files that were present before the
   # command began
-  my %post_all = scan_dir( qr/\w.*/ );
+  my %post_all = scan_dir( qr/.*/ );
 
   for my $file (keys %post_all) {
     if (! exists $all_existing_files{$file}) {
