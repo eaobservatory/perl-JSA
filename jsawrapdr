@@ -169,6 +169,11 @@ BEGIN {
   } else {
     $ENV{PATH} = $newpath;
   }
+
+  # Set ADAM_USER to a temp directory
+  my $adamuser = File::Temp->newdir();
+  $ENV{ADAM_USER} = "$adamuser";
+
 }
 
 # Options
