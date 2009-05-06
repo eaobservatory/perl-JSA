@@ -144,7 +144,6 @@ use FindBin;
 
 use Getopt::Long;
 use Pod::Usage;
-use File::Remove qw/ remove /;
 use File::Spec;
 use File::Temp;
 use Carp;
@@ -558,7 +557,8 @@ if ($cleanup eq 'cadc') {
       # was not previously here
       if (! looks_like_cadcfile( $file ) ) {
 	# does not look like a cadc file
-	remove \1, File::Spec->catfile( $outdir, $file );
+	# do not check status
+	unlink File::Spec->catfile( $outdir, $file );
       }
     }
   }
@@ -585,7 +585,10 @@ if ($cleanup ne 'none') {
   opendir (my $DH, $outdir) or die "Could not open the output directory!";
   for my $f (readdir($DH)) {
     if (!exists $all_existing_files{$f}) {
-      remove \1, File::Spec->catfile($outdir, $f );
+      # use unlink and do not check status
+      # since there is not a lot we can do at this point
+      my $path = File::Spec->catfile($outdir, $f);
+      unlink $path;
     }
   }
 }
