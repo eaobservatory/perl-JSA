@@ -248,6 +248,13 @@ if (exists $ENV{TMPDIR}) {
   if (File::Spec->canonpath($curdir) eq File::Spec->canonpath($ENV{TMPDIR})) {
     $in_grid_engine = 1;
     print "Running in CADC Grid Engine environment\n";
+
+    # Running at CADC so have a stab at setting up logging
+    # directory should be created by dpRetrieve
+    if (!exists $ENV{ORAC_LOGDIR}) {
+      $ENV{ORAC_LOGDIR} = File::Spec->catdir( "/usr/cadc/dplog",
+					      $id );
+    }
   }
 }
 
