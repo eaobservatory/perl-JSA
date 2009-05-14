@@ -1,0 +1,152 @@
+#!/bin/env starperl
+
+=head1 NAME
+
+jsasubmit - Submit a job to the CADC GridEngine for JSA processing.
+
+=head1 SYNOPSIS
+
+  jsasubmit -ut 20080705
+
+=head1 DESCRIPTION
+
+=cut
+
+BEGIN {
+  $ENV{'SYBASE'} = "/local/progs/sybase"
+    unless exists $ENV{'SYBASE'};
+}
+
+use strict;
+use warnings;
+
+use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
+                     create_recipe_instance /;
+use JSA::Files qw/ file_to_uri /;
+use JSA::Headers qw/ get_orac_instrument /;
+
+use OMP::ArchiveDB;
+use OMP::Info::Obs;
+use OMP::Info::ObsGroup;
+use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
+
+use Getopt::Long;
+use Pod::Usage;
+
+my $telescope = 'JCMT';
+
+# Don't fall back to files.
+$OMP::ArchiveDB::FallbackToFiles = 0;
+
+# Handle command-line options.
+my ( $help, $man, $ut, $version );
+my $status = GetOptions( "help"    => \$help,
+                         "man"     => \$man,
+                         "ut=s"    => \$ut,
+                         "version" => \$ut,
+                       );
+
+pod2usage( 1 ) if $help;
+pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+
+if( $version ) {
+  print "Submit a job to the CADC GridEngine for JSA processing.\n";
+  print " Source code revision: 0.01\n";
+  exit;
+}
+
+# Make sure the UT parameter is defined.
+if( ! defined $ut ) {
+  die "Must include -ut parameter";
+}
+
+my $grp = new OMP::Info::ObsGroup( telescope => $telescope,
+                                   date => $ut,
+                                   retainhdr => 1,
+                                 );
+
+# Hash to hold list of groups.
+my %group;
+
+# Hash to hold list of ORAC::Frame::<inst> classes already loaded.
+my %frameclassloaded;
+
+foreach my $obs ( $grp->obs ) {
+  next if $obs->isGenCal;
+
+  # Check to see if we have OBSRA and OBSDEC. If they're defined, the tracking system is J2000. Otherwise it's APP.
+  my $hdr = $obs->hdrhash;
+
+  if( ! defined( $hdr->{'TRACKSYS'} ) ) {
+    if( defined( $hdr->{'OBSRA'} ) &&
+        defined( $hdr->{'OBSDEC'} ) ) {
+      $hdr->{'TRACKSYS'} = 'J2000';
+    } else {
+      $hdr->{'TRACKSYS'} = 'APP';
+    }
+  }
+
+  if( defined( $hdr->{'OBSRA'} ) ) {
+    $hdr->{'BASEC1'} = $hdr->{'OBSRA'};
+  }
+  if( defined( $hdr->{'OBSDEC'} ) ) {
+    $hdr->{'BASEC2'} = $hdr->{'OBSDEC'};
+  }
+
+  if( defined( $hdr->{'FREQ_SIG_LOWER'} ) ) {
+    $hdr->{'FRQSIGLO'} = $hdr->{'FREQ_SIG_LOWER'};
+  }
+  if( defined( $hdr->{'FREQ_SIG_UPPER'} ) ) {
+    $hdr->{'FRQSIGHI'} = $hdr->{'FREQ_SIG_UPPER'};
+  }
+
+  if( ! defined( $hdr->{'SIMULATE'} ) ) {
+    $hdr->{'SIMULATE'} = 1;
+  }
+
+  my $instrument = get_orac_instrument( $obs->fits );
+  my ( $frameclass, $groupclass, $calclass, $instclass ) = orac_determine_inst_classes( $instrument );
+  if( ! $frameclassloaded{$frameclass} ) {
+    my $isok = eval " require $frameclass; 1; ";
+    if( ! $isok ) {
+      die "Could not load $frameclass: $@\n";
+    }
+    $frameclassloaded{$frameclass}++;
+  }
+
+  if( defined( $hdr->{'SUBHEADERS'} ) ) {
+    foreach my $subhdr ( @{$hdr->{'SUBHEADERS'}} ) {
+      my $tmphdr = $hdr;
+
+      foreach my $key ( keys %$subhdr ) {
+        $tmphdr->{$key} = $subhdr->{$key};
+      }
+
+      if( defined( $tmphdr->{'FREQ_SIG_LOWER'} ) ) {
+        $tmphdr->{'FRQSIGLO'} = $tmphdr->{'FREQ_SIG_LOWER'};
+      }
+      if( defined( $tmphdr->{'FREQ_SIG_UPPER'} ) ) {
+        $tmphdr->{'FRQSIGHI'} = $tmphdr->{'FREQ_SIG_UPPER'};
+      }
+
+      my $frm = new $frameclass;
+      $frm->hdr( %{$tmphdr} );
+      my $group = $frm->findgroup;
+      push @{$group{$group}}, $tmphdr->{'FILE_ID'};
+    }
+  } else {
+
+    my $frm = new $frameclass;
+    $frm->hdr( %{$hdr} );
+    my $group = $frm->findgroup;
+    push @{$group{$group}}, $obs->filename;
+  }
+}
+
+my $dbh = connect_to_cadcdp;
+foreach my $group ( keys %group ) {
+  my @members = map { file_to_uri( $_ ) } @{$group{$group}};
+  create_recipe_instance( $dbh, \@members );
+}
+
+disconnect_from_cadcdp( $dbh );

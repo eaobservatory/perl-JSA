@@ -43,7 +43,7 @@ WriteMakefile(
                                     'URI' => 0,
                                    },
               EXE_FILES => [qw/
-                                dpRetrieve jsawrapdr dpCapture convert_dr_files cadc_drcopy.pl
+                                dpRetrieve jsawrapdr dpCapture convert_dr_files cadc_drcopy.pl jsasubmit
                               /],
                'dist'           => { COMPRESS => "gzip -9f"},
                ($] >= 5.005 ?    ## Add these new keywords supported since 5.005

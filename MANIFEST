@@ -5,6 +5,7 @@ dpCapture
 dpRetrieve
 jsawrapdr
 lib/JSA/CADC_Copy.pm
+lib/JSA/CADC_DP.pm
 lib/JSA/Command.pm
 lib/JSA/Convert.pm
 lib/JSA/EnterData.pm
