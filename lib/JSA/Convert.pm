@@ -28,6 +28,7 @@ use warnings::register;
 use Carp;
 use File::Copy;
 use File::Spec;
+use Image::ExifTool qw/ :Public /;
 use Proc::SafeExec;
 use Starlink::Config qw/ :override /;
 use Starlink::Versions qw/ starversion_lt starversion_string/;
@@ -39,7 +40,7 @@ use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    looks_like_drfile looks_like_cadcfile
-                   can_send_to_cadc /;
+                   can_send_to_cadc looks_like_drthumb /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf convert_dr_files list_convert_plan /;
@@ -158,81 +159,99 @@ sub convert_dr_files {
 
   for my $file ( sort keys %$href ) {
 
-    if ( can_send_to_cadc( $href->{$file} ) &&
-         looks_like_drfile( $file ) ) {
+    if( looks_like_drfile( $file ) ) {
+
+      if ( can_send_to_cadc( $href->{$file} ) ) {
+
+        print "Converting file $file\n" if $DEBUG;
+
+        my $assoc = $href->{$file}->value( "ASN_TYPE" );
+
+        # Copy the file to the temporary directory, if necessary.
+        my $tfile = $file;
+        if( defined( $opts->{tempdir} ) ) {
+          $tfile = File::Spec->catfile( $opts->{tempdir}, $file );
+          if( defined( $opts->{indir} ) ) {
+            my $ifile = File::Spec->catfile( $opts->{indir}, $file );
+            print "copying $ifile to $tfile\n" if $DEBUG;
+            copy( $ifile, $tfile ) or die "Copy failed: $!";
+          } else {
+            copy( $file, $tfile ) or die "Copy failed: $!";
+          }
+        }
+
+        # is exportable so first fix up provenance
+        my $skip = 0;
+        try {
+          prov_update_parent_path( $tfile );
+        } catch JSA::Error with {
+          # Just skip this file for now.
+          my $E = shift;
+          chomp($E);
+          print "$E\n --- skipping\n";
+          $skip = 1;
+        };
+        next if $skip;
+
+        # Modify the WCS attributes so that we generate the correct FITS
+        # headers regardless of how the pipeline was configured.
+        set_wcs_attribs( $tfile );
+
+        update_fits_headers( $tfile );
+
+        my @comments = cadc_ack();
+        add_fits_comments( $tfile, \@comments ) if @comments;
+
+        # then convert to fits
+        my $outfile = convert_to_fits( $tfile );
+
+        # Now need to fix up PRODUCT names in extensions
+        update_fits_product( $outfile );
+
+        # At this point, the output file is in either the same
+        # directory as the input file (if $opts->{tempdir} isn't
+        # defined) or in the temporary directory (if $opts->{tempdir}
+        # is defined). If we have been given an output directory, copy
+        # the output file to a temporary filename in the output
+        # directory, then rename it to the proper filename.
+        if( defined( $opts->{outdir} ) ) {
+          my $tempfilename = "cadc$$";
+          my ( $vol, $dir, $ofile ) = File::Spec->splitpath( $outfile );
+          copy( $outfile,
+                File::Spec->catfile( $opts->{outdir}, $tempfilename ) );
+          rename( File::Spec->catfile( $opts->{outdir}, $tempfilename ),
+                  File::Spec->catfile( $opts->{outdir}, $ofile ) );
+          unlink( $outfile );
+        }
+
+        # Clean up temporary directory.
+        if( defined( $opts->{tempdir} ) ) {
+          unlink $tfile;
+        }
+      } else {
+
+        if ($DEBUG) {
+          my $can_send = can_send_to_cadc( $href->{$file} );
+          my $isdr = looks_like_drfile( $file );
+          print "File $file not suitable for conversion (is ".
+            ( $can_send ? "" : "not ") . "valid product) (is ".
+            ( $isdr ? "" : "not ") . "valid DR filename)\n";
+        }
+
+      }
+    } elsif( looks_like_drthumb( $file ) ) {
 
       print "Converting file $file\n" if $DEBUG;
 
-      my $assoc = $href->{$file}->value( "ASN_TYPE" );
+      my $outfile = rename_png( $file );
 
-      # Copy the file to the temporary directory, if necessary.
-      my $tfile = $file;
-      if( defined( $opts->{tempdir} ) ) {
-        $tfile = File::Spec->catfile( $opts->{tempdir}, $file );
-        if( defined( $opts->{indir} ) ) {
-          my $ifile = File::Spec->catfile( $opts->{indir}, $file );
-          print "copying $ifile to $tfile\n" if $DEBUG;
-          copy( $ifile, $tfile ) or die "Copy failed: $!";
-        } else {
-          copy( $file, $tfile ) or die "Copy failed: $!";
-        }
-      }
-
-      # is exportable so first fix up provenance
-      my $skip = 0;      
-      try {
-        prov_update_parent_path( $tfile );
-      } catch JSA::Error with {
-        # Just skip this file for now.
-        my $E = shift;
-        chomp($E);
-        print "$E\n --- skipping\n";
-        $skip = 1;
-      };
-      next if $skip;
-
-      # Modify the WCS attributes so that we generate the correct FITS
-      # headers regardless of how the pipeline was configured.
-      set_wcs_attribs( $tfile );
-
-      update_fits_headers( $tfile );
-
-      my @comments = cadc_ack();
-      add_fits_comments( $tfile, \@comments ) if @comments;
-
-      # then convert to fits
-      my $outfile = convert_to_fits( $tfile );
-
-      # Now need to fix up PRODUCT names in extensions
-      update_fits_product( $outfile );
-
-      # At this point, the output file is in either the same directory
-      # as the input file (if $opts->{tempdir} isn't defined) or in
-      # the temporary directory (if $opts->{tempdir} is defined). If
-      # we have been given an output directory, copy the output file
-      # to a temporary filename in the output directory, then rename
-      # it to the proper filename.
-      if( defined( $opts->{outdir} ) ) {
-        my $tempfilename = "cadc$$";
-        my ( $vol, $dir, $ofile ) = File::Spec->splitpath( $outfile );
-        copy( $outfile,
-              File::Spec->catfile( $opts->{outdir}, $tempfilename ) );
-        rename( File::Spec->catfile( $opts->{outdir}, $tempfilename ),
-                File::Spec->catfile( $opts->{outdir}, $ofile ) );
-        unlink( $outfile );
-      }
-
-      # Clean up temporary directory.
-      if( defined( $opts->{tempdir} ) ) {
-        unlink $tfile;
-      }
     } else {
       if ($DEBUG) {
         my $can_send = can_send_to_cadc( $href->{$file} );
         my $isdr = looks_like_drfile( $file );
         print "File $file not suitable for conversion (is ".
           ( $can_send ? "" : "not ") . "valid product) (is ".
-            ( $isdr ? "" : "not ") . "valid DR filename)\n";
+          ( $isdr ? "" : "not ") . "valid DR filename)\n";
       }
     }
   }
@@ -261,19 +280,52 @@ sub list_convert_plan {
 
   for my $file ( sort keys %$href ) {
 
-    if ( can_send_to_cadc( $href->{$file} ) &&
-         looks_like_drfile( $file ) ) {
-      my $assoc = $href->{$file}->value( "ASN_TYPE" );
-      my $outfile = drfilename_to_cadc( $file, ASN_TYPE => $assoc );
+    if( looks_like_drfile( $file ) ) {
+      if ( can_send_to_cadc( $href->{$file} ) ) {
+        my $assoc = $href->{$file}->value( "ASN_TYPE" );
+        my $outfile = drfilename_to_cadc( $file, ASN_TYPE => $assoc );
+        print "Converting file $file -> $outfile\n";
+      } else {
+        my $can_send = can_send_to_cadc( $href->{$file} );
+        my $isdr = looks_like_drfile( $file );
+        print "File $file not suitable for conversion (is ".
+          ( $can_send ? "" : "not ") . "valid product) (is ".
+          ( $isdr ? "" : "not ") . "valid DR filename)\n";
+      }
+    } elsif( looks_like_drthumb( $file ) ) {
+      my $outfile = drfilename_to_cadc( $file );
       print "Converting file $file -> $outfile\n";
     } else {
       my $can_send = can_send_to_cadc( $href->{$file} );
       my $isdr = looks_like_drfile( $file );
       print "File $file not suitable for conversion (is ".
         ( $can_send ? "" : "not ") . "valid product) (is ".
-          ( $isdr ? "" : "not ") . "valid DR filename)\n";
+        ( $isdr ? "" : "not ") . "valid DR filename)\n";
     }
   }
+}
+
+=item B<rename_png>
+
+=cut
+
+sub rename_png {
+  my $infile = shift;
+
+  # Read the EXIF header to find out what type of ASN_TYPE we have.
+  my $exif = new Image::ExifTool;
+  my @keywords = $exif->GetValue('Keywords');
+  my %keywords = map { split '=', $_ } @keywords;
+  my $assoc = $keywords{'jsa:asn_type'};
+
+  if( defined( $assoc ) ) {
+    $outfile = drfilename_to_cadc( $infile, ASN_TYPE => $assoc );
+  } else {
+    $outfile = drfilename_to_cadc( $infile );
+  }
+
+  copy( $infile, $outfile );
+
 }
 
 =back

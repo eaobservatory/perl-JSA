@@ -25,6 +25,7 @@ use Astro::FITS::HdrTrans;
 use Astro::FITS::Header::NDF;
 use Astro::FITS::Header::CFITSIO;
 use Carp;
+use Image::ExifTool qw/ :Public /;
 use NDF 1.47;
 use Starlink::Config qw/ :override /;
 
@@ -174,8 +175,10 @@ sub read_header {
   my $hdr;
   if ($f =~ /\.f.*$/) {
     $hdr = eval { Astro::FITS::Header::CFITSIO->new( File => $f )};
-  } else {
+  } elsif( $f =~ /\.sdf$/ ) {
     $hdr = eval { Astro::FITS::Header::NDF->new( File => $f )};
+  } elsif( $f =~ /\.png$/ ) {
+    $hdr = eval { ImageInfo( $f ) };
   }
   return $hdr;
 }
