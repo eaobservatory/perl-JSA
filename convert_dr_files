@@ -84,6 +84,8 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 
+use JAC::Setup qw/ omp oracdr sybase /;
+
 use JSA::Convert qw/ convert_dr_files list_convert_plan /;
 use JSA::Files qw/ scan_dir /;
 use JSA::Headers qw/ read_headers /;
@@ -113,7 +115,7 @@ my @files;
 if (@ARGV) {
   @files = @ARGV;
 } else {
-  my %files = scan_dir( qr/\.sdf$/ );  
+  my %files = scan_dir( );
   @files = sort keys %files;
 }
 
