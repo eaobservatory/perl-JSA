@@ -104,8 +104,8 @@ if( defined( $transdir ) ) {
   $transdir = $CADCDIR;
 }
 
-# Scan the directory for plausible fits files
-my %files = scan_dir( qr/^jcmt.*\.fits$/ );
+# Scan the directory for plausible fits or png files
+my %files = scan_dir( qr/^jcmt.*\.(fits|png)$/ );
 for my $f (sort keys %files) {
 
   if (looks_like_cadcfile( $f )) {
