@@ -318,6 +318,7 @@ sub rename_png {
   my %keywords = map { split '=', $_ } @keywords;
   my $assoc = $keywords{'jsa:asn_type'};
 
+  my $outfile;
   if( defined( $assoc ) ) {
     $outfile = drfilename_to_cadc( $infile, ASN_TYPE => $assoc );
   } else {
