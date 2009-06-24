@@ -101,6 +101,9 @@ BEGIN {
         '/jac_sw/archiving/jcmt/import/data.dictionary',
         #'/home/agarwal/src/jac-git/archiving/jcmt/import/data.dictionary',
 
+      # To make OMP::Info::Obs out of given files.
+      'files' => [],
+
       # If false, then nothing is printed (other than fatal messages).
       # Else, messages are printed with increasing verbosity.
       'verbosity' => 1,
@@ -121,6 +124,8 @@ BEGIN {
       or $k eq 'date'
       # Validate instruments before setting.
       or $k eq 'instruments'
+      # Need to check for an array ref.
+      or $k eq 'files'
       # Need to turn off the other if one is true.
       or $k =~ m/^ force-d(?: isk | b ) $/x
       ;
@@ -429,6 +434,38 @@ sub get_dict {
   return $self->{'dict'};
 }
 
+=item B<files>
+
+If no array reference is given, returns the array reference of file
+names.
+
+  $files = $enter->files();
+
+Else, saves the given array reference  & returns nothing.
+
+  $enter->files( [ file_list() ] );
+
+Throws I<JSA::Error> exception if the given argument is not an array
+reference, or is empty.
+
+=cut
+
+sub files {
+
+  my $self = shift @_;
+
+  return $self->{'files'}
+    unless scalar @_;
+
+  my ( $files ) = @_;
+
+  throw JSA::Error 'Need a non-empty array reference.'
+    unless ref $files && scalar @{ $files };
+
+  $self->{'files'} = $files;
+  return;
+}
+
 =item B<prepare_and_insert>
 
 Inserts observation in database retrieved from disk (see also
@@ -483,39 +520,33 @@ set.
 
     my %dict = $self->create_dictionary;
 
-    my ( $observations, $grp, $name, @files_added );
+    my ( $observations, $group, $name, @files_added );
 
     for my $inst ( $self->instruments ) {
 
       $name = $inst->name;
 
+      # Retrieve observations from disk.  An Info::Obs object will be returned
+      # for each subscan in the observation.  No need to retrieve associated
+      # obslog comments. That's <no. of subsystems used> *
+      # <no. of subscans objects returned per observation>.
+      $group = $self->_get_obs_group( 'name' => $name, 'date' => $date );
+      my @obs = $group->obs;
+
       $self->_print_text( sprintf "Inserting data for %s. Date [%s]\n",
                             $name, $date->ymd
                         );
-
-      $tables[1] = $inst->table;
-
-      $columns->{$name} = $self->get_columns( $inst->table, $dbh );
-      $columns->{FILES} = $self->get_columns( 'FILES', $dbh );
-
-      # Retrieve observations from disk.  An Info::Obs object will be returned for
-      # each subscan in the observation.  No need to retrieve associated obslog
-      # comments. That's <no. of subsystems used> * <no. of subscans objects
-      # returned per observation>.
-      $grp = OMP::Info::ObsGroup->new( instrument => $name,
-                                          date => $date,
-                                          nocomments => 1,
-                                          retainhdr => 1,
-                                          ignorebad => 1,
-                                        );
-
-      my @obs = $grp->obs;
 
       if (! $obs[0]) {
 
         $self->_print_text( "\tNo observations found for instrument $name\n\n" );
         next;
       }
+
+      $tables[1] = $inst->table;
+
+      $columns->{$name} = $self->get_columns( $inst->table, $dbh );
+      $columns->{FILES} = $self->get_columns( 'FILES', $dbh );
 
       # Need to create a hash with keys corresponding to the observation number
       # (an array won't be very efficient since observations can be missing and
@@ -525,6 +556,7 @@ set.
       # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
 
       for my $obs (@obs) {
+
         my @subhdrs = $obs->subsystems;
         $observations->{$obs->runnr} = \@subhdrs;
       }
@@ -532,7 +564,6 @@ set.
       my $added = $self->insert_obs( $dbh, $inst, $observations, $columns, \%dict );
       push @files_added, @{ $added }
         if $added && scalar @{ $added };
-
     }
 
     return \@files_added;
@@ -664,6 +695,53 @@ It is called by I<prepare_and_insert> method.
 
     return \@success;
   }
+}
+
+=item B<_get_obs_group>
+
+When no files are provided, returns a L<OMP::Info::ObsGroup> object
+given instrument name and date as a hash.
+
+  $obs = $enter->_get_obs_group( 'name' => 'ACSIS',
+                                  'date' => '2009-06-09'
+                                );
+
+Else, returns a L<OMP::Info::ObsGroup> object created with already
+given files (see I<files> method).
+
+  $obs = $enter->_get_obs_group;
+
+=cut
+
+sub _get_obs_group {
+
+  my ( $self, %args ) = @_;
+
+  my $files = $self->files;
+
+  my %obs =
+    (
+      'nocomments' => 1,
+      'retainhdr' => 1,
+      'ignorebad' => 1,
+    );
+
+  %args =
+    ! $files || ! scalar @{ $files }
+    ? ( 'date' => $args{'date'} ,
+        'instrument' => $args{'name'},
+        %obs
+      )
+    : ( 'obs' =>
+          [ map
+              { OMP::Info::Obs->readfile( $_ , %obs ) }
+              @{ $files }
+          ]
+      )
+    ;
+
+  return
+    OMP::Info::ObsGroup->new( %args );
 }
 
 =item B<skip_obs>
