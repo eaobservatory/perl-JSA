@@ -556,7 +556,6 @@ set.
       # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
 
       for my $obs (@obs) {
-
         my @subhdrs = $obs->subsystems;
         $observations->{$obs->runnr} = \@subhdrs;
       }
