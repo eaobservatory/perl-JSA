@@ -466,6 +466,22 @@ sub files {
   return;
 }
 
+=item B<files_given>
+
+Returns a truth value to indicate if any files were provided to process.
+
+  $use_date = ! $enter->files_given();
+
+=cut
+
+sub files_given {
+
+  my ( $self ) = @_;
+
+  my $files = $self->files;
+  return  !! ( $files && scalar @{ $files } );
+}
+
 =item B<prepare_and_insert>
 
 Inserts observation in database retrieved from disk (see also
@@ -533,8 +549,11 @@ set.
       $group = $self->_get_obs_group( 'name' => $name, 'date' => $date );
       my @obs = $group->obs;
 
-      $self->_print_text( sprintf "Inserting data for %s. Date [%s]\n",
-                            $name, $date->ymd
+      $self->_print_text( ! $self->files_given
+                          ? sprintf( "Inserting data for %s. Date [%s]\n",
+                                      $name, $date->ymd
+                                    )
+                          : "Inserting given files\n"
                         );
 
       if (! $obs[0]) {
@@ -718,22 +737,19 @@ sub _get_obs_group {
 
   my $files = $self->files;
 
-  my %obs =
-    (
-      'nocomments' => 1,
-      'retainhdr' => 1,
-      'ignorebad' => 1,
-    );
+  my %obs = ( 'nocomments' => 1,
+              'retainhdr' => 1,
+            );
 
   %args =
-    ! $files || ! scalar @{ $files }
+    ! $self->files_given
     ? ( 'date' => $args{'date'} ,
         'instrument' => $args{'name'},
         %obs
       )
     : ( 'obs' =>
           [ map
-              { OMP::Info::Obs->readfile( $_ , %obs ) }
+              { OMP::Info::Obs->readfile( $_ , %obs ); }
               @{ $files }
           ]
       )
