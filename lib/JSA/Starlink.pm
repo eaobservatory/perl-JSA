@@ -210,8 +210,11 @@ sub prov_update_parent_path {
   ndf_begin();
   ndf_open( &NDF::DAT__ROOT(), $file, "UPDATE","OLD",my $indf, my $place,$status );
 
+  # Read the provenance from the file
+  my $prov = ndgReadProv( $indf, "", $status );
+
   # Get the 0th provenance entry
-  my @parind = _get_prov_parents( $indf, 0, $status );
+  my @parind = _get_prov_parents( $prov, 0, $status );
 
   # now go through the parents
   if ($status == &NDF::SAI__OK) {
@@ -223,7 +226,8 @@ sub prov_update_parent_path {
     for my $i (@parind) {
       next if( $checked{$i} );
       print "Checking parent $i\n" if $DEBUG;
-      my ($ok, $rej) = _check_parent_product( $indf, $i, $file, $status );
+      my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $status );
+      last if $status != &NDF::SAI__OK;
       push(@validated, @$ok);
       push(@rejected, @$rej);
       $checked{$i}++;
@@ -233,30 +237,24 @@ sub prov_update_parent_path {
     my %seen = ();
     my @toremove = sort { $b <=> $a } grep { ! $seen{$_} ++ } @rejected;
     print "Removing ". @toremove . " unused ancestors\n" if $DEBUG;
-    ndgRmprvs( $indf, \@toremove, $status );
+    $prov->RemoveProv( \@toremove, $status );
 
     print "Validated: ". join(" ", @validated)."\n" if $DEBUG;
     print "Removed: " . join( " ", @rejected ) . "\n" if $DEBUG;
 
     # Get the parent indices again. These should all be valid
-    @parind = _get_prov_parents( $indf, 0, $status );
+    @parind = _get_prov_parents( $prov, 0, $status );
     print "After removal: ". join(" ",@parind)."\n" if $DEBUG;
 
     # Now go through each of the valid parents
     for my $i (@parind) {
-      ndg_gtprv( $indf, $i, my $provloc, $status );
+      my $provkm = $prov->GetProv( $i, $status );
 
       # See if we have parents (useful for later)
-      dat_there( $provloc, "PARENTS", my $haspar, $status );
-
-      # Find Path locator
-      dat_find( $provloc, "PATH", my $pathloc, $status );
-
-      # Ask its length
-      dat_clen( $pathloc, my $pathlen, $status);
+      my $haspar = $provkm->MapHasKey( "PARENTS" );
 
       # get the PATH
-      dat_get0c( $pathloc, my $path, $status );
+      my $path = $provkm->MapGet0C( "PATH" );
 
       # proceed if status is good and the path does not already
       # look correct
@@ -318,26 +316,20 @@ sub prov_update_parent_path {
         }
 
         if (defined $newpath) {
-          # may need to resize
-          if (length($newpath) > $pathlen) {
-            # erases and create
-            dat_annul($pathloc, $status);
-            dat_erase($provloc, "PATH", $status);
-            dat_new0c($provloc, "PATH", length($newpath), $status );
-            dat_find( $provloc, "PATH", $pathloc, $status );
-          }
+          # update the path in the keymap
+          $provkm->MapPut0C( "PATH", $newpath, "" );
 
-          # modify the value in the HDS structure
-          dat_put0c( $pathloc, $newpath, $status );
-
-          # put it back in the file
-          ndg_mdprv( $indf, $i, $provloc, $status );
+          # put it back in the provenance structure
+          $prov->ModifyProv( $i, $provkm, $status );
         }
       }
-      dat_annul( $provloc, $status );
 
-    }
-  } # no parents
+    } # foreach @parind
+
+    # write out the updated provenance structure
+    $prov->WriteProv( $indf, $status );
+
+  } # status not ok
 
   # close the ndf and free locators
   ndf_annul( $indf, $status);
@@ -431,7 +423,7 @@ sub set_wcs_attribs {
 
 Obtain the parent indices given the NDF identified and index of a provenance item.
 
-  @indices = _get_prov_parents( $indf, 0, $status );
+  @indices = _get_prov_parents( $prov, 0, $status );
 
 Returns empty list if there are no further parents. Uses inherited status.
 
@@ -443,7 +435,7 @@ Returns empty list if there are no further parents. Uses inherited status.
 # badness to the caller.
 
 sub _get_prov_parents {
-  my $indf = shift;
+  my $prov = shift;
   my $index = shift;
 
   # Note that we do not use a lexical for status since we want to
@@ -451,9 +443,10 @@ sub _get_prov_parents {
   return () if $_[0] != &NDF::SAI__OK;
 
   # Get the 0th provenance entry
-  my $km = ndgGtprvk( $indf, $index, $_[0] );
+  my $km = $prov->GetProv( $index, $_[0] );
 
-  print "Retrieved 0th provenance entry.\n" if $DEBUG;
+  print "Retrieved provenance entry #$index to retrieve parents.\n" if $DEBUG;
+#  $km->Show();
 
   # get the parent indices
   my $haspar = $km->MapHasKey( "PARENTS" );
@@ -465,7 +458,7 @@ sub _get_prov_parents {
 
   my %seen = ();
   my @uniq_parind = grep { ! $seen{$_} ++ } @parind;
-
+  print "With parent indices: (". join(",",@uniq_parind). ")\n" if $DEBUG;
   return @uniq_parind;
 }
 
@@ -475,7 +468,7 @@ Get the product for this parent and compare it with the allowed list.
 If it does not match the allowed product name, the parent of that item
 is checked until a match is found.
 
-  ($ok, $rej) = _check_parent_product( $indf, $index, $file, $status );
+  ($ok, $rej) = _check_parent_product( $prov, $index, $file, $status );
 
 Returns the results as references to arrays. The first is an array of indices
 that have valid products. The second is an array of indices that were checked and
@@ -492,9 +485,13 @@ array and the second array will be empty.
 # badness to the caller.
 
 sub _check_parent_product {
-  my $indf = shift;
+  my $prov = shift;
   my $index = shift;
   my $file = shift;
+
+  # Note that we do not use a lexical for status since we want to
+  # emulate the interface used for the NDF module
+  return () if $_[0] != &NDF::SAI__OK;
 
   if( defined( $PARENT_PRODUCT_CACHE{$file}{$index}{'ok'} ) &&
       defined( $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} ) ) {
@@ -502,22 +499,18 @@ sub _check_parent_product {
             $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} );
   }
 
-  # Note that we do not use a lexical for status since we want to
-  # emulate the interface used for the NDF module
-  return () if $_[0] != &NDF::SAI__OK;
-
   # first need to get the provenance information
-  ndg_gtprv( $indf, $index, my $provloc, $_[0] );
+  my $provkm = $prov->GetProv( $index, $_[0] );
 
   # get the PATH
-  cmp_get0c( $provloc, "PATH", my $path, $_[0]);
+  my $path = $provkm->MapGet0C( "PATH" );
 
   # clean up
-  dat_annul( $provloc, $_[0]);
-  print "PATH=$path $_[0]\n" if $DEBUG;
+  print "_check_parent_product PATH $index=$path $_[0]\n" if $DEBUG;
   my @rejected;
   my @isok;
   print "Testing index $index\n" if $DEBUG;
+#  $provkm->Show();
   # now test it. If the parent looks like a CADC file already
   # then we assume that it is okay
   if ($_[0] == &NDF::SAI__OK) {
@@ -542,6 +535,8 @@ sub _check_parent_product {
       # are relevant we do an additional test with the header
       if (can_send_to_cadc_guess( $path ) ) {
 
+        print "Can possibly send $path\n" if $DEBUG;
+
         # Open up the header, send it to can_send_to_cadc() to find
         # out if this file is a suitable one to send to CADC.
         my $hdr = read_header( $path );
@@ -549,6 +544,7 @@ sub _check_parent_product {
           if ($_[0] == &NDF::SAI__OK()) {
             $_[0] = &NDF::SAI__ERROR();
             err_rep( " ", "Unable to read FITS header from $path", $_[0] );
+            return ();
           }
         }
 
@@ -562,16 +558,18 @@ sub _check_parent_product {
       print "Looks like raw\n" if $DEBUG;
       @isok = ($index);
     } else {
-      print "Strange match\n" if $DEBUG;
+      print "$path not CADC, DR or raw file\n" if $DEBUG;
     }
 
     # if we have got here with an empty index list we need to look in the parent
     if (!@isok) {
-      my @parents = _get_prov_parents( $indf, $index, $_[0] );
+      my @parents = _get_prov_parents( $prov, $index, $_[0] );
       if (@parents) {
         push(@rejected, $index);
         for my $i (@parents) {
-          my ($ok, $rej) = _check_parent_product( $indf, $i, $file, $_[0] );
+          print "Checking parent $i\n" if $DEBUG;
+          my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $_[0] );
+          return () unless $_[0] == &NDF::SAI__OK();
           push(@isok, @$ok);
           push(@rejected, @$rej);
         }
