@@ -12,16 +12,16 @@ JSA::EnterData::SCUBA2 - SCUBA2 specific methods.
 =head1 SYNOPSIS
 
   # Create new object, with specific header dictionary.
-  my $inst = JSA::EnterData::SCUBA2->new
+  my $scuba2 = JSA::EnterData::SCUBA2->new
 
-  my $name = $inst->name;
+  my $name = $scuba2->name;
 
-  my @cmd = $inst->get_bound_check_command;
+  my @cmd = $scuba2->get_bound_check_command;
   system( @cmd ) == 0
     or die "Problem with running bound check command for $name.";
 
   # Use table in a SQL later.
-  my $table = $inst->table;
+  my $table = $scuba2->table;
 
 
 =head1 DESCRIPTION
@@ -39,7 +39,7 @@ methods in order to be called from L<JSA::EnterData>.
 
 Constructor, returns an I<JSA::EnterData::SCUBA2> object.
 
-  $enter = JSA::EnterData::SCUBA2->new;
+  $scuba2 = JSA::EnterData::SCUBA2->new;
 
 Currently, no extra arguments are handled.
 
@@ -55,7 +55,7 @@ sub new {
 
 =item B<calc_freq>
 
-Noop currently.
+Does nothing currently.
 
 =cut
 
@@ -71,7 +71,7 @@ sub calc_freq {
 Returns a list of command and its argument to be executed to
 check/find the bounds.
 
-  @cmd = $inst->get_bound_check_command;
+  @cmd = $scuba2->get_bound_check_command;
 
   system( @cmd ) == 0
     or die "Problem running the bound check command";
@@ -100,7 +100,7 @@ sub get_bound_check_command {
 
 Returns the name of the instrument involved.
 
-  $name = $inst->name;
+  $name = $scuba2->name;
 
 =cut
 
@@ -108,6 +108,16 @@ sub name { return 'SCUBA-2' ; }
 
 
 =item B<name_is_scuba2>
+
+Returns a truth value indicating if the given string matches some variation of
+"SCUBA-2".
+
+  #  Prints "matched".
+  print 'matched'
+    if $scuba2->name_is_scuba2( 'scuba2' ) ;
+
+Purpose of it is to reduce the number of times to reproduce same regular
+expression test.
 
 =cut
 
@@ -125,20 +135,27 @@ sub name_is_scuba2 {
 
 Returns the database table related to the instrument.
 
-  $table = $inst->table;
+  $table = $scuba2->table;
 
 =cut
 
 sub table { return 'SCUBA2'; }
 
-=item B<transform_header>
-
-=cut
-
 BEGIN {
 
   my $obsidss_re = qr{^ obsidss $}xi;
   my $subarray_re = qr{^ subarray (?:_[a-d])? $}xi;
+
+=item B<transform_header>
+
+Given a header hash reference, returns an array of hash references of
+headers grouped by subarray.  The returned headers have subheaders
+with subarray appended, "obsid_subsynr" field filled in (see
+I<transform_subheader> method).
+
+  @grouped = $scuba2->transform_header( \%header );
+
+=cut
 
   sub transform_header {
 
@@ -177,6 +194,18 @@ BEGIN {
     return ( @new );
   }
 }
+
+=item B<transform_subheader>
+
+Puts I<obsid_subsysnr> in subheaders and appends the subarray type to
+a header where appropriate (see I<append_array_column> method), given
+an array of subheaders and a I<obsidss> value from header.  The given
+obsidss value is used if not found in a subheader.
+
+  $scuba2
+  ->transform_subheader( $header->{'SUBHEADERS'}, $header->{'obsidss'} );
+
+=cut
 
 sub transform_subheader {
 
@@ -223,6 +252,35 @@ BEGIN {
   my $end_re = join '|', @end;
   $_ = qr{(?:$_)}ix for $start_re, $end_re;
 
+=item B<push_range_headers_to_main>
+
+Given a header & a subheader hash references, moves range-type fields
+from the subheader into the main header.
+
+  $scuba2->( $header, $_ ) for @{ $header->{'SUBHEADERS'} };
+
+Currently, the fields being moved are ...
+
+  AMSTART ATSTART AZSTART
+  BKLEGTST BPSTART
+  DATE-OBS
+  FRLEGTST
+  HSTSTART HUMSTART
+  SEEDATST SEEINGST SEQSTART
+  TAU225ST TAUDATST
+  WNDDIRST WNDSPDST WVMDATST WVMTAUST
+
+  AMEND ATEND AZEND
+  BKLEGTEN BPEND
+  DATE-END
+  FRLEGTEN
+  HSTEND HUMEND
+  SEEDATEN SEEINGEN SEQEND
+  TAU225EN TAUDATEN
+  WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
+
+=cut
+
   sub push_range_headers_to_main {
 
     my ( $self, $header, $subhead ) = @_;
@@ -259,7 +317,7 @@ BEGIN {
 
 =item B<get_end_subheaders>
 
-Given an array reference of subheader hash refereneces, returns two hash
+Given an array reference of subheader hash references, returns two hash
 references defining starting and ending subheaders
 
   ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders );
@@ -294,6 +352,19 @@ sub get_end_subheaders {
 
   return ( $start, $end );
 }
+
+=item B<groub_by_subarray>
+
+Returns a hash reference of hash references, where the sole key is the
+subarray type matching C</^s[48].?$/>, given an array reference of
+subheaders & optional subarray type.
+
+Throws L<JSA::Error> exception if a subarray type cannot be determined.
+
+ $grouped =
+  $scuba2->groub_by_subarray( $header->{'SUBHEADERS'}, 's4' );
+
+=cut
 
 sub groub_by_subarray {
 
@@ -330,9 +401,27 @@ sub groub_by_subarray {
   return $group;
 }
 
+=item B<_fill_headers_obsid_subsys>
+
+Does nothing; overrides the parent class method. Field
+"obsid_subsysnr" is taken care by I<transform_subheader> method.
+
+=cut
 
 #  transform_header() takes care of the obsid_subsynr value.
 sub _fill_headers_obsid_subsys { }
+
+=item B<append_array_column>
+
+Returns nothing.  Given a (sub)header hash reference, appends some of
+the fields with C<_[a-d]> as appropriate.
+
+Throws L<JSA::Error> exception if a matching C<SUBARRAY> field value
+not found.
+
+ $scuba2->append_array_column( $subheader );
+
+=cut
 
 sub append_array_column {
 
@@ -370,7 +459,7 @@ sub append_array_column {
 Fills in the headers for C<FILES> database table, given a headers
 hash reference and an L<OMP::Info::Obs> object.
 
-  $enter->fill_headers_FILES( \%header, $obs );
+  $scuba2->fill_headers_FILES( \%header, $obs );
 
 =cut
 
