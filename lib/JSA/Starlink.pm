@@ -327,7 +327,7 @@ sub prov_update_parent_path {
     } # foreach @parind
 
     # write out the updated provenance structure
-    $prov->WriteProv( $indf, $status );
+    $prov->WriteProv( $indf, 0, $status );
 
   } # status not ok
 
