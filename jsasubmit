@@ -43,7 +43,7 @@ my ( $help, $man, $ut, $version );
 my $status = GetOptions( "help"    => \$help,
                          "man"     => \$man,
                          "ut=s"    => \$ut,
-                         "version" => \$ut,
+                         "version" => \$version,
                        );
 
 pod2usage( 1 ) if $help;
