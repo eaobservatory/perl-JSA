@@ -151,7 +151,7 @@ ENDNEWFILEID
   my $dp_file_input_id;
 
   # Start a transaction.
-  $dbh->begin_trans;
+  $dbh->begin_work;
 
   ###############################################
   # Create the new recipe_instance
