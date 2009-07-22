@@ -3,6 +3,7 @@ cadc_drcopy.pl
 convert_dr_files
 dpCapture
 dpRetrieve
+jsasubmit
 jsawrapdr
 lib/JSA/CADC_Copy.pm
 lib/JSA/CADC_DP.pm
