@@ -675,6 +675,9 @@ It is called by I<prepare_and_insert> method.
         }
       }
 
+      next RUN
+        unless $self->calc_radec( $inst, $common_obs, $common_hdrs );
+
       $dbh->begin_work if $self->load_header_db;
 
       $self->fill_headers_COMMON( $common_hdrs, $common_obs );
