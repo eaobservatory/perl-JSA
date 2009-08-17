@@ -1,6 +1,6 @@
 #!perl
 
-use Test::More tests => 22;
+use Test::More tests => 24;
 use Data::Dumper;
 
 my @surveys = qw/ NGS GBS SLS /;
@@ -109,4 +109,18 @@ $result = $qa->analyse_tsys( \%tsys, survey => 'GBS',
                              iterate => 1 );
 is( $result->pass, 1, "GBS passes after high-Tsys receptors are removed" );
 
+# Now try some RxA sample data.
+%tsys = ( 'A' => 790.12 );
 
+# This should pass.
+$result = $qa->analyse_tsysvar( \%tsys,
+                                survey => 'telescope',
+                                frequency => 265.88618 );
+is( $result->pass, 1, "RxA by frequency passes Tsys test" );
+
+# This should fail.
+$result = $qa->analyse_tsysvar( \%tsys,
+                                survey => 'telescope',
+                                molecule => 'CO21',
+                                frequency => 230.538 );
+is( $result->pass, 0, "RxA for CO 2-1 fails Tsys test" );

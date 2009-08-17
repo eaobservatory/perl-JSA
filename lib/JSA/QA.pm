@@ -169,8 +169,8 @@ sub get_data {
 
     # First search for this combination. If it doesn't exist, fall
     # back to survey. If that doesn't exist, search for the default
-    # value for this molecule. If that doesn't exist, fall back to the
-    # default.
+    # value for this molecule. If that doesn't exist, we try the
+    # frequency.
     if( exists( $self->{'CONFIG'}->{$str} ) &&
         exists( $self->{'CONFIG'}->{$str}->{$key} ) ) {
       return $self->{'CONFIG'}->{$str}->{$key};
@@ -180,21 +180,21 @@ sub get_data {
     } elsif( exists( $self->{'CONFIG'}->{"default $molecule"} ) &&
              exists( $self->{'CONFIG'}->{"default $molecule"}->{$key} ) ) {
       return $self->{'CONFIG'}->{"default $molecule"}->{$key};
-    } else {
-      return $self->{'CONFIG'}->{'default'}->{$key};
     }
   }
 
   # Now for frequencies.  Get config keys that have the requested
   # survey and a colon.
-  my $frequency = $opts{'frequency'};
-  my @config_keys = grep { /:/ } grep { /$survey/ } keys %{$self->{'CONFIG'}};
-  foreach my $config_key ( @config_keys ) {
-    $config_key =~ /(\d+):(\d+)/;
-    my $lower = $1;
-    my $upper = $2;
-    if( $lower < $frequency && $frequency < $upper ) {
-      return $self->{'CONFIG'}->{$config_key}->{$key};
+  if( defined( $opts{'frequency'} ) ) {
+    my $frequency = $opts{'frequency'};
+    my @config_keys = grep { /:/ } grep { /$survey/ } keys %{$self->{'CONFIG'}};
+    foreach my $config_key ( @config_keys ) {
+      $config_key =~ /(\d+):(\d+)/;
+      my $lower = $1;
+      my $upper = $2;
+      if( $lower < $frequency && $frequency < $upper ) {
+        return $self->{'CONFIG'}->{$config_key}->{$key};
+      }
     }
   }
 
@@ -207,14 +207,17 @@ sub get_data {
 
   # If we made it here, there isn't an entry for this survey. Try the
   # default, looking for frequency ranges.
-  @config_keys = grep { /:/ } grep { /default/ } keys %{$self->{'CONFIG'}};
-  foreach my $config_key ( @config_keys ) {
-    $config_key =~ /(\d+):(\d+)/;
-    my $lower = $1;
-    my $upper = $2;
-    if( $lower < $frequency && $frequency < $upper &&
-        defined( $self->{'CONFIG'}->{$config_key}->{$key} ) ) {
-      return $self->{'CONFIG'}->{$config_key}->{$key};
+  if( defined( $opts{'frequency'} ) ) {
+    my $frequency = $opts{'frequency'};
+    my @config_keys = grep { /:/ } grep { /default/ } keys %{$self->{'CONFIG'}};
+    foreach my $config_key ( @config_keys ) {
+      $config_key =~ /(\d+):(\d+)/;
+      my $lower = $1;
+      my $upper = $2;
+      if( $lower < $frequency && $frequency < $upper &&
+          defined( $self->{'CONFIG'}->{$config_key}->{$key} ) ) {
+        return $self->{'CONFIG'}->{$config_key}->{$key};
+      }
     }
   }
 
