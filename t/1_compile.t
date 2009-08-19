@@ -1,3 +1,4 @@
+# -*- perl -*-
 # This test simply loads all the modules
 # it does this by scanning ORAC-DR lib dir for .pm files
 # and use'ing each in turn
@@ -7,6 +8,8 @@
 use strict;
 use warnings;
 use Test; # Not really needed since we don't use ok()
+
+use JAC::Setup qw/ omp archiving /;
 
 use File::Find;
 
