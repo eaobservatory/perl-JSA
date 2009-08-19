@@ -12,10 +12,8 @@ jsasubmit - Submit a job to the CADC GridEngine for JSA processing.
 
 =cut
 
-BEGIN {
-  $ENV{'SYBASE'} = "/local/progs/sybase"
-    unless exists $ENV{'SYBASE'};
-}
+
+use JAC::Setup qw/ omp oracdr sybase /;
 
 use strict;
 use warnings;

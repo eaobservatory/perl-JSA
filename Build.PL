@@ -60,10 +60,12 @@ my $build = Module::Build->new
                 'Pod::Usage' => 0,
                 'Astro::Coords' => 0,
                 'Image::ExifTool' => 0,
+                'JAC::Setup' => 0.01,
                },
    build_requires => {
                       'Test::More' => 0,
                       'Test::Command' => 0,
+                      'JAC::Setup' => 0.02,
                      },
   );
 
