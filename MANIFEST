@@ -34,3 +34,4 @@ testdata/inputs.txt
 testdata/raw.txt
 testdata/reduced.txt
 MANIFEST
+META.yml

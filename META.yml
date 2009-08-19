@@ -1,0 +1,94 @@
+---
+name: JSA
+version: 0.02
+author:
+  - 'Tim Jenness <t.jenness@jach.hawaii.edu>'
+  - 'Anubhav Agarwal <a.agarwal@jach.hawaii.edu>'
+  - 'Brad Cavanagh <b.cavanagh@jach.hawaii.edu>'
+abstract: JCMT Science Archive helper functions
+license: gpl
+resources:
+  license: http://opensource.org/licenses/gpl-license.php
+  repository: /jac_sw/gitroot/perl-JSA.git
+build_requires:
+  Test::Command: 0
+  Test::More: 0
+requires:
+  Astro::FITS::HdrTrans: 1
+  Astro::FITS::Header: 3
+  Config::IniFiles: 0
+  DateTime: 0
+  File::Remove: 0
+  File::Temp: 0.2
+  NDF: 0
+  Proc::SafeExec: 0
+  Starlink::Versions: 0
+  Statistics::Descriptive: 0
+  Time::Piece: 0
+  URI: 0
+  perl: v5.8.0
+configure_requires:
+  Module::Build: 0.3306
+provides:
+  JSA::CADC_Copy:
+    file: lib/JSA/CADC_Copy.pm
+  JSA::CADC_DP:
+    file: lib/JSA/CADC_DP.pm
+  JSA::Command:
+    file: lib/JSA/Command.pm
+  JSA::Convert:
+    file: lib/JSA/Convert.pm
+  JSA::EnterData:
+    file: lib/JSA/EnterData.pm
+  JSA::EnterData::ACSIS:
+    file: lib/JSA/EnterData/ACSIS.pm
+  JSA::EnterData::SCUBA2:
+    file: lib/JSA/EnterData/SCUBA2.pm
+  JSA::Error:
+    file: lib/JSA/Error.pm
+    version: 11161
+  JSA::Error::BadArgs:
+    file: lib/JSA/Error.pm
+  JSA::Error::BadEnv:
+    file: lib/JSA/Error.pm
+  JSA::Error::BadExec:
+    file: lib/JSA/Error.pm
+  JSA::Error::BadFITSHeader:
+    file: lib/JSA/Error.pm
+  JSA::Error::BadFile:
+    file: lib/JSA/Error.pm
+  JSA::Error::Conversion:
+    file: lib/JSA/Error.pm
+  JSA::Error::DataRead:
+    file: lib/JSA/Error.pm
+  JSA::Error::DirectoryNotFound:
+    file: lib/JSA/Error.pm
+  JSA::Error::FatalError:
+    file: lib/JSA/Error.pm
+  JSA::Error::Starlink:
+    file: lib/JSA/Error.pm
+  JSA::Files:
+    file: lib/JSA/Files.pm
+  JSA::Headers:
+    file: lib/JSA/Headers.pm
+  JSA::Headers::Starlink:
+    file: lib/JSA/Headers/Starlink.pm
+  JSA::QA:
+    file: lib/JSA/QA.pm
+    version: 1.00
+  JSA::QA::GBS:
+    file: lib/JSA/QA.pm
+  JSA::QA::NGS:
+    file: lib/JSA/QA.pm
+  JSA::QA::Result:
+    file: lib/JSA/QA/Result.pm
+  JSA::QA::SLS:
+    file: lib/JSA/QA.pm
+  JSA::QA::Telescope:
+    file: lib/JSA/QA.pm
+  JSA::Starlink:
+    file: lib/JSA/Starlink.pm
+generated_by: Module::Build version 0.3306
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
