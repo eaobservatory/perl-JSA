@@ -56,6 +56,10 @@ my $build = Module::Build->new
                 'Statistics::Descriptive' => 0,
                 'Time::Piece' => 0,
                 'URI' => 0,
+                'DBD::Sybase' => 0,
+                'Pod::Usage' => 0,
+                'Astro::Coords' => 0,
+                'Image::ExifTool' => 0,
                },
    build_requires => {
                       'Test::More' => 0,
