@@ -372,7 +372,7 @@ sub read_jcmtstate {
     if defined $errstr;
 
   # report if we did not find all that was requested
-  if ($found != @items) {
+  if (@items && $found != @items) {
     throw JSA::Error::FatalError("Requested ".@items." components but only found $found");
   }
 
