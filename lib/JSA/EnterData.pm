@@ -233,6 +233,8 @@ In insert mode, nothing is inserted in "FILES" table.
     return $obj;
   }
 
+}
+
 =item B<instruments>
 
 Returns a list of instrument objects when no arguments given.  Else,
@@ -242,37 +244,33 @@ the list of given instrument objects is accepted for further use.
   $instruments = $enter->instruments;
 
   # Set ACSIS as the only instrument.
-  $enter->instruments( 'ACSIS' );
+  $enter->instruments( JSA::EnterData::ACSIS->new );
 
 =cut
 
-  # It is here to have access to %default, in particular
-  # $default{'instruments'}.
-  sub instruments {
+sub instruments {
 
-    my $self = shift;
+  my $self = shift;
 
-    unless ( scalar @_ ) {
+  unless ( scalar @_ ) {
 
-      my $inst = $self->{'instruments'};
-      return
-        defined $inst ? @{ $inst } : () ;
-    }
-
-    for my $inst ( @_ ) {
-
-      throw JSA::Error "Instrument '$inst' is unknown."
-        unless first { blessed $_ eq blessed $inst }
-                ( JSA::EnterData::ACSIS->new,
-                  JSA::EnterData::SCUBA2->new
-                ) ;
-    }
-
-    $self->{'instruments'} = [ @_ ];
-
-    return;
+    my $inst = $self->{'instruments'};
+    return
+      defined $inst ? @{ $inst } : () ;
   }
 
+  for my $inst ( @_ ) {
+
+    throw JSA::Error "Instrument '$inst' is unknown."
+      unless first { blessed $_ eq blessed $inst }
+              ( JSA::EnterData::ACSIS->new,
+                JSA::EnterData::SCUBA2->new
+              ) ;
+  }
+
+  $self->{'instruments'} = [ @_ ];
+
+  return;
 }
 
 =item B<debug>
