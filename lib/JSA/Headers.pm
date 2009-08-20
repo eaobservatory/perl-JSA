@@ -20,6 +20,7 @@ use strict;
 use warnings;
 use warnings::register;
 
+use Scalar::Util qw/ looks_like_number /;
 use Astro::FITS::CFITSIO;
 use Astro::FITS::HdrTrans;
 use Astro::FITS::Header::NDF;
@@ -34,7 +35,7 @@ use JSA::Files qw/ drfilename_to_cadc /;
 use Exporter 'import';
 our @EXPORT_OK = qw/ read_headers read_header read_wcs get_header_value
                      get_orac_instrument update_fits_product
-                     cadc_ack /;
+                     cadc_ack read_jcmtstate /;
 
 =head1 FUNCTIONS
 
@@ -219,6 +220,163 @@ sub read_wcs {
     $wcs = $header->get_wcs();
   }
   return $wcs;
+}
+
+=item B<read_jcmtstate>
+
+Read the JCMTSTATE information from a raw data file.
+
+  %state = read_jcmtstate( $file, 'start', @items );
+
+Where the second argument can be 'start' or 'end' to indicate
+whether the state values are read first or last entry in
+the file. Additionally, a positive integer can be used to
+specify a particular position in the sequence. The latter
+usage requires that the number of entries in the file
+is known. It can also be a reference to an array indicating
+multiple indices. Finally, an undefined
+value can indicate all entries should be retrieved.
+
+By default all items will be read and returned in a hash
+indexed by component name. If a subset is required then
+the list can be supplied as additional arguments.
+
+If multiple positions are to be read, results will be returned
+as a reference to an array indexed by component name. If only
+one position is requested a simple scalar will be used.
+
+RTS_TASKS is never read by default. It can be read if explicitly
+specified.
+
+=cut
+
+sub read_jcmtstate {
+  my ($file, $upos, @items) = @_;
+
+  # Open up the file, retrieve the JCMTSTATE structure, and store it
+  # in our cache.
+  my $status = &NDF::SAI__OK();
+  err_begin($status);
+
+  hds_open( $file, "READ", my $loc, $status);
+  dat_find( $loc, "MORE", my $mloc, $status);
+  dat_find( $mloc, "JCMTSTATE", my $jloc, $status);
+  dat_annul( $mloc, $status);
+
+  # find out how many time slice there are going to be
+  dat_index( $jloc, 1, my $iloc, $status );
+  dat_size( $iloc, my $size, $status );
+  dat_annul( $iloc, $status );
+
+  # Error string indicating that we had a problem and should clean up
+  my $errstr;
+
+  # work out which position to use. Default to first index
+  my @posns;
+  if ( defined $upos && $status == &NDF::SAI__OK() ) {
+    my @inpos = ( ref($upos) ? @$upos : ($upos) );
+
+    # Loop over all input positions
+    for my $p (@inpos) {
+      $p = lc($p);
+      my $isnum = looks_like_number( $p );
+      # do not need to check if we are only asking for first slice
+      if ( $p eq 'start' ) {
+        push(@posns, 1 );
+      } elsif ( $isnum && $p == 1 ) {
+        push(@posns, 1 );
+      } elsif ($isnum || $p eq 'end' ) {
+        if ($p eq 'end' ) {
+          push(@posns, $size );
+        } elsif ($p > 0 && $p <= $size ) {
+          push(@posns, $p);
+        } else {
+          $errstr = "Requested data from JCMTSTATE slice $p but this is out of range 1 <= $p <= $size";
+        }
+      } else {
+        $errstr = "Error reading JCMTSTATEfrom file $file, position '$p' not recognized";
+      }
+    }
+  }
+
+  # Decide whether we are accessing cells or the full array
+  # Use cell if explicit items have been specified.
+  my $use_cell = ( @posns ? 1 : 0 );
+
+  # Get a hash indicating which items are requested
+  my %items = map { uc($_), undef } @items;
+
+  # find out how many extensions we have
+  dat_ncomp( $jloc, my $ncomp, $status );
+
+  # Somewhere to store the results
+  my %results;
+
+  # Keep a count of how many we retrieved
+  my $found = 0;
+
+  # Loop over each
+  if (!defined $errstr) {
+    for my $i (1..$ncomp) {
+      dat_index( $jloc, $i, my $iloc, $status );
+      dat_name( $iloc, my $name, $status );
+
+      # skip if we are selecting a subset
+      next if (@items && !exists $items{$name});
+
+      # Skip RTS_TASKS unless we are asking for it
+      next if (!@items && $name eq 'RTS_TASKS');
+
+      $found++;
+
+      # Need the type to decide what to call next
+      dat_type( $iloc, my $type, $status );
+
+      my $coderef;
+      if ($type =~ /^_(DOUBLE|REAL)$/) {
+        $coderef = ($use_cell ? \&dat_get0d : \&dat_get1d );
+      } elsif ($type eq '_INTEGER') {
+        $coderef = ($use_cell ? \&dat_get0i : \&dat_get1i );
+      } else {
+        $coderef = ($use_cell ? \&dat_get0c : \&dat_get1c );
+      }
+
+      my @values;
+      if ($use_cell) {
+        for my $c (@posns) {
+          my @cell = ( $c );
+          dat_cell( $iloc, 1, @cell, my $cloc, $status );
+          $coderef->( $cloc, my $val, $status );
+          dat_annul( $cloc, $status );
+          push(@values, $val);
+        }
+      } else {
+        $coderef->( $iloc, $size, \@values, my $el, $status );
+      }
+
+      # store the results
+      $results{$name} = ( @values > 1 ? \@values : $values[0] );
+
+      # free the locator associated with this component
+      dat_annul( $iloc, $status );
+    }
+  }
+  dat_annul($jloc, $status );
+  dat_annul( $loc, $status );
+
+  if ($status != &NDF::SAI__OK()) {
+    $errstr .= &NDF::err_flush_to_string( $status );
+  }
+  err_end($status);
+  throw JSA::Error::FatalError("Error reading JCMTSTATE from file $file: $errstr")
+    if defined $errstr;
+
+  # report if we did not find all that was requested
+  if ($found != @items) {
+    throw JSA::Error::FatalError("Requested ".@items." components but only found $found");
+  }
+
+  return %results;
 }
 
 =item B<update_fits_product>
