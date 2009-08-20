@@ -53,6 +53,7 @@ use Scalar::Util qw[ blessed looks_like_number ];
 
 use Astro::Coords::Angle::Hour;
 
+use JSA::Headers qw/ read_jcmtstate read_wcs /;
 use JSA::EnterData::ACSIS;
 use JSA::EnterData::SCUBA2;
 use JSA::Error qw[ :try ];
@@ -1723,73 +1724,47 @@ frameset...
 
   $wcs = JSA::EnterData->read_ndf( $file );
 
+On error, flushes error to standard error and returns empty list.
+
 =cut
 
 sub read_ndf {
 
   my ( $self, $file, @statekeys ) = @_;
 
-  my $status = &NDF::SAI__OK;
-  my $bad;
+  my $wcs;
+  my $E;
+  try {
+    $wcs = read_wcs( $file );
+  } catch JSA::Error::FatalError with {
+    $E = shift;
+  } otherwise {
+    $E = shift;
+  };
 
-  # begin context and open file
-  err_begin( $status );
-  ndf_begin( );
-  ndf_find( NDF::DAT__ROOT, $file, my $indf, $status);
+  if (defined $E) {
+    print STDERR $E;
+    return ();
+  }
 
-  # read the WCS
-  my $wcs = ndfGtwcs( $indf, $status );
-
-  # Get extension
+  # if we have keys to read and are in list
+  # context, read the state
   my %state;
-  if (@statekeys) {
-
-    ndf_xloc( $indf, "JCMTSTATE", "READ", my $sloc, $status);
-    for my $k (@statekeys) {
-
-      dat_find( $sloc, $k, my $lloc, $status);
-      dat_type( $lloc, my $type, $status);
-      dat_size( $lloc, my $size, $status);
-
-      if ($status == &NDF::SAI__OK) {
-
-        my @values;
-        if ($type =~ /_CHAR/) {
-
-          dat_getvc($lloc, $size, @values, my $el, $status );
-        } elsif ($type =~ /^_[IUBL]/) {
-
-          dat_getvi( $lloc, $size, @values, my $el, $status );
-        } elsif ($type =~ /^_[DR]/) {
-
-          dat_getvd( $lloc, $size, @values, my $el, $status );
-        } else {
-
-          if ($status == &NDF::SAI__OK) {
-
-            $status = &NDF::SAI__ERROR;
-            err_rep( " ", "Error with type $type", $status);
-          }
-        }
-        if ($status == &NDF::SAI__OK) {
-
-          $state{$k} = $values[0]; # first only
-        }
-      }
+  if (@statekeys && wantarray() ) {
+    my %state;
+    try {
+      %state = read_jcmtstate( $file, 'start', @statekeys );
+    } catch JSA::Error::FatalError with {
+      $E = shift;
+    } otherwise {
+      $E = shift;
+    };
+    if (defined $E) {
+      print STDERR $E;
+      return ();
     }
   }
 
-  # tidy up
-  if ($status != &NDF::SAI__OK) {
-
-    err_flush( $status );
-    $bad = 1;
-  }
-
-  err_end( $status );
-  ndf_end($status);
-
-  return () if $bad;
   return wantarray ? ( $wcs, %state ) : $wcs;
 }
 
