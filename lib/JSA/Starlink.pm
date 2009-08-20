@@ -35,7 +35,7 @@ use JSA::Command qw/ run_command /;
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ looks_like_drfile looks_like_cadcfile drfilename_to_cadc dissect_drfile
                    construct_rawfile looks_like_rawfile can_send_to_cadc can_send_to_cadc_guess /;
-use JSA::Headers qw/ read_header /;
+use JSA::Headers qw/ read_header read_wcs /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ check_star_env
@@ -370,22 +370,7 @@ sub set_wcs_attribs {
   check_star_env( "KAPPA", "wcsattrib" );
 
   # Read the WCS from the file to see whether a specframe is present
-  my $status = &NDF::SAI__OK();
-  err_begin($status);
-  ndf_begin();
-
-  # Retrieve the WCS from the NDF.
-  ndf_find(&NDF::DAT__ROOT(), $file, my $indf, $status);
-  my $wcs = ndfGtwcs( $indf, $status );
-  ndf_annul($indf, $status);
-  my $errstr;
-  if ($status != &NDF::SAI__OK()) {
-    $errstr = &NDF::err_flush_to_string( $status );
-  }
-  ndf_end($status);
-  err_end($status);
-  throw JSA::Error::FatalError("Error reading WCS from file $file: $errstr")
-    if defined $errstr;
+  my $wcs = read_wcs( $file );
 
   # See if we have a SpecFrame
   my $template = Starlink::AST::SpecFrame->new( "MaxAxes=7" );

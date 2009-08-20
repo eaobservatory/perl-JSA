@@ -32,7 +32,7 @@ use Starlink::Config qw/ :override /;
 use JSA::Files qw/ drfilename_to_cadc /;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/ read_headers read_header get_header_value
+our @EXPORT_OK = qw/ read_headers read_header read_wcs get_header_value
                      get_orac_instrument update_fits_product
                      cadc_ack /;
 
@@ -183,6 +183,43 @@ sub read_header {
   return $hdr;
 }
 
+=item <read_wcs>
+
+Reads the AST Frameset from a data file. If the file is an NDF the AST
+frameset is read directly, otherwise the header is read and WCS extracted.
+
+  $wcs = read_wcs( $file );
+
+=cut
+
+sub read_wcs {
+  my $f = shift;
+
+  my $wcs;
+  if ($f =~ /\.sdf$/) {
+    my $status = &NDF::SAI__OK();
+    err_begin($status);
+    ndf_begin();
+
+    # Retrieve the WCS from the NDF.
+    ndf_find(&NDF::DAT__ROOT(), $f, my $indf, $status);
+    my $wcs = ndfGtwcs( $indf, $status );
+    ndf_annul($indf, $status);
+    my $errstr;
+    if ($status != &NDF::SAI__OK()) {
+      $errstr = &NDF::err_flush_to_string( $status );
+    }
+    ndf_end($status);
+    err_end($status);
+    throw JSA::Error::FatalError("Error reading WCS from file $f: $errstr")
+      if defined $errstr;
+
+  } else {
+    my $header = read_header($f);
+    $wcs = $header->get_wcs();
+  }
+  return $wcs;
+}
 
 =item B<update_fits_product>
 
@@ -267,7 +304,7 @@ Brad Cavanagh E<lt>b.cavanagh@jach.hawaii.eduE<gt>,
 
 =head1 COPYRIGHT
 
-Copyright (C) 2008 Science and Technology Facilities Council.
+Copyright (C) 2008-2009 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
