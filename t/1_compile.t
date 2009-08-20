@@ -9,7 +9,7 @@ use strict;
 use warnings;
 use Test; # Not really needed since we don't use ok()
 
-use JAC::Setup qw/ omp archiving /;
+use JAC::Setup qw/ omp archiving sybase /;
 
 use File::Find;
 
