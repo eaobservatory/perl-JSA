@@ -3,8 +3,6 @@ package JSA::EnterData::SCUBA2;
 use strict;
 use warnings;
 
-use base 'JSA::EnterData';
-
 =head1 NAME
 
 JSA::EnterData::SCUBA2 - SCUBA2 specific methods.
@@ -49,8 +47,8 @@ sub new {
 
   my ( $class ) = @_;
 
-  my $obj = bless { }, $class;
-  return $obj;
+  my $obj = '';
+  return bless \$obj, $class;
 }
 
 =item B<calc_freq>
@@ -403,8 +401,8 @@ sub groub_by_subarray {
 
 =item B<_fill_headers_obsid_subsys>
 
-Does nothing; overrides the parent class method. Field
-"obsid_subsysnr" is taken care by I<transform_subheader> method.
+Does nothing. Field "obsid_subsysnr" is taken care by
+I<transform_subheader> method.
 
 =cut
 
@@ -456,18 +454,18 @@ sub append_array_column {
 
 =item B<fill_headers_FILES>
 
-Fills in the headers for C<FILES> database table, given a headers
-hash reference and an L<OMP::Info::Obs> object.
+Fills in the headers for C<FILES> database table, given a headers hash
+reference and an L<OMP::Info::Obs> object.
 
   $scuba2->fill_headers_FILES( \%header, $obs );
+
+It needs to be called after L<fill_headers_FILES/JSA::EnterData>.
 
 =cut
 
 sub fill_headers_FILES {
 
-  my ( $self, $header, $obs, $inst ) = @_;
-
-  $self->SUPER::fill_headers_FILES( $header, $obs, $inst );
+  my ( $self, $header, $obs ) = @_;
 
   # Add 'nsubscan' field.
   my $nsub = () = $header->{'NSUBSCAN'};

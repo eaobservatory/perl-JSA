@@ -3,8 +3,6 @@ package JSA::EnterData::ACSIS;
 use strict;
 use warnings;
 
-use base 'JSA::EnterData';
-
 =head1 NAME
 
 JSA::EnterData::ACSIS - ACSIS specific methods.
@@ -49,8 +47,8 @@ sub new {
 
   my ( $class ) = @_;
 
-  my $obj = bless { }, $class;
-  return $obj;
+  my $obj = '';
+  return bless \$obj, $class;
 }
 
 =item B<get_bound_check_command>
@@ -107,6 +105,94 @@ Returns the database table related to the instrument.
 =cut
 
 sub table { return 'ACSIS'; }
+
+
+# Create obsid_subsysnr
+sub _fill_headers_obsid_subsys {
+
+  my ( $self, $header, $obsid ) = @_;
+
+  # Create obsid_subsysnr
+  $header->{'obsid_subsysnr'} = join '_', $obsid,  $header->{'SUBSYSNR'};
+
+  $self->_print_text( sprintf "Created header [obsid_subsysnr] with value [%s]\n",
+                        $header->{'obsid_subsysnr'}
+                    )
+    if $self->debug;
+
+  return;
+}
+
+
+=item B<calc_freq>
+
+Calculate frequency properties, updates given hash reference.
+
+  JSA::EnterData->calc_freq( $obs, $headerref );
+
+It Calculates:
+    zsource, restfreq
+    freq_sig_lower, freq_sig_upper : BARYCENTRIC Frequency GHz
+    freq_img_lower, freq_img_upper : BARYCENTRIC Frequency Image Sideband GHz
+
+=cut
+
+sub calc_freq {
+
+  my ( $self, $obs, $headerref ) = @_;
+
+  # Filenames for a subsystem
+  my @filenames = $obs->filename;
+
+  # need the Frameset
+  my $wcs = $self->read_ndf( $filenames[0] );
+
+  # Change to BARYCENTRIC, GHz
+  $wcs->Set( 'system(1)' => 'FREQ',
+             'unit(1)' => 'GHz',
+             stdofrest => 'BARY' );
+
+  # Rest Frequency
+  $headerref->{restfreq} = $wcs->Get( "restfreq" );
+
+  # Source velocity
+  $wcs->Set( sourcesys => 'redshift' );
+  $headerref->{zsource} = $wcs->Get( "sourcevel" );
+
+  # Upper and lower values require that we know the GRID bounds
+  my @x = (1, $headerref->{NCHNSUBS});
+
+  # need some dummy data for axis 2 and 3 (or else some code to split the
+  # specFrame)
+  my @y = (1,1);
+  my @z = (1,1);
+
+  my @observed = $wcs->TranP( 1, \@x, \@y, \@z );
+
+  # now need to switch to image sideband (if possible) (some buggy data is not
+  # setup as a DSBSpecFrame)
+  my @image;
+  eval {
+    my $sb = uc($wcs->Get("SideBand"));
+    $wcs->Set( 'SideBand' => ($sb eq 'LSB' ? 'USB' : 'LSB' ) );
+
+    @image = $wcs->TranP( 1, \@x, \@y, \@z );
+  };
+
+  # need to sort the numbers
+  my @freq = sort { $a <=> $b } @{ $observed[0] };
+  $headerref->{freq_sig_lower} = $freq[0];
+  $headerref->{freq_sig_upper} = $freq[1];
+
+  if (@image && @{$image[0]}) {
+
+    @freq = sort { $a <=> $b } @{ $image[0] };
+    $headerref->{freq_img_lower} = $freq[0];
+    $headerref->{freq_img_upper} = $freq[1];
+  }
+
+  return;
+}
 
 
 1;

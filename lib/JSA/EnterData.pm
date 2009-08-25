@@ -76,7 +76,9 @@ BEGIN {
 
   # Make sure that bad status from SMURF triggers bad exit status
   $ENV{ADAM_EXIT} = 1;
+}
 
+{
   my %default =
     (
       'date'               => undef,
@@ -831,7 +833,7 @@ sub add_subsys_obs {
     # Need to calculate the frequency information
     $inst->calc_freq( $subsys_obs, $subsys_hdrs );
 
-    $inst->fill_headers( $subsys_hdrs, $subsys_obs );
+    $self->fill_headers( $subsys_hdrs, $subsys_obs );
 
     my @edited =
       $inst->can( 'transform_header' )
@@ -866,7 +868,7 @@ sub add_subsys_obs {
         $added_files++;
 
         # Create headers that don't exist
-        $inst->fill_headers_FILES( $subh, $subsys_obs, $inst );
+        $inst->fill_headers_FILES( $self, $subh, $subsys_obs );
 
         my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subh );
 
@@ -1327,16 +1329,17 @@ sub fill_headers_COMMON {
 
 =item B<fill_headers_FILES>
 
-Fills in the headers for C<FILES> database table, given a headers
-hash reference and an L<OMP::Info::Obs> object.
+Fills in the headers for C<FILES> database table, given a
+L<JSA::EnterData::ACSIS> or L<JSA::EnterData::SCUBA2> object, a
+headers hash reference and an L<OMP::Info::Obs> object.
 
-  $enter->fill_headers_FILES( \%header, $obs );
+  $enter->fill_headers_FILES( $inst, \%header, $obs );
 
 =cut
 
 sub fill_headers_FILES {
 
-  my ( $self, $header, $obs, $inst ) = @_;
+  my ( $self, $inst, $header, $obs ) = @_;
 
   my $obsid = $obs->obsid;
 
@@ -1367,21 +1370,13 @@ sub fill_headers_FILES {
                     )
     if $self->debug;
 
-  return $inst->_fill_headers_obsid_subsys( $header, $obsid );
-}
+  $inst->_fill_headers_obsid_subsys( $header, $obsid );
 
-# Create obsid_subsysnr
-sub _fill_headers_obsid_subsys {
+  # Further work needs to be done for SCUBA2.
+  if ( my $fill = $inst->can( 'fill_headers_FILES' ) ) {
 
-  my ( $self, $header, $obsid ) = @_;
-
-  # Create obsid_subsysnr
-  $header->{'obsid_subsysnr'} = join '_', $obsid,  $header->{'SUBSYSNR'};
-
-  $self->_print_text( sprintf "Created header [obsid_subsysnr] with value [%s]\n",
-                        $header->{'obsid_subsysnr'}
-                    )
-    if $self->debug;
+    $inst->$fill( $header, $obs );
+  }
 
   return;
 }
@@ -1636,76 +1631,6 @@ sub calc_radec {
   $headerref->{obsdec} = $result{REFLAT};
 
   return 1;
-}
-
-=item B<calc_freq>
-
-Calculate frequency properties, updates given hash reference.
-
-  JSA::EnterData->calc_freq( $obs, $headerref );
-
-It Calculates:
-    zsource, restfreq
-    freq_sig_lower, freq_sig_upper : BARYCENTRIC Frequency GHz
-    freq_img_lower, freq_img_upper : BARYCENTRIC Frequency Image Sideband GHz
-
-=cut
-
-sub calc_freq {
-
-  my ( $self, $obs, $headerref ) = @_;
-
-  # Filenames for a subsystem
-  my @filenames = $obs->filename;
-
-  # need the Frameset
-  my $wcs = $self->read_ndf( $filenames[0] );
-
-  # Change to BARYCENTRIC, GHz
-  $wcs->Set( 'system(1)' => 'FREQ',
-             'unit(1)' => 'GHz',
-             stdofrest => 'BARY' );
-
-  # Rest Frequency
-  $headerref->{restfreq} = $wcs->Get( "restfreq" );
-
-  # Source velocity
-  $wcs->Set( sourcesys => 'redshift' );
-  $headerref->{zsource} = $wcs->Get( "sourcevel" );
-
-  # Upper and lower values require that we know the GRID bounds
-  my @x = (1, $headerref->{NCHNSUBS});
-
-  # need some dummy data for axis 2 and 3 (or else some code to split the
-  # specFrame)
-  my @y = (1,1);
-  my @z = (1,1);
-
-  my @observed = $wcs->TranP( 1, \@x, \@y, \@z );
-
-  # now need to switch to image sideband (if possible) (some buggy data is not
-  # setup as a DSBSpecFrame)
-  my @image;
-  eval {
-    my $sb = uc($wcs->Get("SideBand"));
-    $wcs->Set( 'SideBand' => ($sb eq 'LSB' ? 'USB' : 'LSB' ) );
-
-    @image = $wcs->TranP( 1, \@x, \@y, \@z );
-  };
-
-  # need to sort the numbers
-  my @freq = sort { $a <=> $b } @{ $observed[0] };
-  $headerref->{freq_sig_lower} = $freq[0];
-  $headerref->{freq_sig_upper} = $freq[1];
-
-  if (@image && @{$image[0]}) {
-
-    @freq = sort { $a <=> $b } @{ $image[0] };
-    $headerref->{freq_img_lower} = $freq[0];
-    $headerref->{freq_img_upper} = $freq[1];
-  }
-
-  return;
 }
 
 =item B<read_ndf>
