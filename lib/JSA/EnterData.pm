@@ -1756,7 +1756,7 @@ sub _update_or_insert {
   }
   else {
 
-    $vals = $args{'instrument'}->prepare_insert_hash( $args{'table'}, $vals );
+    $vals = $self->prepare_insert_hash( $args{'table'}, $vals );
     $ok = $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
   }
 
