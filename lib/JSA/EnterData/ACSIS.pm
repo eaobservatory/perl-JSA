@@ -3,6 +3,8 @@ package JSA::EnterData::ACSIS;
 use strict;
 use warnings;
 
+use base 'JSA::EnterData::Instrument';
+
 =head1 NAME
 
 JSA::EnterData::ACSIS - ACSIS specific methods.
@@ -45,10 +47,10 @@ Currently, no extra arguments are handled.
 
 sub new {
 
-  my ( $class ) = @_;
+  my ( $class, %args ) = @_;
 
-  my $obj = '';
-  return bless \$obj, $class;
+  my $obj = $class->SUPER::new( %args ) ;
+  return bless $obj, $class;
 }
 
 =item B<get_bound_check_command>
@@ -139,13 +141,13 @@ It Calculates:
 
 sub calc_freq {
 
-  my ( $self, $obs, $headerref ) = @_;
+  my ( $self, $enter, $obs, $headerref ) = @_;
 
   # Filenames for a subsystem
   my @filenames = $obs->filename;
 
   # need the Frameset
-  my $wcs = $self->read_ndf( $filenames[0] );
+  my $wcs = $enter->read_ndf( $filenames[0] );
 
   # Change to BARYCENTRIC, GHz
   $wcs->Set( 'system(1)' => 'FREQ',

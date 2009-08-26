@@ -3,6 +3,8 @@ package JSA::EnterData::SCUBA2;
 use strict;
 use warnings;
 
+use base 'JSA::EnterData::Instrument';
+
 =head1 NAME
 
 JSA::EnterData::SCUBA2 - SCUBA2 specific methods.
@@ -45,10 +47,10 @@ Currently, no extra arguments are handled.
 
 sub new {
 
-  my ( $class ) = @_;
+  my ( $class, %args ) = @_;
 
-  my $obj = '';
-  return bless \$obj, $class;
+  my $obj = $class->SUPER::new( %args ) ;
+  return bless $obj, $class;
 }
 
 =item B<calc_freq>
