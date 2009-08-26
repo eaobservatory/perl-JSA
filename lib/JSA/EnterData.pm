@@ -1749,7 +1749,7 @@ sub read_ndf {
   # context, read the state
   my %state;
   if (@statekeys && wantarray() ) {
-    my %state;
+
     try {
       %state = read_jcmtstate( $file, 'start', @statekeys );
     } catch JSA::Error::FatalError with {
