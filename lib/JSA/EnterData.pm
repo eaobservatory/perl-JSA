@@ -831,7 +831,7 @@ sub add_subsys_obs {
     my $subsys_hdrs = { %{ $subsys_obs->hdrhash } };
 
     # Need to calculate the frequency information
-    $inst->calc_freq( $subsys_obs, $subsys_hdrs );
+    $inst->calc_freq( $self, $subsys_obs, $subsys_hdrs );
 
     $self->fill_headers( $subsys_hdrs, $subsys_obs );
 
@@ -868,7 +868,7 @@ sub add_subsys_obs {
         $added_files++;
 
         # Create headers that don't exist
-        $inst->fill_headers_FILES( $self, $subh, $subsys_obs );
+        $self->fill_headers_FILES( $inst, $subh, $subsys_obs );
 
         my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subh );
 
