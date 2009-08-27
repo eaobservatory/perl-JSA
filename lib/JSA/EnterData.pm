@@ -58,6 +58,7 @@ use JSA::EnterData::ACSIS;
 use JSA::EnterData::SCUBA2;
 use JSA::Error qw[ :try ];
 use JSA::Files qw[ looks_like_rawfile ];
+use JSA::Starlink qw[ run_star_command ];
 use JCMT::DataVerify;
 
 use OMP::DBbackend::Archive;
@@ -1569,7 +1570,8 @@ sub calc_radec {
   $pa *= -1 if defined $pa;
 
   my @command = $inst->get_bound_check_command( $fh, $pa );
-  my $systat = system( @command );
+  my ( undef, undef, $systat ) =
+    run_star_command( $command[0], @command[ 1 .. $#command ] );
 
   if ($systat == 256) {
 
