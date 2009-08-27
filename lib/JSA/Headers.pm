@@ -204,7 +204,7 @@ sub read_wcs {
 
     # Retrieve the WCS from the NDF.
     ndf_find(&NDF::DAT__ROOT(), $f, my $indf, $status);
-    my $wcs = ndfGtwcs( $indf, $status );
+    $wcs = ndfGtwcs( $indf, $status );
     ndf_annul($indf, $status);
     my $errstr;
     if ($status != &NDF::SAI__OK()) {
