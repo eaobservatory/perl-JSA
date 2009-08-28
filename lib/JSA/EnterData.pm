@@ -233,6 +233,11 @@ In insert mode, nothing is inserted in "FILES" table.
       $obj->$sub( $obj->$sub );
     }
 
+    if ( $obj->debug ) {
+
+      $_->debug( 1 ) for $obj->instruments;
+    }
+
     return $obj;
   }
 
