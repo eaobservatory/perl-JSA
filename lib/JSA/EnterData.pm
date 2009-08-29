@@ -66,8 +66,7 @@ use OMP::Info::ObsGroup;
 use OMP::General;
 
 use DateTime;
-use Time::Piece;
-use Time::Seconds;
+use DateTime::Format::ISO8601;
 
 use NDF;
 
@@ -297,9 +296,9 @@ Returns the set date if no arguments given.
 
   $date = $enter->date;
 
-Else, sets the date to date given in C<yyyymmdd> format; returns
-nothing.  If date does not match the format, then current date in
-local timezone is used.
+Else, sets the date to date given as L<DateTime> object or as a string
+in C<yyyymmdd> format; returns nothing.  If date does not match
+expected type, then current date in local timezone is used.
 
   $enter->date( '20251013' );
 
@@ -311,12 +310,21 @@ sub date {
 
   return $self->{'date'} unless scalar @_;
 
-  my $date = shift || localtime;
+  my $date = shift;
 
-  $self->{'date'} =
-    ref $date && $date->isa( 'Time::Piece' )
-      ? $date
-      : Time::Piece->strptime( $date, '%Y%m%d' ) ;
+  if ( ! $date
+      || ( ! ref $date && $date !~ /^\d{8}$/ )
+      || ( ref $date && ! $date->isa( 'DateTime' ) )
+     ) {
+
+    $date = DateTime->now( 'time_zone' => '-1200' ) ;
+  }
+  elsif ( ! ref $date ) {
+
+    $date = DateTime::Format::ISO8601->parse_datetime( $date );
+  }
+
+  $self->{'date'} = $date;
 
   return;
 }
@@ -1217,7 +1225,7 @@ sub transform_value {
         # $self->_print_text( "$column <---- ----> [$val]\n" );
 
         # Convert date to sybase compatible
-        my $date = Time::Piece->strptime($val,'%Y-%m-%dT%H:%M:%S');
+        my $date = DateTime::Format::ISO8601->parse_datetime( $val );
         $values->{$column} = $date->strftime($self->sybase_date_format);
 
         $self->_print_text( sprintf "Converted date [%s] to [%s] for column [%s]\n",
