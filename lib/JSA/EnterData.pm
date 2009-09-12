@@ -1220,19 +1220,20 @@ sub transform_value {
       # Column is defined for this table, get the data type
       my $data_type = $columns->{$table}{$column};
 
-      if ($data_type eq 'datetime' and $val =~ /T/) {
+      if ( $data_type eq 'datetime' ) {
 
-        # $self->_print_text( "$column <---- ----> [$val]\n" );
+        # Temporarily (needs to be handled at the header source) set a
+        # zero date (0000-00-00T00:00:00) to undef.
+        ( my $non_zero = $val ) =~ tr/0T :-//d;
+        unless ( $non_zero ) {
 
-        # Convert date to sybase compatible
-        my $date = DateTime::Format::ISO8601->parse_datetime( $val );
-        $values->{$column} = $date->strftime($self->sybase_date_format);
+          undef $values->{$column} ;
 
-        $self->_print_text( sprintf "Converted date [%s] to [%s] for column [%s]\n",
-                              $val, $values->{$column}, $column
-                          )
-          if $self->debug;
-
+          $self->_print_text( sprintf "Converted date [%s] to [undef] for column [%s]\n",
+                              $val, $column
+                            )
+            if $self->debug;
+        }
       } elsif (exists $transform_data{$data_type}) {
 
         if (exists $transform_data{$data_type}{$val}) {
