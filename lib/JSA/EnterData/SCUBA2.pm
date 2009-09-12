@@ -91,6 +91,7 @@ sub get_bound_check_command {
       'pixsize=1',
       'msg_filter=quiet',
       ( defined $pos_angle ? "crota=$pos_angle" : () ),
+      'method=REBIN',
       'reset'
     );
 }
