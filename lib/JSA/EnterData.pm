@@ -668,6 +668,15 @@ It is called by I<prepare_and_insert> method.
 
       $touched{ $_ } = undef for @base;
 
+      if ( $inst->can( 'transform_header' ) ) {
+
+        for my $sub_ob ( @sub_obs ) {
+
+          my ( $hash , $array ) = $inst->transform_header( $sub_ob->hdrhash );
+          $sub_ob->hdrhash( $hash );
+        }
+      }
+
       my $common_obs = $obs->{$runnr}->[0];
 
       # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
@@ -879,15 +888,16 @@ sub add_subsys_obs {
 
     $self->fill_headers( $subsys_hdrs, $subsys_obs );
 
-    my @edited =
-      $inst->can( 'transform_header' )
-      ? $inst->transform_header( $subsys_hdrs )
-      : ( $subsys_hdrs )
-      ;
+    my @subh = ( $subsys_hdrs );
+
+    if ( $inst->can( 'transform_header' ) ) {
+
+      my ( $hash , $array ) = $inst->transform_header( $subsys_hdrs );
+      @subh = @{ $array };
+    }
 
     my $added_files;
-
-    for my $subh ( @edited ) {
+    for my $subh ( @subh ) {
 
       $inst->_fill_headers_obsid_subsys( $subh, $subsys_obs->obsid );
 
