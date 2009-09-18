@@ -162,6 +162,8 @@ I<transform_subheader> method).
 
     my ( $self, $header ) = @_;
 
+    $self->append_array_column( $header );
+
     my @fields = keys %{ $header };
 
     my $header_val =
@@ -170,9 +172,16 @@ I<transform_subheader> method).
         return ( map { /$filter/ ? $header->{ $_ } : () } @fields )[0];
       };
 
+    my $header_obsidss = $header_val->( $obsidss_re );
+
     my $subh = $header->{'SUBHEADERS'};
 
-    $self->transform_subheader( $subh, $header_val->( $obsidss_re ) );
+    for my $s ( @{ $subh } ) {
+
+      $self->append_array_column( $s );
+
+      $s->{'obsid_subsysnr'} ||= $s->{'OBSIDSS'} || $header_obsidss;
+    }
 
     my %new;
     for my $k ( @fields ) {
@@ -208,20 +217,20 @@ obsidss value is used if not found in a subheader.
 
 =cut
 
-sub transform_subheader {
-
-  my ( $self, $subheaders, $header_obsidss ) = @_;
-
-  for my $subh ( @{ $subheaders } ) {
-
-    # Prefix _[a-d] after some of the keys to match column names.
-    $self->append_array_column( $subh );
-
-    $subh->{'obsid_subsysnr'} ||= $subh->{'OBSIDSS'} || $header_obsidss;
-  }
-
-  return;
-}
+#sub transform_subheader {
+#
+#  my ( $self, $subheaders, $header_obsidss ) = @_;
+#
+#  for my $subh ( @{ $subheaders } ) {
+#
+#    # Prefix _[a-d] after some of the keys to match column names.
+#    $self->append_array_column( $subh );
+#
+#    $subh->{'obsid_subsysnr'} ||= $subh->{'OBSIDSS'} || $header_obsidss;
+#  }
+#
+#  return;
+#}
 
 BEGIN {
 
