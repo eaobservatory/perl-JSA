@@ -263,6 +263,13 @@ if (exists $ENV{TMPDIR}) {
   }
 }
 
+print "Environment variables:\n";
+for my $env_variable ( sort qw/ PERL5LIB STARLINK_DIR ORAC_DIR PATH / ) {
+  print "$env_variable: " . ( defined( $ENV{$env_variable} ) ?
+                              $ENV{$env_variable}            :
+                              "undef" ) . "\n";
+}
+
 # in grid engine mode we always use tmpdir mode
 $tmpdir = 1 if $in_grid_engine;
 
