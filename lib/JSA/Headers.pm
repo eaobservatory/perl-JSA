@@ -184,7 +184,7 @@ sub read_header {
   return $hdr;
 }
 
-=item <read_wcs>
+=item B<read_wcs>
 
 Reads the AST Frameset from a data file. If the file is an NDF the AST
 frameset is read directly, otherwise the header is read and WCS extracted.
