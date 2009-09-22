@@ -316,8 +316,9 @@ sub read_jcmtstate {
   my $found = 0;
 
   # Loop over each
-  if (!defined $errstr) {
+  if ($status == &NDF::SAI__OK && !defined $errstr) {
     for my $i (1..$ncomp) {
+      last if $status != &NDF::SAI__OK;
       dat_index( $jloc, $i, my $iloc, $status );
       dat_name( $iloc, my $name, $status );
 
