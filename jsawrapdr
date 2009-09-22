@@ -595,7 +595,7 @@ if( defined( $transdir ) ) {
 log_message( "\n*** calling dpCapture --id=$id " . ( join " ", @args ) . "\n" );
 
 
-my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", "--archive=TEST", @args);
+my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", "--archive=JCMT", @args);
 
 if ($cleanup ne 'none') {
   # Clean up the output directory.
