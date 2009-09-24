@@ -201,7 +201,7 @@ I<transform_subheader> method).
       push @new, { %{ $grouped->{ $sa } } , %new };
     }
 
-    return ( @new );
+    return ( \%new , \@new );
   }
 }
 
