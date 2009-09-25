@@ -597,6 +597,17 @@ sub find_start_dates {
   }
 }
 
+sub at_cadc {
+  my $ut = shift;
+
+  return if $ut !~ /^\d{8}$/;
+
+  my @uploaded = `/home/cadcops/bin/jcmtInfo a$ut%`;
+  my %at_cadc = map { chomp( $_ ); $_ => undef } @uploaded;
+
+  return \%at_cadc;
+}
+
 1;
 
 =pod
@@ -1068,6 +1079,16 @@ Sets the directory to the given argument, returns nothing.
 
   $copy->verbose( 2 );
 
+=item B<at_cadc>
+
+Return a list of files uploaded to CADC for a specific UT date.
+
+  my $at_cadc = at_cadc( $ut );
+
+The UT date must be in YYYYMMDD format. This function returns a hash
+reference, with keys being the files at CADC. If the UT date is in an
+incorrect format, this method returns undef. If no files are returned,
+this method returns an empty hash reference.
 
 =back
 

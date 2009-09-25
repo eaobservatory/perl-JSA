@@ -23,6 +23,7 @@ use strict;
 use Carp;
 use DBD::Sybase;
 use Math::BigInt;
+use JSA::Error;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ connect_to_cadcdp disconnect_from_cadcdp
@@ -58,7 +59,7 @@ sub connect_to_cadcdp {
                             AutoCommit => 0,
                           } ) or &cadc_dberror;
   if (!$dbh) {
-    die "ERROR could not connect to database as $DBUSER\n";
+    throw JSA::Error::CADCDB( "Could not connect to database as $DBUSER" );
   }
 
   return $dbh;
@@ -79,16 +80,20 @@ sub disconnect_from_cadcdp {
 
 sub cadc_dberror {
   my ( $msg ) = @_;
-  die "ERROR: DB Problem: $DBI::errstr";
+  throw JSA::Error::CADCDB( "DB Problem: $DBI::errstr" );
 }
 
 =item B<create_recipe_instance>
 
 Add a list of requests for processing.
 
-  create_recipe_instance( $dbh, \@members );
+  $recipe_id = create_recipe_instance( $dbh, \@members );
 
-This function takes two parameters: the first being the database handle as returned from connect_to_cadcdp, and the second being an array reference pointing to an array of URIs to be processed.
+This function takes two parameters: the first being the database
+handle as returned from connect_to_cadcdp, and the second being an
+array reference pointing to an array of URIs to be processed.
+
+This function returns the recipe instance ID on success, or undef for failure.
 
 =cut
 
@@ -118,7 +123,8 @@ ENDRECIPEID
   while ( $sth->fetch ) {}
   $sth->finish;
 
-  croak "Cannot retrieve good recipe_id from dp_recipe" unless $dp_recipe_id;
+  throw JSA::Error::CADCDB( "Cannot retrieve good recipe_id from dp_recipe" )
+    unless $dp_recipe_id;
 
   ###############################################
   # Use the maximum current value of recipe_instance_id in
@@ -126,8 +132,9 @@ ENDRECIPEID
   ###############################################
 
   $sql = <<ENDNEWID;
-select isnull(max(recipe_instance_id),0)
+select recipe_instance_id
    from dp_recipe_instance
+   order by recipe_instance_id asc
 ENDNEWID
   print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
 
@@ -163,6 +170,7 @@ insert into dp_recipe_instance
    values
    ( $dp_recipe_instance_id, 0x$dp_recipe_id, " " )
 ENDRECIPE
+  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
   insertWithRollback( $dbh, $sql);
 
   ###############################################
@@ -183,17 +191,20 @@ ENDMEMBER
   }
 
   $dbh->commit;
+
+  return $dp_recipe_instance_id;
+
 }
 
 sub queryValue {
   my ( $dbh, $sql ) = @_;
 
-  my $sth = $dbh->prepare( $sql ) or &dbError;
-  $sth->execute or &dbError;
+  my $sth = $dbh->prepare( $sql ) or &cadc_dberror;
+  $sth->execute or &cadc_dberror;
 
   my $value;
   $sth->bind_columns( \$value );
-  while ( $sth->fetch ) {}
+  while ( $sth->fetch ) { }
   $sth->finish;
 
   return $value
@@ -206,13 +217,13 @@ sub insertWithRollback {
   if (!$sth) {
     my $err = $DBI::errstr;
     $dbh->rollback;
-    croak "ERROR: DB Problem: $err";
+    throw JSA::Error::CADCDB( $err );
   }
 
   if (!$sth->execute) {
     my $err = $DBI::errstr;
     $dbh->rollback;
-    croak "ERROR: DB Problem: $err";
+    throw JSA::Error::CADCDB( $err );
   }
 }
 

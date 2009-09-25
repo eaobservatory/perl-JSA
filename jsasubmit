@@ -18,8 +18,10 @@ use JAC::Setup qw/ omp oracdr sybase /;
 use strict;
 use warnings;
 
+use JSA::CADC_Copy;
 use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
                      create_recipe_instance /;
+use JSA::Error qw/ :try /;
 use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
 
@@ -32,6 +34,7 @@ use Getopt::Long;
 use Pod::Usage;
 
 my $telescope = 'JCMT';
+my $base_url = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
 
 # Don't fall back to files.
 $OMP::ArchiveDB::FallbackToFiles = 0;
@@ -57,6 +60,9 @@ if( $version ) {
 if( ! defined $ut ) {
   die "Must include -ut parameter";
 }
+
+# Retrieve list of files at CADC for this UT date.
+my $atCADC = &JSA::CADC_Copy::at_cadc( $ut );
 
 my $grp = new OMP::Info::ObsGroup( telescope => $telescope,
                                    date => $ut,
@@ -143,8 +149,42 @@ foreach my $obs ( $grp->obs ) {
 
 my $dbh = connect_to_cadcdp;
 foreach my $group ( keys %group ) {
+  print "Requesting CADC processing of the following files:\n";
+  print map { "$_\n" } @{$group{$group}};
   my @members = map { file_to_uri( $_ ) } @{$group{$group}};
-  create_recipe_instance( $dbh, \@members );
+
+  print "Checking to ensure files are at CADC...";
+  my $there = 1;
+  foreach my $file ( @{$group{$group}} ) {
+    $file =~ s/\.sdf$//;
+    if( ! exists( $atCADC->{$file} ) ) {
+      $there = 0;
+    }
+  }
+  if( ! $there ) {
+    print "nope. Skipping to next group.\n";
+    next;
+  }
+  print "yep.\n";
+
+  # Submit the job.
+  my $recipe_id;
+  try {
+    $recipe_id = create_recipe_instance( $dbh, \@members );
+  }
+  catch JSA::Error::CADCDB with {
+    my $Error = shift;
+    print "Error in CADC DB connectivity: $Error";
+    print "Skipping to next group.\n";
+  }
+  otherwise {
+    my $Error = shift;
+    $Error->throw;
+  };
+  exit if ! defined $recipe_id;
+  print "Request submitted with recipe instance $recipe_id.\n";
+  print "Recipe URL: $base_url" . hex($recipe_id) . "\n";
+  print "\n";
 }
 
 disconnect_from_cadcdp( $dbh );

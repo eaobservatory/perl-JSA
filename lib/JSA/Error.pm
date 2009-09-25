@@ -208,6 +208,10 @@ File name does not match support format.
 
 A missing or unsupported value in a FITS header.
 
+=item B<JSA::Error::CADCDB>
+
+Errors involving CADC database connectivity.
+
 =item B<JSA::Error::Conversion>
 
 Error converting FITS to NDF or vice versa.
@@ -295,6 +299,9 @@ package JSA::Error::BadFile;
 use base qw/ JSA::Error /;
 
 package JSA::Error::BadFITSHeader;
+use base qw/ JSA::Error /;
+
+package JSA::Error::CADCDB;
 use base qw/ JSA::Error /;
 
 package JSA::Error::Conversion;
