@@ -26,7 +26,7 @@ my $tmpdir = File::Temp->newdir();
 # we need to make sure that ORAC_DATA_IN is set
 $ENV{ORAC_DATA_IN} = File::Spec->rel2abs("testdata");
 
-$test_run = Test::Command->new( cmd => qq/ $^X -Mblib $com_path --outdir $tmpdir $inputs / );
+$test_run = Test::Command->new( cmd => qq/ $^X -Mblib $com_path --outdir $tmpdir --inputs $inputs / );
 isa_ok( $test_run, "Test::Command" );
 $test_run->exit_is_num( 0, "Exit status from copy" );
 
