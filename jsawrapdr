@@ -260,11 +260,14 @@ if (exists $ENV{TMPDIR}) {
        && exists $ENV{CADC_LOG_DIR}) {
       $ENV{ORAC_LOGDIR} = $ENV{CADC_LOG_DIR};
     }
+
+    # Force the number of threads to 8.
+    $ENV{'SMURF_THREADS'} = 8;
   }
 }
 
 print "Environment variables:\n";
-for my $env_variable ( sort qw/ PERL5LIB STARLINK_DIR ORAC_DIR PATH / ) {
+for my $env_variable ( sort qw/ PERL5LIB STARLINK_DIR SMURF_THREADS ORAC_DIR PATH / ) {
   print "$env_variable: " . ( defined( $ENV{$env_variable} ) ?
                               $ENV{$env_variable}            :
                               "undef" ) . "\n";
