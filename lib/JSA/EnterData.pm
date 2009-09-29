@@ -61,6 +61,7 @@ use JSA::Files qw[ looks_like_rawfile ];
 use JSA::Starlink qw[ run_star_command ];
 use JCMT::DataVerify;
 
+use OMP::ArchiveDB;
 use OMP::DBbackend::Archive;
 use OMP::Info::ObsGroup;
 use OMP::General;
@@ -759,19 +760,33 @@ sub _get_obs_group {
               'retainhdr' => 1,
             );
 
-  %args =
-    ! $self->files_given
-    ? ( 'date' => $args{'date'} ,
-        'instrument' => $args{'name'},
-        %obs
-      )
-    : ( 'obs' =>
-          [ map
-              { OMP::Info::Obs->readfile( $_ , %obs ); }
-              @{ $files }
-          ]
-      )
-    ;
+    unless ( $self->files_given ) {
+
+      %args =
+        ( 'date' => $args{'date'} ,
+          'instrument' => $args{'name'},
+          %obs
+        );
+    }
+    else {
+
+      my @obs =
+        map { OMP::Info::Obs->readfile( $_ , %obs ) } @{ $files } ;
+
+      my @headers;
+      for my $ob ( @obs ) {
+
+        push @headers,
+          { 'filename' => $ob->{'FILENAME'}->[0],
+            'header' => $ob->hdrhash,
+          }
+      }
+
+      my %merged = OMP::ArchiveDB->_merge_dupes( @headers );
+      @obs = OMP::ArchiveDB->_hdrs_to_obs( $obs{'retainhdr'} , %merged );
+
+      %args =  ( 'obs' => [ @obs ] );
+    }
 
   return
     OMP::Info::ObsGroup->new( %args );
