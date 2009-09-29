@@ -1354,6 +1354,11 @@ sub fill_headers_COMMON {
                     )
     if $self->debug;
 
+  if ( exists $header->{'INSTRUME'} && ! defined $header->{'BACKEND'} ) {
+
+    $header->{'BACKEND'} = $header->{'INSTRUME'};
+  }
+
   return;
 }
 
