@@ -116,6 +116,9 @@ BEGIN {
       # with the database, but don't actually do any inserts, and be
       # very verbose.
       'debug' => 0,
+
+      # Force procssing of simulation if true.
+      'process-simulation' => 0,
     );
 
   #  Generate some accessor functions.
@@ -498,6 +501,18 @@ sub files_given {
   return  !! ( $files && scalar @{ $files } );
 }
 
+=item B<process_simulation>
+
+Returns the set truth value to indicate whether simulation processing
+is forced, if no arguments given.
+
+  $skip_sim = ! $enter->process_simulation;
+
+Else, sets the truth value to turn on or off simulation processing;
+returns nothing.
+
+  $enter->process_simulation( 1 );
+
 =item B<prepare_and_insert>
 
 Inserts observation in database retrieved from disk (see also
@@ -663,7 +678,7 @@ It is called by I<prepare_and_insert> method.
 
       $self->_print_text( sprintf "\t[%s]... ", join ', ', @base );
 
-      if ( $common_hdrs->{SIMULATE} ) {
+      if ( ! $self->process_simulation && $common_hdrs->{SIMULATE} ) {
 
         $self->_print_text( "simulation data. Skipping\n" );
         next RUN;
