@@ -64,9 +64,13 @@ BEGIN {
 
   sub instrument_list {
 
-    my ( $class ) = @_;
+    my ( $class ) = shift @_;
 
-    return @inst;
+    return @inst
+      unless scalar @_;
+
+    @inst = @_;
+    return;
   }
 
   # Make instrument_root(), instrument_ok_regex(), instrument_path_regex
