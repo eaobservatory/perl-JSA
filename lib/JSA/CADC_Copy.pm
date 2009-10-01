@@ -33,9 +33,11 @@ BEGIN {
 
       'SCUBA2' =>
         {
-          'ok-regex' => undef,
-          'root' => undef,
-        }
+          'ok-regex' => qr/^ s[48][a-d] \d{8} _ (\d{5}) [.]ok $/x,
+          'root' =>
+            #'/jcmtdata/raw/scuba2/ok/eng/',
+            '/jcmtdata/raw/scuba2',
+        },
     );
 
   $inst{'ACSIS'}->{'path-regex'} =
