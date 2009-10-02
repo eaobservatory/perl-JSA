@@ -86,12 +86,19 @@ if( scalar( @{$grp->obs} ) == 0 ) {
   my %frameclassloaded;
 
   foreach my $obs ( $grp->obs ) {
-    next if $obs->isGenCal;
+
+    my $hdr = $obs->hdrhash;
+
+    # We only want to process science observations, so skip if the
+    # OBS_TYPE header is not 'science'.
+    if( ( defined( $hdr->{'OBS_TYPE'} ) &&
+          $hdr->{'OBS_TYPE'} ne 'science' ) ||
+        ! defined( $hdr->{'OBS_TYPE'} ) ) {
+      next;
+    }
 
     # Check to see if we have OBSRA and OBSDEC. If they're defined,
     # the tracking system is J2000. Otherwise it's APP.
-    my $hdr = $obs->hdrhash;
-
     if( ! defined( $hdr->{'TRACKSYS'} ) ) {
       if( defined( $hdr->{'OBSRA'} ) &&
           defined( $hdr->{'OBSDEC'} ) ) {
