@@ -118,7 +118,7 @@ BEGIN {
       'debug' => 0,
 
       # Force procssing of simulation if true.
-      'process-simulation' => 0,
+      'process_simulation' => 0,
     );
 
   #  Generate some accessor functions.
