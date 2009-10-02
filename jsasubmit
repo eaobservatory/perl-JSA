@@ -61,6 +61,8 @@ if( ! defined $ut ) {
   die "Must include -ut parameter";
 }
 
+print "Running jsasubmit for $ut for $telescope.\n";
+
 # Retrieve list of files at CADC for this UT date.
 my $atCADC = &JSA::CADC_Copy::at_cadc( $ut );
 
@@ -68,6 +70,10 @@ my $grp = new OMP::Info::ObsGroup( telescope => $telescope,
                                    date => $ut,
                                    retainhdr => 1,
                                  );
+
+if( scalar( $grp->obs ) == 0 ) {
+  print "No observations were retrieved from the database for $ut for $telescope.\n";
+}
 
 # Hash to hold list of groups.
 my %group;
@@ -147,7 +153,10 @@ foreach my $obs ( $grp->obs ) {
   }
 }
 
+print "Connecting to CADC data processing database...";
 my $dbh = connect_to_cadcdp;
+print "connected!\n";
+
 foreach my $group ( keys %group ) {
   print "Requesting CADC processing of the following files:\n";
   print map { "$_\n" } @{$group{$group}};
@@ -187,4 +196,7 @@ foreach my $group ( keys %group ) {
   print "\n";
 }
 
+print "Disconnecting from CADC data processing database...";
 disconnect_from_cadcdp( $dbh );
+print "disconnected!\n\n";
+print "Data processing requests complete.\n";
