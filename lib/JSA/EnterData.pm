@@ -578,7 +578,11 @@ set.
       # obslog comments. That's <no. of subsystems used> *
       # <no. of subscans objects returned per observation>.
       $group = $self->_get_obs_group( 'name' => $name, 'date' => $date );
-      my @obs = $group->obs;
+      my @obs =
+        $self->_filter_header( $inst,
+                              [ $group->obs ],
+                              'OBS_TYPE' => [qw[ FLATFIELD ] ],
+                          );
 
       $self->_print_text( ! $self->files_given
                           ? sprintf( "Inserting data for %s. Date [%s]\n",
@@ -756,6 +760,87 @@ It is called by I<prepare_and_insert> method.
 
     return \@success;
   }
+}
+
+sub _filter_header {
+
+  my ( $self, $inst, $obs, %ignore ) = @_;
+
+  return
+    unless scalar @{ $obs };
+
+  return @{ $obs }
+    if $inst->name eq 'ACSIS';
+
+  my $remove_ok =
+    sub {
+
+      my ( $href, $key ) = @_;
+
+      return
+        unless exists $href->{ $key }
+        && defined $ignore{ $key };
+
+      my $present = $href->{ $key };
+      return
+        defined $present
+        && first
+            { looks_like_number( $_ )
+                ? $present == $_
+                : $present eq $_
+              }
+              ( ref $ignore{ $key }
+                ? @{ $ignore{ $key } }
+                : $ignore{ $key }
+              )
+              ;
+
+      };
+
+  my @new;
+  OBS:
+  for my $cur ( @{ $obs } ) {
+
+    my $header = $cur->hdrhash;
+
+    IGNORE:
+    for my $key ( keys %ignore ) {
+
+      if ( $remove_ok->( $header, $key ) ) {
+
+        $self->_print_text( sprintf 'Ignoring observation with %s = %s',
+                              $key, $header->{ $key }
+                          );
+
+        next OBS;
+      }
+
+      push @new, $cur;
+      my @subhead = $header->{'SUBHEADERS'} ? @{ $header->{'SUBHEADERS'} } : ();
+
+      next OBS
+        unless scalar @subhead;
+
+      my @new_sub;
+      SUBHEAD:
+      for my $sub ( @subhead ) {
+
+        if ( $remove_ok->( $sub, $key ) ) {
+
+          $self->_print_text( sprintf 'Ignoring subheader with %s = %s',
+                                $key, $sub->{ $key }
+                            );
+
+          next SUBHEAD;
+        }
+
+        push @new_sub, $sub;
+      }
+      $new[-1]->{'SUBHEADERS'} = [ @new_sub ];
+    }
+  }
+
+  return @new;
 }
 
 =item B<_get_obs_group>
