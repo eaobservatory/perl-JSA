@@ -59,6 +59,24 @@ BEGIN {
         $
       }x;
 
+  $inst{'SCUBA2'}->{'path-regex'} =
+    qr{ ^
+        # Parent instrument directory with date.
+        ( .+?
+          /
+          \d{8}
+        )
+        [/\d]+?
+        # Base file name.
+        (
+          (s[48][a-d])
+          \d{8} _
+          # Observation number.
+          ( \d{5} )
+          _ \d{4} [.]sdf
+        )
+        $
+      }x;
   # Instruments to loop through
   my @inst = sort { lc $a cmp lc $b } keys %inst;
 
