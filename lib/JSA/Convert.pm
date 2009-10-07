@@ -149,7 +149,7 @@ allowed keys:
  - indir: the input directory
  - outdir: the output directory
  - tempdir: a temporary directory for file conversion.
- - mode: Processing mode ("obs", "night", "project", "public").
+ - mode: Processing mode ("night", "project", "public").
 
 =cut
 
@@ -157,7 +157,7 @@ sub convert_dr_files {
   my $href = shift;
 
   my $opts = shift;
-  my $mode = ( defined( $opts->{'mode'} ) ? lc( $opts->{'mode'} ) : "night" );
+  my $mode = $opts->{'mode'};
 
   for my $file ( sort keys %$href ) {
 

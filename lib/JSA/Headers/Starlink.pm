@@ -51,7 +51,7 @@ updated.
 This function takes one optional argument: a hash reference with the
 following allowed keys:
 
- - mode: Processing mode ("obs", "night", "project", "public")
+ - mode: Processing mode ("night", "project", "public")
 
 This function does not return anything.
 
@@ -61,7 +61,7 @@ sub update_fits_headers {
   my $file = shift;
 
   my $options = shift;
-  my $mode = ( defined( $options->{'mode'} ) ? lc( $options->{'mode'} ) : "night" );
+  my $mode = $options->{'mode'};
 
   # Make sure we actually need to do this. FITSMOD adds a new
   # card even if it already exists.
