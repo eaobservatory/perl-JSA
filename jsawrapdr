@@ -85,6 +85,13 @@ C<-instrument> and C<-ut> options.
 Specify an instrument for which data will be reduced. Must be used in
 conjunction with the C<-ut> option.
 
+=item B<-mode>
+
+Specify the grouping mode. This does not change grouping behaviour; it
+only changes collection IDs as stored by CADC. Can be one of 'obs'
+(for single observation), 'night' (for night grouping), 'project' (for
+project grouping) or 'public'.
+
 =item B<-outdir>
 
 Controls the output directory for all files created by the wrapper. The current
@@ -177,24 +184,27 @@ BEGIN {
 }
 
 # Options
-my ($help, $man, $version, $log, $persist, $id, $drparameters, $inputs, $outdir, $debug,
-   $tmpdir, $indir, $instrument, $ut, $transdir, $cleanup);
-my $status = GetOptions("help" => \$help,
-                        "man" => \$man,
-                        "version" => \$version,
-                        "log=s" => \$log,
-                        "persist" => \$persist,
-                        "id=s" => \$id,
-                        "parameters=s" => \$drparameters,
-                        "inputs=s" => \$inputs,
-                        "outdir=s" => \$outdir,
-                        "debug" => \$debug,
-                        "indir=s" => \$indir,
-                        "instrument=s" => \$instrument,
-                        "tmpdir" => \$tmpdir,
-                        "transdir=s" => \$transdir,
-                        "ut=s" => \$ut,
-                        "cleanup=s" => \$cleanup,
+my( $cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
+    $instrument, $log, $man, $mode, $outdir, $persist, $tmpdir,
+    $transdir, $ut, $version );
+
+my $status = GetOptions( "cleanup=s"    => \$cleanup,
+                         "debug"        => \$debug,
+                         "help"         => \$help,
+                         "id=s"         => \$id,
+                         "indir=s"      => \$indir,
+                         "inputs=s"     => \$inputs,
+                         "instrument=s" => \$instrument,
+                         "log=s"        => \$log,
+                         "man"          => \$man,
+                         "mode=s"       => \$mode,
+                         "outdir=s"     => \$outdir,
+                         "parameters=s" => \$drparameters,
+                         "persist"      => \$persist,
+                         "tmpdir"       => \$tmpdir,
+                         "transdir=s"   => \$transdir,
+                         "ut=s"         => \$ut,
+                         "version"      => \$version,
                        );
 
 pod2usage(1) if $help;
@@ -570,7 +580,7 @@ my @drfiles = compare_file_lists( \%post_retrieve, \%post_process );
 my %drhdrs = read_headers( @drfiles );
 
 # And convert those files that have valid PRODUCT headers.
-convert_dr_files( \%drhdrs );
+convert_dr_files( \%drhdrs, { "mode" => $mode } );
 
 # cleanup for CADC if required
 if ($cleanup eq 'cadc') {

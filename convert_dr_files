@@ -38,6 +38,13 @@ List what would and would not be converted without actually doing the conversion
 
 Print full manual.
 
+=item B<-mode>
+
+Specify the grouping mode. This does not change grouping behaviour; it
+only changes collection IDs as stored by CADC. Can be one of 'obs'
+(for single observation), 'night' (for night grouping), 'project' (for
+project grouping) or 'public'.
+
 =item B<-version>
 
 Print version information.
@@ -90,12 +97,13 @@ use JSA::Convert qw/ convert_dr_files list_convert_plan /;
 use JSA::Files qw/ scan_dir /;
 use JSA::Headers qw/ read_headers /;
 
-my ($help, $version, $man, $debug, $list);
+my ($help, $version, $man, $debug, $list, $mode);
 my $status = GetOptions( "help" => \$help,
                          "version" => \$version,
                          "man" => \$man,
                          "list" => \$list,
                          "debug" => \$debug,
+                         "mode=s" => \$mode,
                        );
 
 pod2usage(1) if $help;
@@ -130,7 +138,7 @@ if ($list) {
   list_convert_plan( \%drhdrs );
 } else {
   # Do the actual conversion
-  convert_dr_files( \%drhdrs );
+  convert_dr_files( \%drhdrs, { "mode" => $mode } );
 }
 
 exit;

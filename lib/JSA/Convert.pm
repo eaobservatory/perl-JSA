@@ -149,6 +149,7 @@ allowed keys:
  - indir: the input directory
  - outdir: the output directory
  - tempdir: a temporary directory for file conversion.
+ - mode: Processing mode ("obs", "night", "project", "public").
 
 =cut
 
@@ -156,6 +157,7 @@ sub convert_dr_files {
   my $href = shift;
 
   my $opts = shift;
+  my $mode = ( defined( $opts->{'mode'} ) ? lc( $opts->{'mode'} ) : "night" );
 
   for my $file ( sort keys %$href ) {
 
@@ -197,7 +199,7 @@ sub convert_dr_files {
         # headers regardless of how the pipeline was configured.
         set_wcs_attribs( $tfile );
 
-        update_fits_headers( $tfile );
+        update_fits_headers( $tfile, { "mode" => $mode } );
 
         my @comments = cadc_ack();
         add_fits_comments( $tfile, \@comments ) if @comments;

@@ -26,6 +26,7 @@ use File::Spec;
 use File::Temp;
 
 use JSA::Starlink qw/ check_star_env run_star_command /;
+use JSA::Headers qw/ read_header /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ update_fits_headers add_fits_comments /;
@@ -38,13 +39,19 @@ our @EXPORT_OK = qw/ update_fits_headers add_fits_comments /;
 
 Update CADC-specific FITS headers in an NDF file.
 
-  update_fits_headers( $file );
+  update_fits_headers( $file, \%options );
 
 This function updates one FITS header:
 
  o INSTREAM: set to 'JCMT'
 
-This function takes one argument: the NDF file to be updated.
+This function takes one mandatory argument: the NDF file to be
+updated.
+
+This function takes one optional argument: a hash reference with the
+following allowed keys:
+
+ - mode: Processing mode ("obs", "night", "project", "public")
 
 This function does not return anything.
 
@@ -52,6 +59,9 @@ This function does not return anything.
 
 sub update_fits_headers {
   my $file = shift;
+
+  my $options = shift;
+  my $mode = ( defined( $options->{'mode'} ) ? lc( $options->{'mode'} ) : "night" );
 
   # Make sure we actually need to do this. FITSMOD adds a new
   # card even if it already exists.
@@ -68,6 +78,49 @@ sub update_fits_headers {
 
   run_star_command( @args );
 
+  # Get the FITS headers.
+  my $header = read_header( $file );
+
+  # Retrieve the ASN_ID.
+  my $asn_id = $header->value( "ASN_ID" );
+
+  # Depending on the mode, append the value of a specific header, but
+  # only if ASN_ID is defined.
+  if( defined( $asn_id ) ) {
+    if( $mode eq 'night' ) {
+      my $utdate = $header->value( "UTDATE" );
+      $asn_id .= $utdate;
+    } elsif( $mode eq 'project' ) {
+      my $survey = $header->value( "SURVEY" );
+      if( defined( $survey ) ) {
+        $asn_id .= $survey;
+      } else {
+        $asn_id .= $header->value( "PROJECT" );
+      }
+
+      # Fix the ASN_TYPE header while we're at it.
+      @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
+                "NDF=$file",
+                "KEYWORD=ASN_TYPE",
+                "VALUE=project",
+                "COMMENT=\$C",
+                "EDIT=AMEND",
+                "POSITION=\!" );
+      run_star_command( @args );
+
+    }
+
+    # Write the ASN_ID header back into the FITS header.
+    @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
+              "NDF=$file",
+              "KEYWORD=ASN_ID",
+              "VALUE=$asn_id",
+              "COMMENT=\$C",
+              "EDIT=AMEND",
+              "POSITION=\!" );
+
+    run_star_command( @args );
+  }
 }
 
 =item B<add_fits_comments>
