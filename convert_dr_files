@@ -41,9 +41,9 @@ Print full manual.
 =item B<-mode>
 
 Specify the grouping mode. This does not change grouping behaviour; it
-only changes collection IDs as stored by CADC. Can be one of 'obs'
-(for single observation), 'night' (for night grouping), 'project' (for
-project grouping) or 'public'.
+only changes collection IDs as stored by CADC. Can be one of 'night'
+(for night grouping), 'project' (for project grouping) or 'public'. If
+not given, then an error will be thrown.
 
 =item B<-version>
 
@@ -117,6 +117,10 @@ if ($debug) {
   $JSA::Convert::DEBUG = 1;
   $JSA::Files::DEBUG = 1;
   $JSA::Starlink::DEBUG = 1;
+}
+
+if( ! defined( $mode ) ) {
+  die "-mode parameter to convert_dr_files must be set";
 }
 
 my @files;

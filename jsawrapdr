@@ -88,9 +88,8 @@ conjunction with the C<-ut> option.
 =item B<-mode>
 
 Specify the grouping mode. This does not change grouping behaviour; it
-only changes collection IDs as stored by CADC. Can be one of 'obs'
-(for single observation), 'night' (for night grouping), 'project' (for
-project grouping) or 'public'.
+only changes collection IDs as stored by CADC. Can be one of 'night'
+(for night grouping), 'project' (for project grouping) or 'public'.
 
 =item B<-outdir>
 
@@ -228,6 +227,11 @@ if( ! defined $ut && defined $instrument ) {
 my $skipdp = 0;
 if( defined $ut && defined $instrument ) {
   $skipdp = 1;
+}
+
+# Die if we don't have the mode.
+if( ! defined( $mode ) ) {
+  die "Must supply -mode parameter to jsawrapdr";
 }
 
 $cleanup = "cadc" unless defined $cleanup;
