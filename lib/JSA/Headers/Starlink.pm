@@ -89,13 +89,13 @@ sub update_fits_headers {
   if( defined( $asn_id ) ) {
     if( $mode eq 'night' ) {
       my $utdate = $header->value( "UTDATE" );
-      $asn_id .= $utdate;
+      $asn_id = $utdate . $asn_id;
     } elsif( $mode eq 'project' ) {
       my $survey = $header->value( "SURVEY" );
       if( defined( $survey ) ) {
-        $asn_id .= $survey;
+        $asn_id = $survey . $asn_id;
       } else {
-        $asn_id .= $header->value( "PROJECT" );
+        $asn_id = $header->value( "PROJECT" ) . $asn_id;
       }
 
       # Fix the ASN_TYPE header while we're at it.
