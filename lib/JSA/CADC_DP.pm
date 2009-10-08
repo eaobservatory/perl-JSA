@@ -87,11 +87,16 @@ sub cadc_dberror {
 
 Add a list of requests for processing.
 
-  $recipe_id = create_recipe_instance( $dbh, \@members );
+  $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
 
 This function takes two parameters: the first being the database
 handle as returned from connect_to_cadcdp, and the second being an
 array reference pointing to an array of URIs to be processed.
+
+This function takes one optional parameter: a hash reference with the
+following optional keys:
+
+ - mode: Grouping mode ("night", "project", "public")
 
 This function returns the recipe instance ID on success, or undef for failure.
 
@@ -100,6 +105,10 @@ This function returns the recipe instance ID on success, or undef for failure.
 sub create_recipe_instance {
   my $dbh = shift;
   my $MEMBERSREF = shift;
+
+  my $options = shift;
+
+  my $mode = $options->{'mode'};
 
   my $sql;
 
@@ -164,12 +173,18 @@ ENDNEWFILEID
   # Create the new recipe_instance
   ###############################################
 
-  $sql = <<ENDRECIPE;
-insert into dp_recipe_instance
-   ( recipe_instance_id, recipe_id, state )
-   values
-   ( $dp_recipe_instance_id, 0x$dp_recipe_id, " " )
-ENDRECIPE
+  $sql = "insert into dp_recipe_instance\n";
+  $sql .= "  ( recipe_instance_id, recipe_id, state";
+  if( defined( $mode ) ) {
+    $sql .= ", parameters";
+  }
+  $sql .= " )\n";
+  $sql .= "  values\n";
+  $sql .= "  ( $dp_recipe_instance_id, 0x$dp_recipe_id, \" \"";
+  if( defined( $mode ) ) {
+    $sql .= ", \"-mode='$mode'\"";
+  }
+  $sql .= " )";
   print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
   insertWithRollback( $dbh, $sql);
 

@@ -43,10 +43,11 @@ $OMP::ArchiveDB::FallbackToFiles = 0;
 $OMP::ArchiveDB::AnyDate = 1;
 
 # Handle command-line options.
-my ( $help, $man, $ut, $version );
+my ( $help, $man, $mode, $ut, $version );
 my $status = GetOptions( "help"    => \$help,
                          "man"     => \$man,
                          "ut=s"    => \$ut,
+                         "mode=s"  => \$mode,
                          "version" => \$version,
                        );
 
@@ -64,7 +65,12 @@ if( ! defined $ut ) {
   die "Must include -ut parameter";
 }
 
-print "Running jsasubmit for $ut for $telescope.\n";
+# Default to night mode for now.
+if( ! defined $mode ) {
+  $mode = "night";
+}
+
+print "Running jsasubmit for $ut for $telescope in $mode mode.\n";
 
 # Retrieve list of files at CADC for this UT date.
 my $atCADC = &JSA::CADC_Copy::at_cadc( $ut );
@@ -191,7 +197,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     # Submit the job.
     my $recipe_id;
     try {
-      $recipe_id = create_recipe_instance( $dbh, \@members );
+      $recipe_id = create_recipe_instance( $dbh, \@members,
+                                           { 'mode' => $mode } );
     }
     catch JSA::Error::CADCDB with {
       my $Error = shift;

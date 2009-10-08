@@ -52,12 +52,22 @@ dpRetrieve executable and the contents must match that expected
 by dpRetrieve. dpRetrieve ensures that the files are all available
 in a local working directory.
 
-=item B<--parameters>
+=item B<--drparameters>
 
 These are the parameters that should be passed either to ORAC-DR or to
 PICARD. They should be limited to a recipe name. The wrapper will determine
 whether the data should be processed by PICARD or ORAC-DR. The recipe is
 optional for ORAC-DR and mandatory for PICARD.
+
+=item B<--parameters>
+
+This is a string containing two possible parameters, mode and
+drparameters. This can be passed to jsawrapdr via CADC's data
+processing recipe system, whereby these two parameters are supplied in
+a database table and then passed to this script. If either 'mode' or
+'drparameters' are supplied in this string, then they will override
+those specific parameters as passed via --mode or --drparameters to
+this script.
 
 =item B<-persist>
 
@@ -148,7 +158,7 @@ use warnings;
 
 use FindBin;
 
-use Getopt::Long;
+use Getopt::Long qw/ GetOptionsFromString /;
 use Pod::Usage;
 use File::Spec;
 use File::Temp;
@@ -165,7 +175,7 @@ use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
 
 # Add the path for this routine to the full path. This will allow
-# dpCapture and dpRetrieve to be found in emulation. Add to the end of 
+# dpCapture and dpRetrieve to be found in emulation. Add to the end of
 # path so that the real CADC versions will be found
 BEGIN {
   my $newpath = $FindBin::RealBin;
@@ -184,26 +194,27 @@ BEGIN {
 
 # Options
 my( $cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
-    $instrument, $log, $man, $mode, $outdir, $persist, $tmpdir,
-    $transdir, $ut, $version );
+    $instrument, $log, $man, $mode, $outdir, $parameters, $persist,
+    $tmpdir, $transdir, $ut, $version );
 
-my $status = GetOptions( "cleanup=s"    => \$cleanup,
-                         "debug"        => \$debug,
-                         "help"         => \$help,
-                         "id=s"         => \$id,
-                         "indir=s"      => \$indir,
-                         "inputs=s"     => \$inputs,
-                         "instrument=s" => \$instrument,
-                         "log=s"        => \$log,
-                         "man"          => \$man,
-                         "mode=s"       => \$mode,
-                         "outdir=s"     => \$outdir,
-                         "parameters=s" => \$drparameters,
-                         "persist"      => \$persist,
-                         "tmpdir"       => \$tmpdir,
-                         "transdir=s"   => \$transdir,
-                         "ut=s"         => \$ut,
-                         "version"      => \$version,
+my $status = GetOptions( "cleanup=s"      => \$cleanup,
+                         "debug"          => \$debug,
+                         "drparameters=s" => \$drparameters,
+                         "help"           => \$help,
+                         "id=s"           => \$id,
+                         "indir=s"        => \$indir,
+                         "inputs=s"       => \$inputs,
+                         "instrument=s"   => \$instrument,
+                         "log=s"          => \$log,
+                         "man"            => \$man,
+                         "mode=s"         => \$mode,
+                         "outdir=s"       => \$outdir,
+                         "parameters=s"   => \$parameters,
+                         "persist"        => \$persist,
+                         "tmpdir"         => \$tmpdir,
+                         "transdir=s"     => \$transdir,
+                         "ut=s"           => \$ut,
+                         "version"        => \$version,
                        );
 
 pod2usage(1) if $help;
@@ -214,6 +225,13 @@ if ($version) {
   print "jsawrapdr - CADC compliant wrapper for JSA data processing\n";
   print " Source code revision: $rev\n";
   exit;
+}
+
+# Handle the "parameters" option.
+if( defined( $parameters ) ) {
+  $status = GetOptionsFromString( $parameters,
+                                  "mode=s" => \$mode,
+                                  "drparameters=s" => \$drparameters );
 }
 
 # Check the UT and instrument parameters. If one's defined but not the
@@ -239,21 +257,11 @@ $cleanup = "cadc" unless defined $cleanup;
 # We require that STARLINK_DIR and ORAC_DIR are set
 check_star_env( "ORAC" );
 
-# Check recipe parameters
+# Check recipe parameters and strip any leading or trailing
+# whitespace.
 if (defined $drparameters) {
   $drparameters =~ s/^\s+//;
   $drparameters =~ s/\s+$//;
-
-  # a recipe name not an option
-  if ($drparameters) {
-    if ($drparameters =~ /\s/) {
-      die "DR parameters argument can not contain white space.";
-    } elsif ($drparameters !~ /^[A-Z]/) {
-      die "DR parameters argument must start with a capital letter";
-    }
-  } else {
-    $drparameters = undef;
-  }
 }
 
 # Get the current working directory
@@ -536,8 +544,8 @@ if ($useoracdr) {
     push @drcommand, "-loop", "file", "-file", "$tmpfile"
   }
 
-  # The recipe comes at the end and is optional
-  push(@drcommand, $drparameters) if defined $drparameters;
+  # Add the DR parameters.
+  push(@drcommand, split /\s+/, $drparameters) if defined $drparameters;
 
 } else {
   # We are going to need a ^file option in picard
@@ -545,13 +553,13 @@ if ($useoracdr) {
 
   # PICARD needs a recipe name so we need to abort if we do not have one
   die "Processing reduced data requires the use of the -parameters option\n"
-    unless (defined $drparameters && $drparameters =~ /[A-Z]/);
+    unless (defined $drparameters);
 
   # Picard only uses a recipe name from drparameters
   @drcommand = ( $^X,
                File::Spec->catfile($ENV{ORAC_DIR},"bin","picard"),
                "-log","f",
-               $drparameters,
+               ( split /\s+/, $drparameters ),
                @files
              );
 
