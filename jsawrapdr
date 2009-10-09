@@ -618,7 +618,7 @@ if( $persist ) {
   push @args, "--persist";
 }
 if( defined( $transdir ) ) {
-  push @args, "-transdir", $transdir;
+  push @args, "--transdir", $transdir;
 }
 
 log_message( "\n*** calling dpCapture --id=$id " . ( join " ", @args ) . "\n" );
