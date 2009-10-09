@@ -205,33 +205,6 @@ I<transform_subheader> method).
   }
 }
 
-=item B<transform_subheader>
-
-Puts I<obsid_subsysnr> in subheaders and appends the subarray type to
-a header where appropriate (see I<append_array_column> method), given
-an array of subheaders and a I<obsidss> value from header.  The given
-obsidss value is used if not found in a subheader.
-
-  $scuba2
-  ->transform_subheader( $header->{'SUBHEADERS'}, $header->{'obsidss'} );
-
-=cut
-
-#sub transform_subheader {
-#
-#  my ( $self, $subheaders, $header_obsidss ) = @_;
-#
-#  for my $subh ( @{ $subheaders } ) {
-#
-#    # Prefix _[a-d] after some of the keys to match column names.
-#    $self->append_array_column( $subh );
-#
-#    $subh->{'obsid_subsysnr'} ||= $subh->{'OBSIDSS'} || $header_obsidss;
-#  }
-#
-#  return;
-#}
-
 BEGIN {
 
   my @start =
