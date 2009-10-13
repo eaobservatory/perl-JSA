@@ -190,10 +190,18 @@ I<transform_subheader> method).
       $new{ $k } = $header->{ $k };
     }
 
+    # Speical handling for /date.(obs|end)/ & /ms(start|end)/.
+    $self->push_ms_ends( \%new, $subh );
+    $self->push_date_obs_end( \%new, $subh );
+
+    # General purpose.
     $self->push_range_headers_to_main( \%new, $subh );
 
     my $grouped =
       $self->group_by_subarray( $subh, $header_val->( $subarray_re ) );
+
+    # Now that headers are grouped by array, calcualte total integration time.
+    $self->push_integration_time( \%new, $gropued{ (keys %{ $grouped })[0] } );
 
     my @new;
     for my $sa ( keys %{ $grouped } ) {
@@ -214,6 +222,7 @@ BEGIN {
         DATE-OBS
         FRLEGTST
         HSTSTART HUMSTART
+        MSSTART
         SEEDATST SEEINGST SEQSTART
         TAU225ST TAUDATST
         WNDDIRST WNDSPDST WVMDATST WVMTAUST
@@ -226,6 +235,7 @@ BEGIN {
         DATE-END
         FRLEGTEN
         HSTEND HUMEND
+        MSEND
         SEEDATEN SEEINGEN SEQEND
         TAU225EN TAUDATEN
         WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
@@ -268,7 +278,7 @@ Currently, the fields being moved are ...
 
     my ( $self, $header, $subhead ) = @_;
 
-    return if 1 >= scalar @{ $subhead };
+    #return if 1 >= scalar @{ $subhead };
 
     my $extract =
     sub {
@@ -296,6 +306,56 @@ Currently, the fields being moved are ...
 
     return;
   }
+}
+
+sub push_integration_time {
+
+  my ( $self, $header, $subarray ) = @_;
+
+}
+
+sub push_date_obs_end {
+
+  my ( $self, $header, $subheaders ) = @_;
+
+  my @dark;
+  for my $sub ( @{ $subheaders } ) {
+
+    next unless $self->_is_dark( $sub );
+
+    push @dark, $sub;
+  }
+
+  my ( $start, $end ) = ( 'DATE-OBS', 'DATE-END' );
+  my %new;
+  $new{ $_ } = $dark[0]->{ $_ } for $start;
+  $new{ $_ } = $dark[1]->{ $_ } || $new{ $start } for $end;
+
+  return
+    $self->push_range_headers_to_main( $head, [ { %new } ] );
+}
+
+sub push_ms_ends {
+
+  my ( $self, $head, $subheaders ) = @_;
+
+  my ( $start, $end ) = ( 'MSSTART', 'MSEND' );
+  my %new;
+  for my $sub ( @{ $subheaders } ) {
+
+    last if 2 == scalar keys %new;
+
+    $new{ $start } = $sub->{ $start }
+      if ! exists $new{ start }
+      && exists $sub->{ $start };
+
+    $new{ $end } = $sub->{ $end }
+      if ! exists $new{ $end }
+      && exists $sub->{ $end };
+  }
+
+  return
+    $self->push_range_headers_to_main( $head, [ { %new } ] );
 }
 
 =item B<get_end_subheaders>
