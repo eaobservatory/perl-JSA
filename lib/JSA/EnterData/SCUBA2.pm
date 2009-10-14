@@ -191,7 +191,7 @@ I<transform_subheader> method).
     }
 
     # Speical handling for /date.(obs|end)/ & /ms(start|end)/.
-    $self->push_ms_ends( \%new, $subh );
+    $self->push_ams_ends( \%new, $subh );
     $self->push_date_obs_end( \%new, $subh );
 
     # General purpose.
@@ -199,9 +199,6 @@ I<transform_subheader> method).
 
     my $grouped =
       $self->group_by_subarray( $subh, $header_val->( $subarray_re ) );
-
-    # Now that headers are grouped by array, calcualte total integration time.
-    $self->push_integration_time( \%new, $gropued{ (keys %{ $grouped })[0] } );
 
     my @new;
     for my $sa ( keys %{ $grouped } ) {
@@ -278,40 +275,39 @@ Currently, the fields being moved are ...
 
     my ( $self, $header, $subhead ) = @_;
 
-    #return if 1 >= scalar @{ $subhead };
-
-    my $extract =
-    sub {
-      my ( $sub, $re ) = @_;
-      for my $key ( keys %{ $sub } ) {
-
-        next unless $key =~ $re;
-
-        if ( exists $header->{ $key } ) {
-
-          delete $sub->{ $key };
-          next;
-        }
-
-        $header->{ $key } = $sub->{ $key };
-        delete $sub->{ $key };
-      }
-      return;
-    };
+    return if 1 >= scalar @{ $subhead };
 
     my ( $start, $end ) = $self->get_end_subheaders( $subhead );
 
-    $extract->( $start, $start_re ) if $start;
-    $extract->( $end, $end_re ) if $end;
+    $self->push_header( $header, $start, $start_re ) if $start;
+    $self->push_header( $header, $end, $end_re ) if $end;
 
     return;
   }
 }
 
-sub push_integration_time {
+sub push_header {
 
-  my ( $self, $header, $subarray ) = @_;
+  my ( $self, $header, $sub, $re ) = @_;
 
+  for my $key ( keys %{ $sub } ) {
+
+    next if $re && $key !~ $re;
+
+    if ( exists $header->{ $key }
+          && defined  $header->{ $key }
+          && ! defined $sub->{ $key }
+        ) {
+
+      delete $sub->{ $key };
+      next;
+    }
+
+    $header->{ $key } = $sub->{ $key };
+    delete $sub->{ $key };
+  }
+
+  return;
 }
 
 sub push_date_obs_end {
@@ -332,18 +328,20 @@ sub push_date_obs_end {
   $new{ $_ } = $dark[1]->{ $_ } || $new{ $start } for $end;
 
   return
-    $self->push_range_headers_to_main( $head, [ { %new } ] );
+    $self->push_header( $header, { %new } );
 }
 
-sub push_ms_ends {
+sub push_ams_ends {
 
   my ( $self, $head, $subheaders ) = @_;
 
-  my ( $start, $end ) = ( 'MSSTART', 'MSEND' );
+  my ( $start, $end ) = ( 'AMSTART', 'AMEND' );
   my %new;
   for my $sub ( @{ $subheaders } ) {
 
     last if 2 == scalar keys %new;
+
+    next if $self->_is_dark( $sub );
 
     $new{ $start } = $sub->{ $start }
       if ! exists $new{ start }
@@ -355,7 +353,7 @@ sub push_ms_ends {
   }
 
   return
-    $self->push_range_headers_to_main( $head, [ { %new } ] );
+    $self->push_header( $head, { %new } );
 }
 
 =item B<get_end_subheaders>
