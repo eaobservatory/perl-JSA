@@ -193,7 +193,7 @@ I<transform_subheader> method).
     $self->push_range_headers_to_main( \%new, $subh );
 
     my $grouped =
-      $self->groub_by_subarray( $subh, $header_val->( $subarray_re ) );
+      $self->group_by_subarray( $subh, $header_val->( $subarray_re ) );
 
     my @new;
     for my $sa ( keys %{ $grouped } ) {
@@ -336,7 +336,7 @@ sub get_end_subheaders {
   return ( $start, $end );
 }
 
-=item B<groub_by_subarray>
+=item B<group_by_subarray>
 
 Returns a hash reference of hash references, where the sole key is the
 subarray type matching C</^s[48].?$/>, given an array reference of
@@ -345,11 +345,11 @@ subheaders & optional subarray type.
 Throws L<JSA::Error> exception if a subarray type cannot be determined.
 
  $grouped =
-  $scuba2->groub_by_subarray( $header->{'SUBHEADERS'}, 's4' );
+  $scuba2->group_by_subarray( $header->{'SUBHEADERS'}, 's4' );
 
 =cut
 
-sub groub_by_subarray {
+sub group_by_subarray {
 
   my ( $self, $subheaders, $header_arr ) = @_;
 
