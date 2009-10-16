@@ -191,7 +191,7 @@ I<transform_subheader> method).
     }
 
     # Speical handling for /date.(obs|end)/ & /ms(start|end)/.
-    $self->push_ams_ends( \%new, $subh );
+    $self->push_extreme_start_end( \%new, $subh );
     $self->push_date_obs_end( \%new, $subh );
 
     # General purpose.
@@ -212,35 +212,81 @@ I<transform_subheader> method).
 
 BEGIN {
 
-  my @start =
-    qw[
-        AMSTART ATSTART AZSTART
-        BKLEGTST BPSTART
-        DATE-OBS
-        FRLEGTST
-        HSTSTART HUMSTART
-        MSSTART
-        SEEDATST SEEINGST SEQSTART
-        TAU225ST TAUDATST
-        WNDDIRST WNDSPDST WVMDATST WVMTAUST
-    ];
+  my @seq = qw[ SEQSTART SEQEND ];
 
-  my @end =
-    qw[
-        AMEND ATEND AZEND
-        BKLEGTEN BPEND
-        DATE-END
-        FRLEGTEN
-        HSTEND HUMEND
-        MSEND
-        SEEDATEN SEEINGEN SEQEND
-        TAU225EN TAUDATEN
-        WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
-      ];
+=item B<get_end_subheaders>
 
-  my $start_re = join '|' , @start;
-  my $end_re = join '|', @end;
-  $_ = qr{(?:$_)}ix for $start_re, $end_re;
+Given an array reference of subheader hash references, returns two hash
+references defining starting and ending subheaders: first and last,
+based on C<SEQSTART> and C<SEQEND> respectively.
+
+  ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders );
+
+=cut
+
+  sub get_end_subheaders {
+
+    my ( $self, $subheaders ) = @_;
+
+    my ( $init, %start, %end );
+    for my $h ( @{ $subheaders } ) {
+
+      my %h = %{ $h };
+
+      next
+        unless exists $h{ $seq[0] }
+        && exists $h{ $seq[1] };
+
+      my ( $k_start, $k_end ) = map { $h{ $_ } } @seq;
+
+      unless ( $init ) {
+
+        %end = %start = %h;
+        $init++;
+        next;
+      }
+
+      %start = %h if $start{ $seq[0] } >  $k_start;
+      %end   = %h if $end{ $seq[1] }   <= $k_end;
+    }
+
+    return ( { %start }, { %end } );
+  }
+
+=item B<push_extreme_start_end>
+
+Given a header hash reference and an subheader array reference, copies
+the first true-value field in a subheader hash reference to the main
+header.
+
+  $scuba2->push_extreme_start_end( \%header, \@subheader );
+
+For *START fields, search starts from the front; for *END, from the
+end.  For the list of fields see I<_find_first_field>.
+
+=cut
+
+  sub push_extreme_start_end {
+
+    my ( $self, $head, $subheaders ) = @_;
+
+    my @subh = @{ $subheaders };
+
+    my @start =
+      sort { $a->{ $seq[0] } <=> $b->{ $seq[0] } }
+      @subh;
+
+    my @end =
+      sort { $b->{ $seq[1] } <=> $a->{ $seq[1] } }
+      @subh;
+
+    my %new;
+    $self->_find_first_field( \@start, \%new );
+    $self->_find_first_field( \@end, \%new, my $end = 1 );
+
+    return
+      $self->push_header( $head, { %new } );
+  }
 
 =item B<push_range_headers_to_main>
 
@@ -251,18 +297,16 @@ from the subheader into the main header.
 
 Currently, the fields being moved are ...
 
-  AMSTART ATSTART AZSTART
+  ATSTART AZSTART
   BKLEGTST BPSTART
-  DATE-OBS
   FRLEGTST
   HSTSTART HUMSTART
   SEEDATST SEEINGST SEQSTART
   TAU225ST TAUDATST
   WNDDIRST WNDSPDST WVMDATST WVMTAUST
 
-  AMEND ATEND AZEND
+  ATEND AZEND
   BKLEGTEN BPEND
-  DATE-END
   FRLEGTEN
   HSTEND HUMEND
   SEEDATEN SEEINGEN SEQEND
@@ -270,6 +314,34 @@ Currently, the fields being moved are ...
   WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
 
 =cut
+
+  my @start_rest =
+    qw[
+        ATSTART AZSTART
+        BKLEGTST BPSTART
+        FRLEGTST
+        HSTSTART HUMSTART
+        MSSTART
+        SEEDATST SEEINGST SEQSTART
+        TAU225ST TAUDATST
+        WNDDIRST WNDSPDST WVMDATST WVMTAUST
+    ];
+
+  my @end_rest =
+    qw[
+        ATEND AZEND
+        BKLEGTEN BPEND
+        FRLEGTEN
+        HSTEND HUMEND
+        MSEND
+        SEEDATEN SEEINGEN SEQEND
+        TAU225EN TAUDATEN
+        WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
+      ];
+
+  my $start_re = join '|' , @start_rest;
+  my $end_re = join '|', @end_rest;
+  $_ = qr{(?:$_)}ix for $start_re, $end_re;
 
   sub push_range_headers_to_main {
 
@@ -284,31 +356,77 @@ Currently, the fields being moved are ...
 
     return;
   }
-}
 
-sub push_header {
+=item B<_find_first_field>
 
-  my ( $self, $header, $sub, $re ) = @_;
+Given an array reference of subheaders, a hash reference as storage,
+copies the I<first> field existing in a subheader (value of which
+evalutes to true) to the storage hash reference. It takes an optional
+truth value to select the list of field names.  Default list is ...
 
-  for my $key ( keys %{ $sub } ) {
+  AMSTART
 
-    next if $re && $key !~ $re;
+If the optional value is true, then list consists of ...
 
-    if ( exists $header->{ $key }
-          && defined  $header->{ $key }
-          && ! defined $sub->{ $key }
-        ) {
+  AMEND
 
-      delete $sub->{ $key };
-      next;
+
+  # For all the fields in default list, copy to C<%save>.
+  $scuba2->_find_first_field( \@subheader_a, \%save, );
+
+  # Select alternative list.
+  $scuba2->_find_first_field( \@subheader_b, \%save, 1 );
+
+=cut
+
+  my @extreme_start =
+    qw[
+        AMSTART
+      ];
+
+  my @extreme_end =
+    qw[
+        AMEND
+      ];
+
+  sub _find_first_field {
+
+    my ( $self, $subheaders, $save, $choose_end ) = @_;
+
+    my @field = $choose_end ? @extreme_start : @extreme_end;
+
+    SUBHEADER:
+    for my $sub ( @{ $subheaders } ) {
+
+      FIELD:
+      for my $f ( @field ) {
+
+        next FIELD
+          unless exists $sub->{ $f }
+          && $sub->{ $f };
+
+        $save->{ $f } =  $sub->{ $f };
+        last FIELD;
+      }
     }
 
-    $header->{ $key } = $sub->{ $key };
-    delete $sub->{ $key };
+    return;
   }
 
-  return;
 }
+
+=item B<push_date_obs_end>
+
+Given a main header hash reference and an array reference of
+subheaders, copies C<DATE-OBS> & C<DATE-END> fields from "darks"
+(subheaders) to the main header.
+
+  $scuba2->push_date_obs_end( \%header, \@subheader );
+
+At least two darks are expected.  For definition of dark, see
+I<_is_dark>.
+
+=cut
 
 sub push_date_obs_end {
 
@@ -331,67 +449,64 @@ sub push_date_obs_end {
     $self->push_header( $header, { %new } );
 }
 
-sub push_ams_ends {
+=item B<push_header>
 
-  my ( $self, $head, $subheaders ) = @_;
+It is a general purpose method to copy fields to given header hash
+reference from another given hash reference.  It optionally takes a
+regular expression to filter out the keys in of subheader.
 
-  my ( $start, $end ) = ( 'AMSTART', 'AMEND' );
-  my %new;
-  for my $sub ( @{ $subheaders } ) {
+  $scuba2->push_header( \%header,
+                          { 'DATE-OBS' => '20091003T00:00:00',
+                            'DATE-END' => '20091003T11:11:11'
+                          }
+                      );
 
-    last if 2 == scalar keys %new;
 
-    next if $self->_is_dark( $sub );
-
-    $new{ $start } = $sub->{ $start }
-      if ! exists $new{ start }
-      && exists $sub->{ $start };
-
-    $new{ $end } = $sub->{ $end }
-      if ! exists $new{ $end }
-      && exists $sub->{ $end };
-  }
-
-  return
-    $self->push_header( $head, { %new } );
-}
-
-=item B<get_end_subheaders>
-
-Given an array reference of subheader hash references, returns two hash
-references defining starting and ending subheaders
-
-  ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders );
+  # Copy only DATE* fields.
+  $scuba2->push_header( \%header,
+                        { 'DATE-OBS' => '20091003T00:00:00',
+                          'DATE-END' => '20091003T11:11:11',
+                          'AMSTART'  => '20091003T01:00:00'
+                        },
+                        'DATE'
+                      );
 
 =cut
 
-sub get_end_subheaders {
+sub push_header {
 
-  my ( $self, $subheaders ) = @_;
+  my ( $self, $header, $sub, $re ) = @_;
 
-  my @key = qw[ SEQSTART SEQEND ];
+  for my $key ( keys %{ $sub } ) {
 
-  my ( $init, $start, $end );
-  for my $h ( @{ $subheaders } ) {
+    next if $re && $key !~ m/$re/;
 
-    next
-      unless exists $h->{ $key[0] }
-      && exists $h->{ $key[1] };
+    if ( exists $header->{ $key }
+          && defined $header->{ $key }
+          && ! defined $sub->{ $key }
+        ) {
 
-    my ( $k_start, $k_end ) = map { $h->{ $_ } } @key;
-
-    unless ( $init ) {
-
-      $end = $start = $h;
-      $init++;
+      delete $sub->{ $key };
       next;
     }
 
-    $start = $h if $start->{ $key[0] } >  $k_start;
-    $end   = $h if $end->{ $key[1] }   <= $k_end;
+    $header->{ $key } = $sub->{ $key };
+    delete $sub->{ $key };
   }
 
-  return ( $start, $end );
+  return;
+}
+
+# If shutter field is '1.0', it is open|not dark (else, it is '0.0' & is closed|dark).
+sub _is_dark {
+
+  my ( $class, $subhead ) = @_;
+
+  return
+    unless exists $subhead->{'SHUTTER'}
+    && defined $subhead->{'SHUTTER'};
+
+  return ! ( $subhead->{'SHUTTER'} + 0 );
 }
 
 =item B<group_by_subarray>
@@ -416,6 +531,9 @@ sub group_by_subarray {
   my $array_re = qr{^( s[48] .? )$}ix;
 
   my $array = $header_arr;
+
+  my $int_key = 'INT_TIME';
+
   for my $sub ( @{ $subheaders } ) {
 
     my @keys = keys %{ $sub };
@@ -435,7 +553,16 @@ sub group_by_subarray {
 
     for ( @keys ) {
 
-      $group->{ $array }{ $_ } ||= $sub->{ $_ };
+      # Collect fields unless already exist (except for integration time) ...
+      unless ( $_ eq $int_key ) {
+
+        $group->{ $array }{ $_ } ||= $sub->{ $_ };
+      }
+      # ... for integration time, sum all of them.
+      else {
+
+        $group->{ $array }{ $_ } += $sub->{ $_ };
+      }
     }
   }
 
