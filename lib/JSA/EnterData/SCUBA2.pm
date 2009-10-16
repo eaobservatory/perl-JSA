@@ -195,7 +195,17 @@ I<transform_subheader> method).
     $self->push_date_obs_end( \%new, $subh );
 
     # General purpose.
-    $self->push_range_headers_to_main( \%new, $subh );
+    my $skip;
+    # Don't skip darks if it is a noise or a flat field, as shutter remains
+    # closed for those.
+    for my $key ( qw[ OBS-TYPE OBS_TYPE ] ) {
+
+      next unless exists $header->{ $key };
+
+      $skip = $header->{ $key } !~ m{\b(?: noise | flat.?field )}xi;
+      last;
+    }
+    $self->push_range_headers_to_main( \%new, $subh, $skip );
 
     my $grouped =
       $self->group_by_subarray( $subh, $header_val->( $subarray_re ) );
@@ -218,7 +228,8 @@ BEGIN {
 
 Given an array reference of subheader hash references, returns two
 hash references defining starting and ending subheaders: first and
-last, based on C<SEQSTART> and C<SEQEND> respectively. It optionally
+last, based on C<SEQSTART> and C<SEQEND> respectively.
+It optionally
 takes a truth value to indicate if to skip darks.
 
   ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders );
@@ -299,9 +310,11 @@ end.  For the list of fields see I<_find_first_field>.
 =item B<push_range_headers_to_main>
 
 Given a header & a subheader hash references, moves range-type fields
-from the subheader into the main header.
+from the subheader into the main header.  It optionally takes a truth
+value to indicate if to skip darks.
 
-  $scuba2->( $header, $_ ) for @{ $header->{'SUBHEADERS'} };
+  $scuba2->push_range_headers_to_main( $header, $_ )
+    for @{ $header->{'SUBHEADERS'} };
 
 Currently, the fields being moved are ...
 
@@ -353,11 +366,11 @@ Currently, the fields being moved are ...
 
   sub push_range_headers_to_main {
 
-    my ( $self, $header, $subhead ) = @_;
+    my ( $self, $header, $subhead, $skip_dark ) = @_;
 
     return if 1 >= scalar @{ $subhead };
 
-    my ( $start, $end ) = $self->get_end_subheaders( $subhead );
+    my ( $start, $end ) = $self->get_end_subheaders( $subhead, $skip_dark );
 
     $self->push_header( $header, $start, $start_re ) if $start;
     $self->push_header( $header, $end, $end_re ) if $end;
