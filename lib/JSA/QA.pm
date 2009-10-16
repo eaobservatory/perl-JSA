@@ -315,7 +315,7 @@ sub analyse_timeseries_rms {
       $result->add_note( $note );
     } else {
 
-      while( $numgood >= $goodrecep ) {
+      while( $numgood > $goodrecep ) {
 
         # Find the highest RMS, knock it out.
         my $highest_recep = _highest( $newrms );
@@ -586,7 +586,7 @@ sub analyse_tsysvar {
       $result->add_note( $note );
     } else {
 
-      while( $numgood >= $goodrecep ) {
+      while( $numgood > $goodrecep ) {
 
         # Find the highest Tsys, knock it out.
         my $highest_recep = _highest( $newtsys );
