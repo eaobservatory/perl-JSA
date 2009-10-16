@@ -216,20 +216,28 @@ BEGIN {
 
 =item B<get_end_subheaders>
 
-Given an array reference of subheader hash references, returns two hash
-references defining starting and ending subheaders: first and last,
-based on C<SEQSTART> and C<SEQEND> respectively.
+Given an array reference of subheader hash references, returns two
+hash references defining starting and ending subheaders: first and
+last, based on C<SEQSTART> and C<SEQEND> respectively. It optionally
+takes a truth value to indicate if to skip darks.
 
   ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders );
+
+  # Skip darks.
+  ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders, 1 );
 
 =cut
 
   sub get_end_subheaders {
 
-    my ( $self, $subheaders ) = @_;
+    my ( $self, $subheaders, $skip_dark ) = @_;
 
     my ( $init, %start, %end );
     for my $h ( @{ $subheaders } ) {
+
+      next
+        if $skip_dark
+        && $self->_is_dark( $h );
 
       my %h = %{ $h };
 
