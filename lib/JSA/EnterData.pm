@@ -1428,7 +1428,22 @@ sub fill_headers_COMMON {
   # for the general case but for OBSTYPE != SCIENCE or
   # STANDARD=T the release date is immediate
   my $release_date;
-  if ($obs->isScience) {
+
+  # For time being, set the release date in Jun 2010.
+  if ( JSA::EnterData::SCUBA2->name_is_scuba2( $header->{'INSTRUME'} )
+        || JSA::EnterData::SCUBA2->name_is_scuba2( $header->{'BACKEND'} )
+      ) {
+
+    $release_date = DateTime->new( 'month' => 6,
+                                  'year' => 2010,
+                                  'day' => 15,
+                                  'hour' => 12,
+                                  'minute' => 0,
+                                  'second' => 0,
+                                  'time_zone' => 0
+                                );
+  }
+  elsif ($obs->isScience) {
 
     # semester release
     my $semester = OMP::General->determine_semester( date => $obsdate,
