@@ -428,6 +428,11 @@ sub analyse_tsys {
 
     return $merged;
   } else {
+
+    # Calculate the Tsys stats.
+    my $mmm_return = _min_max_mean( [ values %$tsys ] );
+    $result->tsys_stats( $mmm_return );
+
     return $result;
   }
 }
