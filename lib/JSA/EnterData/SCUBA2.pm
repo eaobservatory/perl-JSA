@@ -639,7 +639,6 @@ sub append_array_column {
     next unless exists $header->{ $field };
 
     $header->{ join '_', $field, $col } = $header->{ $field };
-    delete $header->{ $field };
   }
 
   return;
