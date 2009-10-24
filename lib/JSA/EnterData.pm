@@ -973,16 +973,14 @@ sub add_subsys_obs {
 
     $self->fill_headers( $subsys_hdrs, $subsys_obs );
 
-    my @subh = ( $subsys_hdrs );
-
+    my $grouped;
     if ( $inst->can( 'transform_header' ) ) {
 
-      my ( $hash , $array ) = $inst->transform_header( $subsys_hdrs );
-      @subh = @{ $array };
+      ( undef, $grouped ) = $inst->transform_header( $subsys_hdrs );
     }
 
     my $added_files;
-    for my $subh ( @subh ) {
+    for my $subh ( $grouped ? @{ $grouped } : $subsys_hdrs ) {
 
       $inst->_fill_headers_obsid_subsys( $subh, $subsys_obs->obsid );
 
@@ -1007,9 +1005,9 @@ sub add_subsys_obs {
         $added_files++;
 
         # Create headers that don't exist
-        $self->fill_headers_FILES( $inst, $subh, $subsys_obs );
+        $self->fill_headers_FILES( $inst, $subsys_hdrs, $subsys_obs );
 
-        my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subh );
+        my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subsys_hdrs );
 
         if ( ! $self->update_mode ) {
 
