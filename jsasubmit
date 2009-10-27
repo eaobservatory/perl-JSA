@@ -103,6 +103,12 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
+    # Temporarily disable processing of SCUBA-2.
+    if( defined( $hdr->{'INSTRUME'} ) &&
+        $hdr->{'INSTRUME'} eq 'SCUBA-2' ) {
+      next;
+    }
+
     # Check to see if we have OBSRA and OBSDEC. If they're defined,
     # the tracking system is J2000. Otherwise it's APP.
     if( ! defined( $hdr->{'TRACKSYS'} ) ) {
