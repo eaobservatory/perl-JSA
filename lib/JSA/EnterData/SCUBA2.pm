@@ -638,7 +638,15 @@ sub append_array_column {
 
     next unless exists $header->{ $field };
 
-    $header->{ join '_', $field, $col } = $header->{ $field };
+    my $alt = join '_', $field, $col;
+
+    $header->{ $alt } = $header->{ $field };
+
+    # Need to change subarray_[a-d] to a bit value.
+    if ( $field eq 'SUBARRAY' ) {
+
+      $header->{ $alt } = $header->{ $alt } ? 1 : 0;
+    }
   }
 
   return;
