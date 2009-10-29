@@ -1501,8 +1501,6 @@ sub fill_headers_FILES {
 
   my ( $self, $inst, $header, $obs ) = @_;
 
-  my $obsid = $obs->obsid;
-
   # Create file_id - also need to extract NSUBSCAN from subheader if we have more
   # than one file. (although simply using a 1-based index would be sufficient)
   my @files = $obs->simple_filename;
@@ -1530,7 +1528,7 @@ sub fill_headers_FILES {
                     )
     if $self->debug;
 
-  $inst->_fill_headers_obsid_subsys( $header, $obsid );
+  $inst->_fill_headers_obsid_subsys( $header, $obs->obsid );
 
   # Further work needs to be done for SCUBA2.
   if ( my $fill = $inst->can( 'fill_headers_FILES' ) ) {
