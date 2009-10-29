@@ -190,11 +190,6 @@ I<transform_subheader> method).
       $new{ $k } = $header->{ $k };
     }
 
-    # Speical handling for /date.(obs|end)/ & /ms(start|end)/.
-    $self->push_extreme_start_end( \%new, $subh );
-    $self->push_date_obs_end( \%new, $subh );
-
-    # General purpose.
     my $skip;
     # Don't skip darks if it is a noise or a flat field, as shutter remains
     # closed for those.
@@ -205,6 +200,12 @@ I<transform_subheader> method).
       $skip = $header->{ $key } !~ m{\b(?: noise | flat.?field )}xi;
       last;
     }
+
+    # Special handling for /date.(obs|end)/ & /ms(start|end)/.
+    $self->push_extreme_start_end( \%new, $subh );
+
+    $self->push_date_obs_end( \%new, $subh, $skip );
+
     $self->push_range_headers_to_main( \%new, $subh, $skip );
 
     my $grouped =
@@ -454,12 +455,14 @@ I<_is_dark>.
 
 sub push_date_obs_end {
 
-  my ( $self, $header, $subheaders ) = @_;
+  my ( $self, $header, $subheaders, $skip_dark ) = @_;
 
   my @dark;
   for my $sub ( @{ $subheaders } ) {
 
-    next unless $self->_is_dark( $sub );
+    next
+      if $skip_dark
+      && ! $self->_is_dark( $sub );
 
     push @dark, $sub;
   }
@@ -467,7 +470,7 @@ sub push_date_obs_end {
   my ( $start, $end ) = ( 'DATE-OBS', 'DATE-END' );
   my %new;
   $new{ $_ } = $dark[0]->{ $_ } for $start;
-  $new{ $_ } = $dark[1]->{ $_ } || $new{ $start } for $end;
+  $new{ $_ } = $dark[-1]->{ $_ } || $new{ $start } for $end;
 
   return
     $self->push_header( $header, { %new } );
