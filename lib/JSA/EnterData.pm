@@ -1499,26 +1499,26 @@ headers hash reference and an L<OMP::Info::Obs> object.
 
 sub fill_headers_FILES {
 
-  my ( $self, $inst, $subh, $obs ) = @_;
+  my ( $self, $inst, $header, $obs ) = @_;
 
   my $obsid = $obs->obsid;
 
   # Create file_id - also need to extract NSUBSCAN from subheader if we have more
   # than one file. (although simply using a 1-based index would be sufficient)
   my @files = $obs->simple_filename;
-  $subh->{'file_id'} = \@files;
+  $header->{'file_id'} = \@files;
 
   # We need to know whether a nsubscan header is even required so %columns really
   # needs to be accessed. For now we kluge it.
-  unless ( exists $subh->{'nsubscan'} ) {
+  unless ( exists $header->{'nsubscan'} ) {
 
     if (scalar(@files) > 1) {
 
-      $subh->{'nsubscan'} = [ map { $_->value('NSUBSCAN') } $obs->fits->subhdrs ];
-    } elsif (exists $subh->{'NSUBSCAN'}) {
+      $header->{'nsubscan'} = [ map { $_->value('NSUBSCAN') } $obs->fits->subhdrs ];
+    } elsif (exists $header->{'NSUBSCAN'}) {
 
       # not really needed because the key becomes case insensitive
-      $subh->{'nsubscan'} = $subh->{'NSUBSCAN'};
+      $header->{'nsubscan'} = $header->{'NSUBSCAN'};
     } else {
 
       die "Internal error - NSUBSCAN does not exist yet there is only one file!";
@@ -1526,16 +1526,16 @@ sub fill_headers_FILES {
   }
 
   $self->_print_text( sprintf "Created header [file_id] with value [%s]\n",
-                        join ',', @{ $subh->{'file_id'} }
+                        join ',', @{ $header->{'file_id'} }
                     )
     if $self->debug;
 
-  $inst->_fill_headers_obsid_subsys( $subh, $obsid );
+  $inst->_fill_headers_obsid_subsys( $header, $obsid );
 
   # Further work needs to be done for SCUBA2.
   if ( my $fill = $inst->can( 'fill_headers_FILES' ) ) {
 
-    $inst->$fill( $subh, $obs );
+    $inst->$fill( $header, $obs );
   }
 
   return;
