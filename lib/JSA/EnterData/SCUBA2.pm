@@ -669,6 +669,12 @@ sub fill_headers_FILES {
 
     $header->{'nsubscan'} =
       [ map { /_(\d+)[.]sdf$/ ? 0 + $1 : ()  } @{ $header->{'file_id'} } ];
+
+  }
+
+  for my $subh ( @{ $header->{'SUBHEADERS'} } ) {
+
+    push @{ $header->{'obsid_subsysnr'} }, $subh->{'OBSIDSS'};
   }
 
   # Add 'subsysnr' field.
