@@ -658,17 +658,17 @@ It needs to be called after L<fill_headers_FILES/JSA::EnterData>.
 
 sub fill_headers_FILES {
 
-  my ( $self, $subh, $obs ) = @_;
+  my ( $self, $header, $obs ) = @_;
 
   # Add 'nsubscan' field.
-  my $nsub = () = $subh->{'NSUBSCAN'};
+  my $nsub = () = $header->{'NSUBSCAN'};
 
-  my @file = @{ $subh->{'file_id'} };
+  my @file = @{ $header->{'file_id'} };
 
   if ( $nsub < scalar @file ) {
 
-    $subh->{'nsubscan'} =
-      [ map { /_(\d+)[.]sdf$/ ? 0 + $1 : ()  } @{ $subh->{'file_id'} } ];
+    $header->{'nsubscan'} =
+      [ map { /_(\d+)[.]sdf$/ ? 0 + $1 : ()  } @{ $header->{'file_id'} } ];
   }
 
   # Add 'subsysnr' field.
@@ -676,9 +676,9 @@ sub fill_headers_FILES {
 
   for my $i ( 0 .. scalar @file - 1 ) {
 
-    next if $subh->{'subsysnr'}[ $i ];
+    next if $header->{'subsysnr'}[ $i ];
 
-    ( $subh->{'subsysnr'}[ $i ] ) = $file[ $i ] =~ $parse;
+    ( $header->{'subsysnr'}[ $i ] ) = $file[ $i ] =~ $parse;
   }
 
   return;
