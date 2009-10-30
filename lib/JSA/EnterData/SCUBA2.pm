@@ -3,6 +3,9 @@ package JSA::EnterData::SCUBA2;
 use strict;
 use warnings;
 
+use Carp qw[ carp ];
+use List::Util qw[ first ];
+
 use base 'JSA::EnterData::Instrument';
 
 =head1 NAME
@@ -304,8 +307,8 @@ end.  For the list of fields see I<_find_first_field>.
       @subh;
 
     my %new;
-    $self->_find_first_field( \@start, \%new );
-    $self->_find_first_field( \@end, \%new, my $end = 1 );
+    $self->_find_first_field( $head, \@start, \%new );
+    $self->_find_first_field( $head, \@end, \%new, my $end = 1 );
 
     return
       $self->push_header( $head, { %new } );
@@ -416,7 +419,7 @@ If the optional value is true, then list consists of ...
 
   sub _find_first_field {
 
-    my ( $self, $subheaders, $save, $choose_end ) = @_;
+    my ( $self, $head, $subheaders, $save, $choose_end ) = @_;
 
     my @field = $choose_end ? @extreme_start : @extreme_end;
 
@@ -428,16 +431,57 @@ If the optional value is true, then list consists of ...
 
         next FIELD
           unless exists $sub->{ $f }
-          && $sub->{ $f };
+          && $sub->{ $f }
+          ;
 
         $save->{ $f } =  $sub->{ $f };
         last FIELD;
       }
     }
 
-    return;
+    return
+      $self->_find_in_main_header( $head, $save, \@field );
   }
 
+
+}
+
+=item B<_find_in_main_header>
+
+Purpose is to save the headers/fields found in main header after
+failing to find headers/fields in C<SUBHEADERS> hash reference.  Only
+plain vlaues or C<ARRAY> types (as defined by L<ref>) are handled.
+
+  $self->_find_in_main_header( \%header, \%save, \@field_names );
+
+=cut
+
+sub _find_in_main_header {
+
+  my ( $self, $head, $save, $fields ) = @_;
+
+  # Search in main header now if not found in sub headers.
+  for my $f ( @{ $fields } ) {
+
+    next
+      if exists $save->{ $f }
+      || ! exists $head->{ $f };
+
+    my $val = $head->{ $f };
+
+    if ( ref $val && ref $val ne 'ARRAY' ) {
+
+      carp( sprintf 'Do not know how to handle %s value of type %s in header.',
+            $f,
+            ref $val
+          );
+      next;
+    }
+
+    $save->{ $f } = first { $_ } ref $val ? @{ $val } : ( $val );
+  }
+
+  return;
 }
 
 =item B<push_date_obs_end>
