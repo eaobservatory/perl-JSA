@@ -1886,6 +1886,9 @@ sub _update_or_insert {
 
   my $vals = $self->get_insert_values( @args{qw/ table columns dict headers /});
 
+  my $table = $args{'table'};
+
+
   my $ok;
   if ( $self->update_mode ) {
 
@@ -1893,7 +1896,24 @@ sub _update_or_insert {
   }
   else {
 
-    $vals = $self->prepare_insert_hash( $args{'table'}, $vals );
+    $vals = $self->prepare_insert_hash( $table, $vals );
+
+    #  KLUDGE to avoid duplicate inserts due to same obsid.  First hash reference
+    #  most likely have undef (AZ|AM|EL)(START|END).
+    if ( $table eq 'COMMON'
+          && ref $vals eq 'ARRAY'
+          && 1 < scalar @{ $vals }
+        ) {
+
+      my %val;
+      for my $v ( @{ $vals } ) {
+
+        # Last one "wins".
+        $val{ $v->{'obsid'} } = $v;
+      }
+      $vals = [ map { $val{ $_ } } keys %val ];
+    }
+
     $ok = $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
   }
 
