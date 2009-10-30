@@ -971,7 +971,7 @@ sub add_subsys_obs {
     # Need to calculate the frequency information
     $inst->calc_freq( $self, $subsys_obs, $subsys_hdrs );
 
-    $self->fill_headers( $subsys_hdrs, $subsys_obs );
+    $inst->fill_max_subscan( $subsys_hdrs, $subsys_obs );
 
     my $grouped;
     if ( $inst->can( 'transform_header' ) ) {
@@ -1384,26 +1384,6 @@ sub transform_value {
     }
   }
   return 1;
-}
-
-=item B<fill_headers>
-
-Fills in the headers for C<ACSIS> or C<SCUBA2> database tables, given a headers
-hash reference and an L<OMP::Info::Obs> object.
-
-  $enter->fill_headers( \%header, $obs );
-
-=cut
-
-sub fill_headers {
-
-  my ( $self, $header, $obs ) = @_;
-
-  my $obsid = $obs->obsid;
-  my @subscans = $obs->simple_filename;
-  $header->{'max_subscan'} = scalar @subscans;
-
-  return;
 }
 
 =item B<fill_headers_COMMON>
