@@ -689,13 +689,16 @@ sub fill_headers_FILES {
   }
 
   # Add 'subsysnr' field.
-  my $parse = qr{^ (s[48]) [a-d] }xi;
+  my $parse = qr{^ s([48]) [a-d] }xi;
 
   for my $i ( 0 .. scalar @file - 1 ) {
 
     next if $header->{'subsysnr'}[ $i ];
 
-    ( $header->{'subsysnr'}[ $i ] ) = $file[ $i ] =~ $parse;
+    ( my $wavelen ) =
+      $file[ $i ] =~ $parse or next;
+
+    $header->{'subsysnr'}[ $i ] = "${wavelen}50";
   }
 
   return;
