@@ -701,6 +701,33 @@ sub fill_headers_FILES {
   return;
 }
 
+
+=item B<fill_max_subscan>
+
+Fills in the I<max_subscan> for C<SCUBA2> database table, given a
+headers hash reference and an L<OMP::Info::Obs> object.
+
+  $inst->fill_max_subscan( \%header, $obs );
+
+=cut
+
+sub fill_max_subscan {
+
+  my ( $self, $header, $obs ) = @_;
+
+  my $subar = 'SUBARRAY';
+  my %count;
+  $count{ $_->{ $subar } }++ for @{ $header->{'SUBHEADERS'} };
+
+  for ( @{ $header->{'SUBHEADERS'} } ) {
+
+    $_->{'max_subscan'} = $count{ $_->{ $subar } };
+  }
+
+  return;
+}
+
+
 1;
 
 =pod
