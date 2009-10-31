@@ -742,9 +742,19 @@ sub fill_headers_FILES {
 
   }
 
-  for my $subh ( @{ $header->{'SUBHEADERS'} } ) {
+  if ( ! exists $header->{'obsid_subsysnr'} ) {
 
-    push @{ $header->{'obsid_subsysnr'} }, $subh->{'OBSIDSS'};
+    if ( exists $header->{'OBSIDSS'} ) {
+
+      $header->{'obsid_subsysnr'} = $header->{'OBSIDSS'};
+    }
+    elsif ( exists $header->{'SUBHEADERS'} ) {
+
+      for my $subh ( @{ $header->{'SUBHEADERS'} } ) {
+
+        push @{ $header->{'obsid_subsysnr'} }, $subh->{'OBSIDSS'};
+      }
+    }
   }
 
   # Add 'subsysnr' field.
