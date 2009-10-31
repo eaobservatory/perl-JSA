@@ -177,7 +177,10 @@ I<transform_subheader> method).
 
     my $header_obsidss = $header_val->( $obsidss_re );
 
-    my $subh = $header->{'SUBHEADERS'};
+    my $subh =
+      exists $header->{'SUBHEADERS'}
+      ? $header->{'SUBHEADERS'}
+      : ();
 
     for my $s ( @{ $subh } ) {
 
@@ -292,6 +295,10 @@ end.  For the list of fields see I<_find_first_field>.
   sub push_extreme_start_end {
 
     my ( $self, $head, $subheaders ) = @_;
+
+    return
+      unless $subheaders
+      && scalar @{ $subheaders };
 
     my @subh =
           grep
@@ -421,6 +428,10 @@ If the optional value is true, then list consists of ...
 
     my ( $self, $head, $subheaders, $save, $choose_end ) = @_;
 
+    return
+      unless $subheaders
+      && scalar @{ $subheaders };
+
     my @field = $choose_end ? @extreme_start : @extreme_end;
 
     SUBHEADER:
@@ -500,6 +511,10 @@ I<_is_dark>.
 sub push_date_obs_end {
 
   my ( $self, $header, $subheaders, $skip_dark ) = @_;
+
+  return
+    unless $subheaders
+    && scalar @{ $subheaders };
 
   my @dark;
   for my $sub ( @{ $subheaders } ) {
@@ -762,14 +777,33 @@ sub fill_max_subscan {
 
   my ( $self, $header, $obs ) = @_;
 
+  my $subh = 'SUBHEADERS';
   my $subar = 'SUBARRAY';
-  my %count;
-  $count{ $_->{ $subar } }++ for @{ $header->{'SUBHEADERS'} };
+  my $max = 'max_subscan';
 
-  for ( @{ $header->{'SUBHEADERS'} } ) {
+  if ( exists $header->{ $subh } ) {
 
-    $_->{'max_subscan'} = $count{ $_->{ $subar } };
+    my %count;
+    for ( @{ $header->{ $subh } } ) {
+
+      $count{ $_->{ $subar } }++
+        if exists $_->{ $subar };
+    }
+
+    for ( @{ $header->{ $subh } } ) {
+
+      $_->{ $max } = $count{ $_->{ $subar } }
+        if exists $_->{ $subar };
+    }
+
+    return if keys %count;
   }
+
+  # In main header, there will be only one entry of subarry, so
+  # nothing to count.
+  $header->{ $max } = 1
+    if ! $header->{ $max }
+    && exists $header->{ $subar };
 
   return;
 }
