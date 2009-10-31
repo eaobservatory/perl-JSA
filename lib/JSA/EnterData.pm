@@ -1462,6 +1462,19 @@ sub fill_headers_COMMON {
     $header->{'BACKEND'} = $header->{'INSTRUME'};
   }
 
+  # Sybase ASE 15 cannot convert '0.000000000000000e+00' to a datetime value.
+  my $date_re = qr{ (?: \b date | dat(?: en | st )\b ) }xi;
+  for my $k ( keys %{ $header } ) {
+
+    next unless $k =~ $date_re;
+
+    my $date = $header->{ $k };
+    undef $header->{ $k }
+      if ! $date
+      || ( looks_like_number( $date ) && 0 == $date )
+          ;
+  }
+
   return;
 }
 
