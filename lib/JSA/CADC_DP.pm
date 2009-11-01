@@ -160,6 +160,9 @@ ENDNEWID
 select isnull(max(input_id),0)
    from dp_file_input
 ENDNEWFILEID
+
+$sql = "select input_id from dp_file_input order by input_id";
+
   print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
 
   my $dp_file_input_count = queryValue( $dbh, $sql );
@@ -202,6 +205,7 @@ insert into dp_file_input
   values
   ( $dp_file_input_id, $dp_recipe_instance_id, '$mem', 'infile' )
 ENDMEMBER
+print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
     insertWithRollback( $dbh, $sql );
   }
 
