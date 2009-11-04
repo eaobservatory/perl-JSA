@@ -1165,7 +1165,7 @@ No-op for files table at the present time.
 
 =cut
 
-sub update_hash {
+sub prepare_update_hash {
 
   my ( $self, $table, $dbh, $field_values ) = @_;
 
@@ -1270,6 +1270,24 @@ sub update_hash {
     }
   }
 
+  return
+    { 'differ' => { %differ },
+      'unique_val' => $unique_val,
+      'unique_key' => $unique_key,
+    };
+}
+
+sub update_hash {
+
+  my ( $self, $table, $dbh, $field_values ) = @_;
+
+  return if $table eq 'FILES';
+
+  my $change = prepare_update_hash( $table, $dbh, $field_values )
+    or return;
+
+  my %differ = %{ $change->{'differ'} };
+
   return 1 unless keys %differ;
 
   my @sorted = sort keys %differ;
@@ -1287,8 +1305,11 @@ sub update_hash {
       }
       @sorted;
 
-  $sql = sprintf "UPDATE %s SET %s WHERE %s = '%s'",
-            $table, $changes, $unique_key, $unique_val;
+  my $sql = sprintf "UPDATE %s SET %s WHERE %s = '%s'",
+            $table,
+            $changes,
+            $change->{'unique_key'},
+            $change->{'unique_val'};
 
   if ( $self->debug ) {
 
