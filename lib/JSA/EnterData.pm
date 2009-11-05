@@ -1279,12 +1279,11 @@ sub prepare_update_hash {
 
 sub update_hash {
 
-  my ( $self, $table, $dbh, $field_values ) = @_;
+  my ( $self, $table, $dbh, $change ) = @_;
 
-  return if $table eq 'FILES';
-
-  my $change = prepare_update_hash( $table, $dbh, $field_values )
-    or return;
+  return
+    if $table eq 'FILES'
+    || ! $change;
 
   my %differ = %{ $change->{'differ'} };
 
@@ -1922,11 +1921,11 @@ sub _update_or_insert {
 
   my $table = $args{'table'};
 
-
   my $ok;
   if ( $self->update_mode ) {
 
-    $ok = $self->update_hash( @args{qw/ table dbhandle /}, $vals )
+    my $change = $self->prepare_update_hash( @args{qw/ table dbhandle /}, $vals );
+    $ok = $self->update_hash( @args{qw/ table dbhandle /}, $change )
   }
   else {
 
