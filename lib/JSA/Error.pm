@@ -235,6 +235,10 @@ what will be returned by the overload methods.
 
 An internal Starlink error.
 
+=item B<JSA::Error::StarlinkCommand>
+
+An error during run of a Starlink command.
+
 =back
 
 =head1 KNOWN PROBLEMS
@@ -317,6 +321,9 @@ package JSA::Error::FatalError;
 use base qw/ JSA::Error /;
 
 package JSA::Error::Starlink;
+use base qw/ JSA::Error /;
+
+package JSA::Error::StarlinkCommand;
 use base qw/ JSA::Error /;
 
 1;
