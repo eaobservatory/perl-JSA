@@ -1738,18 +1738,21 @@ sub calc_radec {
   $pa *= -1 if defined $pa;
 
   my @command = $inst->get_bound_check_command( $fh, $pa );
-  my ( undef, undef, $systat ) =
-    run_star_command( $command[0], @command[ 1 .. $#command ] );
+  my ( $systat );
+  try {
 
-  if ($systat == 256) {
-
-    # ADAM_EXIT - there will be a standard out message so the user should follow up
-    return 0;
-  } elsif ($systat != 0) {
-
-    # probably control-C
-    die "Error running SMURF: Status = $systat";
+    ( undef, undef, $systat ) =
+      run_star_command( $command[0], @command[ 1 .. $#command ] );
   }
+  catch JSA::Error::StarlinkCommand with {
+
+    my ( $err ) = @_;
+    print $err->text;
+  };
+  # Allow JSA::Error::BadExec error to move up.
+
+  # run_star_command() throws Error when $systat != 0.
+  return if $systat != 0;
 
   # Get the bounds
   my %result;
