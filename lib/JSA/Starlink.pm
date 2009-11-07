@@ -160,8 +160,21 @@ sub run_star_command {
     }
   }
 
-  throw JSA::Error::BadExec( "Error running Starlink command $args[0] - status = $exstat.".(@errors ? " Errors:\n". join("\n",@errors) : "")."\n" )
-    if $exstat != 0;
+  if ( $exstat != 0 ) {
+
+    my $text =
+      "Error running Starlink command $args[0] - status = $exstat."
+      . ( @errors
+          ? " Errors:\n" . join( "\n", @errors )
+          : ''
+        )
+      . "\n" ;
+
+    throw JSA::Error::StarlinkCommand( $text )
+      if $exstat == 1;
+
+    throw JSA::Error::BadExec( $text );
+  }
 
   return (\@out, \@errors, $exstat);
 }
