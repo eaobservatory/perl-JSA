@@ -1937,26 +1937,33 @@ sub _update_or_insert {
 
     $vals = $self->prepare_insert_hash( $table, $vals );
 
-    #  KLUDGE to avoid duplicate inserts due to same obsid.  First hash reference
-    #  most likely have undef (AZ|AM|EL)(START|END).
-    if ( $table eq 'COMMON'
-          && ref $vals eq 'ARRAY'
-          && 1 < scalar @{ $vals }
-        ) {
-
-      my %val;
-      for my $v ( @{ $vals } ) {
-
-        # Last one "wins".
-        $val{ $v->{'obsid'} } = $v;
-      }
-      $vals = [ map { $val{ $_ } } keys %val ];
-    }
+    $vals = $self->_apply_kludge_for_COMMON( $vals )
+      if 'COMMON' eq $table ;
 
     $ok = $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
   }
 
   return $args{'dbhandle'}->errstr;
+}
+
+# KLUDGE to avoid duplicate inserts due to same obsid.  First hash reference
+# most likely have undef (AZ|AM|EL)(START|END).
+sub _apply_kludge_for_COMMON {
+
+  my ( $self, $vals ) = @_;
+
+  return
+    unless ref $vals eq 'ARRAY'
+    || 1 < scalar @{ $vals };
+
+  my %val;
+  for my $v ( @{ $vals } ) {
+
+    # Last one "wins".
+    $val{ $v->{'obsid'} } = $v;
+  }
+
+  return [ map { $val{ $_ } } keys %val ];
 }
 
 =item B<_verify_dict>
