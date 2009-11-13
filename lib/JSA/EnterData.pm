@@ -614,7 +614,14 @@ set.
         $observations->{$obs->runnr} = \@subhdrs;
       }
 
-      my $added = $self->insert_obs( $dbh, $inst, $observations, $columns, \%dict );
+      my $added = $self->insert_obs( 'dbhandle' => $dbh,
+                                      'instrument' => $inst,
+                                      'columns' => $columns,
+                                      'dict'    => \%dict,
+                                      'obs' => $observations,
+                                    );
+
+
       push @files_added, @{ $added }
         if $added && scalar @{ $added };
     }
@@ -628,13 +635,18 @@ Inserts a row  in "FILES", "COMMON", and instrument related tables for
 each observation for each subscan and subsystem used.  Every insert
 per observation is done in one transaction.
 
-It takes a database handle; an instrument object
+It takes a hash of database handle; an instrument object
 (I<JSA::EnterData::ACSIS> or I<JSA::EnterData::SCUBA2>); hash
 reference of observations (run number as keys, array reference of sub
 headers as values); a hash reference of columns (see I<get_columns>);
 and a hash reference of dictionary (see I<create_dictionary>).
 
-  $enter->insert_obs( $dbh, $inst, \%obs, \%cols, \%dict );
+  $enter->insert_obs( 'dbhandle' => $dbh,
+                      'instrument' => $inst,
+                      'columns' => \%cols,
+                      'dict'    => \%dict,
+                      'obs'     => \%obs,
+                    );
 
 It is called by I<prepare_and_insert> method.
 
@@ -648,10 +660,16 @@ It is called by I<prepare_and_insert> method.
   # fails, the entire observation fails to go in to the DB.
   sub insert_obs {
 
-  my ( $self, $dbh, $inst, $obs, $cols, $dict ) = @_ ;
+    my ( $self, %args ) = @_ ;
+  #my ( $self, $dbh, $inst, obs, $cols, $dict ) = @_ ;
+
+    # Pass everything but observations hash reference to other subs.
+    my %pass_args =
+      map { $_ => $args{ $_ } } qw[ instrument dbhandle columns dict ];
+
+    my ( $inst, $dbh, $obs ) = map { $args{ $_ } } qw[ instrument dbhandle obs ];
 
     my ( @success, @sub_obs, @base );
-
     RUN:
     for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
 
@@ -727,12 +745,9 @@ It is called by I<prepare_and_insert> method.
       $self->fill_headers_COMMON( $common_hdrs, $common_obs );
 
       my $error =
-        $self->_update_or_insert( 'dbhandle' => $dbh,
+        $self->_update_or_insert( %pass_args,
                                   'table'   => 'COMMON',
                                   'headers' => $common_hdrs,
-                                  'columns' => $cols,
-                                  'dict'    => $dict,
-                                  'instrument' => $inst,
                                 );
 
       if ($error) {
@@ -748,7 +763,9 @@ It is called by I<prepare_and_insert> method.
         next RUN;
       }
 
-      $self->add_subsys_obs( $dbh, $inst, $obs->{$runnr}, $cols, $dict )
+      $self->add_subsys_obs( %pass_args,
+                              'obs' => $obs->{$runnr},
+                            )
         or next RUN ;
 
       $dbh->commit if $self->load_header_db;
@@ -936,10 +953,13 @@ sub skip_obs {
 
 =item B<add_subsys_obs>
 
-Adds subsystem observations, given a database handle; hash reference
-of observations (run number as keys, array reference of sub headers as
-values); a hash reference of columns (see I<get_columns>); and a hash
-reference of dictionary (see I<create_dictionary>).
+Adds subsystem observations, given a hash of database handle; hash
+reference of observations (run number as keys, array reference of sub
+headers as values); a hash reference of columns (see I<get_columns>);
+and a hash reference of dictionary (see I<create_dictionary>).
+
+The observations hash reference is for a given run number, not the
+the I<OMP::Info::Objects> in its entirety.
 
 If "load header db" has been set to true (see I<load_header_db>
 method), then the database transactions will be rolled back on
@@ -947,7 +967,12 @@ a database related error.
 
 Returns true on success, false on failure.
 
-  $ok = $enter->add_subsys_obs( $dbh, $inst, \%obs, \%cols, \%dict );
+  $ok = $enter->add_subsys_obs( 'dbhandle' => $dbh,
+                                'instrument' => $inst,
+                                'columns' => \%cols,
+                                'dict'    => \%dict,
+                                'obs'     => \%obs_per_runnr,
+                              );
 
 It is called by I<insert_obs> method.
 
@@ -955,7 +980,22 @@ It is called by I<insert_obs> method.
 
 sub add_subsys_obs {
 
-  my ( $self, $dbh, $inst, $obs, $cols, $dict ) = @_;
+  my ( $self, %args ) = @_;
+  #my ( $self, $dbh, $inst, $obs, $cols, $dict ) = @_;
+
+  for my $k ( qw[ instrument dbhandle columns dict obs ] ) {
+
+    next
+      if exists $args{ $k } && $args{ $k } && ref $args{ $k };
+
+    throw JSA::Error::BadArgs( qq[No suitable value given for ${k}.] );
+  }
+
+  # Need to pass everything but observations to other subs.
+  my %pass_args =
+    map { $_ => $args{ $_ } } qw[ instrument dbhandle columns dict ];
+
+  my ( $inst, $dbh, $obs ) = map { $args{ $_ } } qw[ instrument dbhandle obs ];
 
   my $subsysnr = 0;
   my $totsub = scalar @{ $obs };
@@ -985,12 +1025,9 @@ sub add_subsys_obs {
       $inst->_fill_headers_obsid_subsys( $subh, $subsys_obs->obsid );
 
       my $error =
-        $self->_update_or_insert( 'dbhandle' => $dbh,
-                                  'instrument' => $inst,
+        $self->_update_or_insert( %pass_args,
                                   'table'   => $inst->table,
                                   'headers' => $subh,
-                                  'columns' => $cols,
-                                  'dict'    => $dict,
                                 );
 
       if ($error) {
@@ -1007,7 +1044,13 @@ sub add_subsys_obs {
         # Create headers that don't exist
         $self->fill_headers_FILES( $inst, $subsys_hdrs, $subsys_obs );
 
-        my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subsys_hdrs );
+        my $insert_ref =
+          $self->get_insert_values( 'table' => 'FILES',
+                                    'headers' => $subsys_hdrs,
+                                    map( { $_ => $pass_args{ $_} }
+                                          qw[ columns dict ]
+                                        ),
+                                  );
 
         try {
 
@@ -1579,20 +1622,31 @@ sub get_columns {
 
 =item B<get_insert_values>
 
-Given a table name, a hash reference containing table column
-information (see global hash %columns), a hash reference containing
-the dictionary contents, and a hash reference containing observation
+Given a hash of a table name; a hash reference containing table column
+information (see global hash %columns); a hash reference containing
+the dictionary contents; and a hash reference containing observation
 headers, return a hash reference with the table's columns as the keys,
 and the insertion values as the values.
 
+For FILES table, an additional hash reference is needed to list the
+already processed files.  Keys are the (base) file names, values could
+be anything.
+
   $vals =
-    $enter->get_insert_values( $table, \%columns, \%dictionary, \%hdrhash );
+    $enter->get_insert_values( 'table' => $table,
+                                'columns' => \%columns,
+                                'dict' => \%dictionary,
+                                'headers' => \%hdrhash,
+                              );
 
 =cut
 
 sub get_insert_values {
 
-  my ( $self, $table, $columns, $dictionary, $hdrhash ) = @_;
+  my ( $self, %args ) = @_;
+  #my ( $self, $table, $columns, $dictionary, $hdrhash ) = @_;
+
+  my ( $table, $columns ) = map { $args{ $_ } } qw[ table columns ];
 
   for ( qw[ SCUBA-2 ] ) {
 
@@ -1606,8 +1660,7 @@ sub get_insert_values {
   # Map headers to columns, translating from the dictionary as
   # necessary.
 
-  my $main =
-    $self->extract_column_headers( $table, $columns, $dictionary, $hdrhash );
+  my $main = $self->extract_column_headers( %args );
 
   # Do value transformation
   $self->transform_value($table, $columns, $main);
@@ -1617,7 +1670,10 @@ sub get_insert_values {
 
 sub extract_column_headers {
 
-  my ( $self, $table, $columns, $dict, $hdrhash ) = @_;
+  my ( $self, %args ) = @_;
+
+  my ( $hdrhash, $table, $columns, $dict ) =
+    map { $args{ $_ } } qw[ headers table columns dict ];
 
   my %values;
 
@@ -1926,7 +1982,7 @@ sub _update_or_insert {
 
   my ( $self, %args ) = @_;
 
-  my $vals = $self->get_insert_values( @args{qw/ table columns dict headers /});
+  my $vals = $self->get_insert_values( %args );
 
   my $table = $args{'table'};
 
