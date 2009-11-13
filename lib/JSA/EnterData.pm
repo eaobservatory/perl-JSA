@@ -738,7 +738,7 @@ It is called by I<prepare_and_insert> method.
       if ($error) {
 
         $dbh->rollback;
-        if ($error =~ /insert duplicate key row/i ) {
+        if ( $self->_is_insert_dup_error( $error ) ) {
 
           $self->_print_text( "File metadata already present\n" );
         } else {
@@ -1964,6 +1964,79 @@ sub _apply_kludge_for_COMMON {
   }
 
   return [ map { $val{ $_ } } keys %val ];
+}
+
+sub _modify_db_on_obsend {
+
+  my ( $self, %args ) = @_;
+
+  # Obey update_mode() as usual.
+  return $self->_update_or_insert( %args )
+    if 'FILES' eq $args{'table'}
+    || ! $self->_exists_obs_end( $args{'headers'} );
+
+  my $old_mode = $self->update_mode;
+
+  # Force an INSERT.
+  $self->update_mode( 0 );
+  my $err_text = $self->_update_or_insert( %args );
+
+  # Failing that, try UPDATE.
+  if ( $self->_is_insert_dup_error( $err_text ) ) {
+
+    $self->update_mode( 1 );
+    $err_text = $self->_update_or_insert( %args );
+  }
+
+  $self->update_mode( $old_mode );
+
+  return $err_text;
+}
+
+sub _exists_obs_end {
+
+  my ( $self, $head ) = @_;
+
+  my $array = ref $head eq 'ARRAY';
+
+  for my $h ( $array
+              ? @{ $head }
+              : $head
+             ) {
+
+    return 1
+      if grep { exists $h->{ $_ } && $h->{ $_ } } qw[ OBSEND ];
+  }
+
+  return unless $array;
+
+  my $subh = 'SUBHEADERS';
+  return $self->_exists_obs_end( $head->{ $subh } )
+    if exists $head->{ $subh };
+
+  return;
+}
+
+=item B<_is_insert_dup_error>
+
+Returns a truth value to indicate if the error was due to insertion of duplicate
+row, given a plain string or an L<Error> object.  It compares the expected
+Sybase error text.
+
+  $dbh->rollback
+    if $enter->_is_insert_dup_error( $dbh->errstr );
+
+=cut
+
+sub _is_insert_dup_error {
+
+  my ( $self, $err ) = @_;
+
+  my $text = ref $err ? $err->text : $err;
+
+  return
+    $text
+    && $text =~ /insert duplicate key row/i ;
 }
 
 =item B<_verify_dict>
