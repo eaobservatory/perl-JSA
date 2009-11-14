@@ -1752,7 +1752,7 @@ sub calc_radec {
   # Allow JSA::Error::BadExec error to move up.
 
   # run_star_command() throws Error when $systat != 0.
-  return if $systat != 0;
+  return if ! defined $systat || $systat != 0;
 
   # Get the bounds
   my %result;
