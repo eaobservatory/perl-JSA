@@ -43,12 +43,12 @@ $OMP::ArchiveDB::FallbackToFiles = 0;
 $OMP::ArchiveDB::AnyDate = 1;
 
 # Handle command-line options.
-my ( $help, $man, $mode, $ut, $version );
-my $status = GetOptions( "help"    => \$help,
-                         "man"     => \$man,
-                         "ut=s"    => \$ut,
-                         "mode=s"  => \$mode,
-                         "version" => \$version,
+my ( $help, $man, $mode, $project, $ut, $version );
+my $status = GetOptions( "help"      => \$help,
+                         "man"       => \$man,
+                         "project=s" => \$project,
+                         "ut=s"      => \$ut,
+                         "version"   => \$version,
                        );
 
 pod2usage( 1 ) if $help;
@@ -61,29 +61,35 @@ if( $version ) {
 }
 
 # Make sure the UT parameter is defined.
-if( ! defined $ut ) {
-  die "Must include -ut parameter";
+if( ! defined $ut || ! defined $project ) {
+  die "Must include either -ut or -project parameter";
 }
 
-# Default to night mode for now.
-if( ! defined $mode ) {
+if( defined( $project ) ) {
+  $mode = "project";
+  $project = uc( $project );
+  print "Running jsasubmit for project $project.\n";
+} else {
+  print "Running jsasubmit for UT date $ut.\n";
   $mode = "night";
 }
 
-print "Running jsasubmit for $ut for $telescope in $mode mode.\n";
-
-# Retrieve list of files at CADC for this UT date.
-my $atCADC = &JSA::CADC_Copy::at_cadc( $ut );
-
-my $grp = new OMP::Info::ObsGroup( telescope => $telescope,
-                                   date => $ut,
-                                   retainhdr => 1,
-                                 );
+my $grp;
+my $atCADC;
+if( $mode eq 'project' ) {
+  $grp = new OMP::Info::ObsGroup( projectid => $project,
+                                  retainhdr => 1 );
+} else {
+  $grp = new OMP::Info::ObsGroup( telescope => $telescope,
+                                  date => $ut,
+                                  retainhdr => 1 );
+  $atCADC = JSA::CADC_Copy::at_cadc( $ut );
+}
 
 if( scalar( @{$grp->obs} ) == 0 ) {
-  print "No observations were retrieved from the database for $ut for $telescope.\n";
+  print "No observations were retrieved from the database.\n";
 } else {
-  print scalar( @{$grp->obs} ) . " observations were retrieved from the database for $ut for $telescope.\n\n";
+  print scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n";
 
   # Hash to hold list of groups.
   my %group;
@@ -186,25 +192,34 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     print map { "$_\n" } @{$group{$group}};
     my @members = map { file_to_uri( $_ ) } @{$group{$group}};
 
-    print "Checking to ensure files are at CADC...";
-    my $there = 1;
-    foreach my $file ( @{$group{$group}} ) {
-      $file =~ s/\.sdf$//;
-      if( ! exists( $atCADC->{$file} ) ) {
-        $there = 0;
+    # Only check for night mode. If we're in project mode, assume the
+    # files are at CADC.
+    if( $mode eq 'night' ) {
+      print "Checking to ensure files are at CADC...";
+      my $there = 1;
+      foreach my $file ( @{$group{$group}} ) {
+        $file =~ s/\.sdf$//;
+        if( ! exists( $atCADC->{$file} ) ) {
+          $there = 0;
+        }
       }
+      if( ! $there ) {
+        print "nope. Skipping to next group.\n";
+        next;
+      }
+      print "yep.\n";
     }
-    if( ! $there ) {
-      print "nope. Skipping to next group.\n";
-      next;
-    }
-    print "yep.\n";
 
     # Submit the job.
     my $recipe_id;
     try {
-      $recipe_id = create_recipe_instance( $dbh, \@members,
-                                           { 'mode' => $mode } );
+      my %opts;
+      $opts{'mode'} = $mode;
+      if( $mode eq 'project' ) {
+        $opts{'projectid'} = $project;
+      }
+
+      $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
     }
     catch JSA::Error::CADCDB with {
       my $Error = shift;

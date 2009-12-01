@@ -109,6 +109,7 @@ sub create_recipe_instance {
   my $options = shift;
 
   my $mode = $options->{'mode'};
+  my $project = uc( $options->{'project'} );
 
   my $sql;
 
@@ -184,8 +185,12 @@ $sql = "select input_id from dp_file_input order by input_id";
   $sql .= " )\n";
   $sql .= "  values\n";
   $sql .= "  ( $dp_recipe_instance_id, 0x$dp_recipe_id, \" \"";
-  if( defined( $mode ) ) {
+  if( defined( $mode ) && defined( $project ) ) {
+    $sql .= ", \"-mode='$mode' -drparameters='-recpar recpar-$project.ini'\"";
+  } elsif( defined( $mode ) ) {
     $sql .= ", \"-mode='$mode'\"";
+  } elsif( defined( $project ) ) {
+    $sql .= ", \"-drparameters='-recpars recpars-$project.ini'\"";
   }
   $sql .= " )";
   print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
