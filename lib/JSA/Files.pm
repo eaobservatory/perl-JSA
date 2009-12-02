@@ -104,7 +104,15 @@ sub can_send_to_cadc {
   if ($inst ne "SCUBA") {
 
     my $obstype = $header->value( "OBS_TYPE" );
-    return 0 if ( ! defined $obstype || $obstype !~ /science/i );
+
+    return 0 if !defined $obstype;
+
+    # For SCUBA-2 we can transfer pointing observations
+    if ($inst =~ /SCUBA\-?2/i) {
+      return 0 if ( $obstype !~ /science|pointing/i );
+    } else {
+      return 0 if ( $obstype !~ /science/i );
+    }
   }
 
   my $assoc = $header->value( "ASN_TYPE" );
@@ -280,7 +288,7 @@ sub looks_like_drfile {
   if ($filename =~ /^g?[ah]\d{8}_\d{1,5}_\d\d?_[a-z]+(\d\d\d)?\.sdf$/) {
     # ACSIS
     return 1;
-  } elsif ($filename =~ /^g?s\d{8}_\d{5}_\d{3}_\w+\.sdf$/) {
+  } elsif ($filename =~ /^g?s\d{8}_\d{1,5}_\d{3}_\w+\.sdf$/) {
     # SCUBA-2
     return 1;
   } elsif ($filename =~ /^\d{8}_\d{4}_(resw|flat)\.sdf$/ ||
@@ -549,8 +557,9 @@ sub drfilename_to_cadc {
   $prefix = "h" if $prefix eq 'a';
 
   # _cube has a mandatory count and some earlier pipeline versions
-  # did not support that. This check is probably obsolete
-  if ($product eq 'cube' && !defined $prodcount) {
+  # did not support that. _reduced also has a mandatory count and
+  # scuba-2 does not yet include the count in the pipeline.
+  if ( $product =~ /^(cube|reduced)/ && !defined $prodcount) {
     $prodcount = 1;
   }
 
