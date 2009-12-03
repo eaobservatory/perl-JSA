@@ -621,12 +621,34 @@ sub find_start_dates {
   }
 }
 
+=item B<at_cadc>
+
+Return a list of files uploaded to CADC for a specific UT date.
+
+  my $at_cadc = at_cadc( $ut );
+
+The UT date must be in YYYYMMDD format. This function returns a hash
+reference, with keys being the files at CADC. If the UT date is in an
+incorrect format, this method returns undef. If no files are returned,
+this method returns an empty hash reference.
+
+=cut
+
 sub at_cadc {
   my $ut = shift;
 
   return if $ut !~ /^\d{8}$/;
 
-  my @uploaded = `/home/cadcops/bin/jcmtInfo a$ut%`;
+  # Go through each instrument prefix and push the list of files onto
+  # our array.
+  my @uploaded;
+  foreach my $instprefix ( qw/ a s4a s4b s4c s4d s8a s8b s8c s8d / ) {
+    my @instuploaded = `/home/cadcops/bin/jcmtInfo ${instprefix}$ut%`;
+    next if $instuploaded[0] =~ /No such file/;
+    push @uploaded, @instuploaded;
+  }
+
+  # Now make the hash that we'll return.
   my %at_cadc = map { chomp( $_ ); $_ => undef } @uploaded;
 
   return \%at_cadc;
@@ -1103,26 +1125,14 @@ Sets the directory to the given argument, returns nothing.
 
   $copy->verbose( 2 );
 
-=item B<at_cadc>
+=head1 AUTHORS
 
-Return a list of files uploaded to CADC for a specific UT date.
-
-  my $at_cadc = at_cadc( $ut );
-
-The UT date must be in YYYYMMDD format. This function returns a hash
-reference, with keys being the files at CADC. If the UT date is in an
-incorrect format, this method returns undef. If no files are returned,
-this method returns an empty hash reference.
-
-=back
-
-=head1 AUTHOR
-
-Anubhav E<lt>a.agarwal@jach.hawaii.eduE<gt>
+Anubhav E<lt>a.agarwal@jach.hawaii.eduE<gt>,
+Brad Cavanagh E<lt>b.cavanagh@jach.hawaii.eduE<gt>.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2008, Science and Technology Facilities Council.
+Copyright (C) 2008,2009 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify
