@@ -31,10 +31,17 @@ use OMP::Info::ObsGroup;
 use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
 
 use Getopt::Long;
+use Net::SMTP;
 use Pod::Usage;
 
-my $telescope = 'JCMT';
-my $base_url = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
+my $TELESCOPE = 'JCMT';
+my $BASEURL = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
+my $MAILHOST = 'mailhost.jach.hawaii.edu';
+my $MAILTO = 'jcmtarch@jach.hawaii.edu';
+my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
+
+# Array to hold messages that will be mailed out.
+my @mailmessages;
 
 # Don't fall back to files.
 $OMP::ArchiveDB::FallbackToFiles = 0;
@@ -61,16 +68,16 @@ if( $version ) {
 }
 
 # Make sure the UT parameter is defined.
-if( ! defined $ut || ! defined $project ) {
+if( ! defined $ut && ! defined $project ) {
   die "Must include either -ut or -project parameter";
 }
 
 if( defined( $project ) ) {
   $mode = "project";
   $project = uc( $project );
-  print "Running jsasubmit for project $project.\n";
+  push @mailmessages, "Running jsasubmit for project $project.\n";
 } else {
-  print "Running jsasubmit for UT date $ut.\n";
+  push @mailmessages, "Running jsasubmit for UT date $ut.\n";
   $mode = "night";
 }
 
@@ -80,16 +87,16 @@ if( $mode eq 'project' ) {
   $grp = new OMP::Info::ObsGroup( projectid => $project,
                                   retainhdr => 1 );
 } else {
-  $grp = new OMP::Info::ObsGroup( telescope => $telescope,
+  $grp = new OMP::Info::ObsGroup( telescope => $TELESCOPE,
                                   date => $ut,
                                   retainhdr => 1 );
   $atCADC = JSA::CADC_Copy::at_cadc( $ut );
 }
 
 if( scalar( @{$grp->obs} ) == 0 ) {
-  print "No observations were retrieved from the database.\n";
+  push @mailmessages, "No observations were retrieved from the database.\n";
 } else {
-  print scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n";
+  push @mailmessages, scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n";
 
   # Hash to hold list of groups.
   my %group;
@@ -101,17 +108,16 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
     my $hdr = $obs->hdrhash;
 
-    # We only want to process science observations, so skip if the
-    # OBS_TYPE header is not 'science'.
-    if( ( defined( $hdr->{'OBS_TYPE'} ) &&
-          $hdr->{'OBS_TYPE'} ne 'science' ) ||
-        ! defined( $hdr->{'OBS_TYPE'} ) ) {
-      next;
-    }
+    my $obstype = uc( $hdr->{'OBS_TYPE'} );
+    my $instrume = uc( $hdr->{'INSTRUME'} );
+    my $backend = uc( $hdr->{'BACKEND'} );
 
-    # Temporarily disable processing of SCUBA-2.
-    if( defined( $hdr->{'INSTRUME'} ) &&
-        $hdr->{'INSTRUME'} eq 'SCUBA-2' ) {
+    # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
+    # ACSIS.
+    if( ! ( ( $instrume eq 'SCUBA-2' &&
+              ( $obstype eq 'SCIENCE' ||
+                $obstype eq 'POINTING' ) ) ||
+            ( $backend eq 'ACSIS' && $obstype eq 'SCIENCE' ) ) ) {
       next;
     }
 
@@ -145,6 +151,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
 
     my $instrument = get_orac_instrument( $obs->fits );
+
     my ( $frameclass, $groupclass, $calclass, $instclass ) = orac_determine_inst_classes( $instrument );
     if( ! $frameclassloaded{$frameclass} ) {
       my $isok = eval " require $frameclass; 1; ";
@@ -169,6 +176,14 @@ if( scalar( @{$grp->obs} ) == 0 ) {
           $tmphdr->{'FRQSIGHI'} = $tmphdr->{'FREQ_SIG_UPPER'};
         }
 
+        # Set ORAC_INSTRUMENT so SCUBA-2 works.
+        my $ORAC_INSTRUMENT = '';
+        if( defined( $tmphdr->{'SUBSYSNR'} ) &&
+            $instrument eq 'SCUBA-2' ) {
+          $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr->{'SUBSYSNR'};
+        }
+        $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
+
         my $frm = new $frameclass;
         $frm->hdr( %{$tmphdr} );
         my $group = $frm->findgroup;
@@ -183,31 +198,32 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
   }
 
-  print "Connecting to CADC data processing database...";
+  push @mailmessages, "Connecting to CADC data processing database...";
   my $dbh = connect_to_cadcdp;
-  print "connected!\n";
+  push @mailmessages, "connected!\n\n";
 
-  foreach my $group ( keys %group ) {
-    print "Requesting CADC processing of the following files:\n";
-    print map { "$_\n" } @{$group{$group}};
+  foreach my $group ( sort keys %group ) {
+    push @mailmessages, "Requesting CADC processing of the following files:\n";
+    push @mailmessages, map { "$_\n" } @{$group{$group}};
     my @members = map { file_to_uri( $_ ) } @{$group{$group}};
 
     # Only check for night mode. If we're in project mode, assume the
     # files are at CADC.
     if( $mode eq 'night' ) {
-      print "Checking to ensure files are at CADC...";
+      push @mailmessages, "Checking to ensure files are at CADC...\n";
       my $there = 1;
       foreach my $file ( @{$group{$group}} ) {
         $file =~ s/\.sdf$//;
         if( ! exists( $atCADC->{$file} ) ) {
           $there = 0;
+          push @mailmessages, "$file is not at CADC!\n";
         }
       }
       if( ! $there ) {
-        print "nope. Skipping to next group.\n";
+        push @mailmessages, "One or more files from current group not at CADC.\nSkipping to next group.\n";
         next;
       }
-      print "yep.\n";
+      push @mailmessages, "All files are at CADC. Submitting processing request.\n";
     }
 
     # Submit the job.
@@ -223,22 +239,35 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
     catch JSA::Error::CADCDB with {
       my $Error = shift;
-      print "Error in CADC DB connectivity: $Error";
-      print "Skipping to next group.\n";
+      push @mailmessages, "Error in CADC DB connectivity: $Error";
+      push @mailmessages, "Skipping to next group.\n";
     }
     otherwise {
       my $Error = shift;
       $Error->throw;
     };
     exit if ! defined $recipe_id;
-    print "Request submitted with recipe instance $recipe_id.\n";
-    print "Recipe URL: $base_url" . hex($recipe_id) . "\n";
-    print "\n";
+    push @mailmessages, "Request submitted with recipe instance $recipe_id.\n";
+    push @mailmessages, "Recipe URL: $BASEURL" . hex($recipe_id) . "\n";
+    push @mailmessages, "\n";
   }
 
-  print "Disconnecting from CADC data processing database...";
+  push @mailmessages, "Disconnecting from CADC data processing database...";
   disconnect_from_cadcdp( $dbh );
-  print "disconnected!\n\n";
-  print "Data processing requests complete.\n";
+  push @mailmessages, "disconnected!\n\n";
+  push @mailmessages, "Data processing requests complete.\n";
 
 }
+
+# Send the email.
+my $smtp = Net::SMTP->new( $MAILHOST );
+$smtp->mail( $MAILFROM );
+$smtp->to( $MAILTO );
+
+$smtp->data();
+$smtp->datasend( "To: $MAILTO\n" );
+$smtp->datasend("Subject: CADC Processing for " . ( defined( $ut ) ? $ut : $project ) . "\n");
+$smtp->datasend("\n");
+$smtp->datasend( @mailmessages );
+
+$smtp->quit;
