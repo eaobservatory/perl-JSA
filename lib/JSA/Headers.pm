@@ -119,16 +119,8 @@ sub get_orac_instrument {
   my $oa;
   if ($backend eq 'ACSIS' || $backend eq 'DAS' || $backend eq 'AOSC') {
     $oa = "ACSIS";
-  } elsif ($instrument eq 'SCUBA2') {
-    # depends on long vs short
-    my $subarray = $hdr->value("SUBARRAY");
-    if (defined $subarray) {
-      if ($subarray =~ /^s8/) {
-        $oa = "SCUBA2_LONG";
-      } elsif ($subarray =~ /^s4/) {
-        $oa = "SCUBA2_SHORT";
-      }
-    }
+  } elsif ($instrument eq 'SCUBA-2') {
+    $oa = 'SCUBA2';
   } else {
     # go with instrument
     $oa = $instrument;
