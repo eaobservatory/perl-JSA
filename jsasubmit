@@ -232,7 +232,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       my %opts;
       $opts{'mode'} = $mode;
       if( $mode eq 'project' ) {
-        $opts{'projectid'} = $project;
+        $opts{'project'} = $project;
       }
 
       $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
