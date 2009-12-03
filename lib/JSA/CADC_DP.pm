@@ -109,7 +109,7 @@ sub create_recipe_instance {
   my $options = shift;
 
   my $mode = $options->{'mode'};
-  my $project = uc( $options->{'project'} );
+  my $project = defined( $options->{'project'} ? uc( $options->{'project'} ) : undef );
 
   my $sql;
 
@@ -179,7 +179,7 @@ $sql = "select input_id from dp_file_input order by input_id";
 
   $sql = "insert into dp_recipe_instance\n";
   $sql .= "  ( recipe_instance_id, recipe_id, state";
-  if( defined( $mode ) ) {
+  if( defined( $mode ) || defined( $project ) ) {
     $sql .= ", parameters";
   }
   $sql .= " )\n";
