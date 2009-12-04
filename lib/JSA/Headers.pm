@@ -122,7 +122,7 @@ sub get_orac_instrument {
   } elsif ($instrument eq 'SCUBA-2') {
     $oa = 'SCUBA2';
 
-    my $subsysnr = $fits->{'SUBSYSNR'};
+    my $subsysnr = $fits{'SUBSYSNR'};
     if( defined( $subsysnr ) ) {
       $oa .= "_$subsysnr";
     }
