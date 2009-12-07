@@ -109,7 +109,7 @@ sub create_recipe_instance {
   my $options = shift;
 
   my $mode = $options->{'mode'};
-  my $project = defined( $options->{'project'} ? uc( $options->{'project'} ) : undef );
+  my $project = defined( $options->{'project'} ) ? uc( $options->{'project'} ) : undef;
 
   my $sql;
 
