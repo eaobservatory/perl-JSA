@@ -235,9 +235,13 @@ sub merge_pngs {
 
       # Check to see if the rimg exists. If it doesn't, use the
       # special "null:" keyword for montage.
-      if( exists( $rimgs{$rimg} ) ) {
+      if( ! exists( $rimgs{$rimg} ) ) {
         $rimg = "null:";
       }
+
+      # Set up and run the command. At this point if there's an error
+      # just don't do anything, but if it succeeds, push the name of
+      # the resulting file onto our array for return later.
       my $command = "$montage $rimg $rsp -tile 2x1 -geometry ${size}x${size}+0+0 $reduced";
       my $returnval = system( $command );
       if( ! $returnval ) {
@@ -621,7 +625,7 @@ sub drfilename_to_cadc {
   # _cube has a mandatory count and some earlier pipeline versions
   # did not support that. _reduced also has a mandatory count and
   # scuba-2 does not yet include the count in the pipeline.
-  if ( $product =~ /^(cube|reduced)/ && !defined $prodcount) {
+  if ( $suffix ne 'png' && $product =~ /^(cube|reduced)/ && !defined $prodcount) {
     $prodcount = 1;
   }
 

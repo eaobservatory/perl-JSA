@@ -40,7 +40,8 @@ use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    looks_like_drfile looks_like_cadcfile
-                   can_send_to_cadc looks_like_drthumb /;
+                   can_send_to_cadc looks_like_drthumb
+                   merge_pngs /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf convert_dr_files list_convert_plan /;
@@ -159,6 +160,8 @@ sub convert_dr_files {
   my $opts = shift;
   my $mode = $opts->{'mode'};
 
+  my @pngs;
+
   for my $file ( sort keys %$href ) {
 
     if( looks_like_drfile( $file ) ) {
@@ -246,6 +249,7 @@ sub convert_dr_files {
       print "Converting file $file\n" if $DEBUG;
 
       my $outfile = rename_png( $file );
+      push @pngs, $outfile;
 
     } else {
       if ($DEBUG) {
@@ -257,6 +261,10 @@ sub convert_dr_files {
       }
     }
   }
+
+  # And merge the PNGs we've created.
+  my $reduced = merge_pngs( @pngs );
+
 }
 
 =item B<list_convert_plan>
@@ -309,6 +317,9 @@ sub list_convert_plan {
 
 =item B<rename_png>
 
+Rename a PNG as created by ORAC-DR to the filename convention for CADC
+ingest. Returns the name of the copied PNG.
+
 =cut
 
 sub rename_png {
@@ -328,6 +339,8 @@ sub rename_png {
   }
 
   copy( $infile, $outfile );
+
+  return $outfile;
 
 }
 
