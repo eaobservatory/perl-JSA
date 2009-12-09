@@ -1725,6 +1725,12 @@ sub calc_radec {
 
   my ( $self, $inst, $obs, $headerref ) = @_;
 
+  return 1
+    if 3 ==
+      scalar grep
+              { exists $headerref->{ $_ } && defined $headerref->{ $_ } }
+              qw[ TRACKSYS BASEC1 BASEC2 ];
+
   # Filenames for a subsystem
   my @filenames = $obs->filename;
 
