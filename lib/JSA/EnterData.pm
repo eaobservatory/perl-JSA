@@ -1754,9 +1754,11 @@ sub calc_radec {
   # run_star_command() throws Error when $systat != 0.
   return if ! defined $systat || $systat != 0;
 
+  require File::Basename;
+  my $prog = File::Basename::fileparse( $command[0], '' );
+
   # Get the bounds
   my %result;
-  my $prog = $command[0];
   for my $k ( qw/ FTL FBR FTR FBL /) {
 
     my $res = qx{ /star/bin/kappa/parget $k $prog };
