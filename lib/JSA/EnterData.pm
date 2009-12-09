@@ -1756,9 +1756,10 @@ sub calc_radec {
 
   # Get the bounds
   my %result;
+  my $prog = $command[0];
   for my $k ( qw/ FTL FBR FTR FBL /) {
 
-    my $res = qx{ /star/bin/kappa/parget $k makecube };
+    my $res = qx{ /star/bin/kappa/parget $k $prog };
     $res =~ s/^\s+//;
     $res =~ s/\s+$//;
     $result{$k} = [ map {Astro::Coords::Angle->new( $_, units => 'rad') } split(/\s+/,$res) ];
@@ -1785,7 +1786,7 @@ sub calc_radec {
 
     for my $k (qw/ REFLON REFLAT / ) {
 
-      my $res = qx{ /star/bin/kappa/parget $k makecube };
+      my $res = qx{ /star/bin/kappa/parget $k $prog };
       chomp($res);
       $result{$k} = $res;
     }
