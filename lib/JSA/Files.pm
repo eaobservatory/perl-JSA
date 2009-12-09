@@ -34,7 +34,7 @@ our @EXPORT_OK = qw( uri_to_file file_to_uri drfilename_to_cadc
                      looks_like_rawfile cadc_transfer_check
                      compare_file_lists scan_dir construct_rawfile
                      can_send_to_cadc can_send_to_cadc_guess
-                     looks_like_drthumb );
+                     looks_like_drthumb merge_pngs );
 
 our $DEBUG = 0;
 
@@ -186,6 +186,68 @@ sub cadc_transfer_check {
     }
   }
   return( \@transferred, \@not_transferred );
+}
+
+=item B<merge_pngs>
+
+Given a list of acceptable PNGs, merge them so that the rimg is on the
+left and the rsp is on the right. The resulting PNGs will be named
+_reduced_ in place of the _rimg_ and _rsp_ in the original file
+names. If the _rimg_ PNG is missing for a given _rsp_ PNG, then the
+output _reduced_ PNG will have a transparent square where the _rimg_
+would be.
+
+  $merged = merge_pngs( @inputs );
+
+Returns a reference to an array of the merged PNG names. If no PNGs
+were successfully merged for whatever reason, the returned array will
+be empty.
+
+Requires ImageMagick, specifically the 'montage' command, which will
+be looked for in /usr/bin/montage.
+
+=cut
+
+sub merge_pngs {
+  my @inputs = @_;
+
+  # Split off the rimgs and the rsps, storing the rimgs in a hash for
+  # ease of search.
+  my %rimgs = map { $_ => undef } grep { /_rimg_/ } @inputs;
+  my @rsps = grep { /_rsp_/ } @inputs;
+
+  # Array to hold a list of merged PNGs.
+  my @reduced;
+
+  # Check for montage.
+  my $montage = "/usr/bin/montage";
+
+  if( -e $montage ) {
+    foreach my $rsp ( @rsps ) {
+
+      # Get the size.
+      $rsp =~ /_(\d{2,4})\.png$/;
+      my $size = $1;
+
+      # Form the appropriate rimg and reduced names from this rimg.
+      ( my $reduced = $rsp ) =~ s/_rsp_/_reduced_/;
+      ( my $rimg = $rsp ) =~ s/_rsp_/_rimg_/;
+
+      # Check to see if the rimg exists. If it doesn't, use the
+      # special "null:" keyword for montage.
+      if( exists( $rimgs{$rimg} ) ) {
+        $rimg = "null:";
+      }
+      my $command = "$montage $rimg $rsp -tile 2x1 -geometry ${size}x${size}+0+0 $reduced";
+      my $returnval = system( $command );
+      if( ! $returnval ) {
+        push @reduced, $reduced;
+      }
+    }
+  }
+
+  return \@reduced;
+
 }
 
 =item B<uri_to_file>
