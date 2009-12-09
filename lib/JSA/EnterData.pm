@@ -122,7 +122,7 @@ BEGIN {
     );
 
   #  Generate some accessor functions.
-  for my $k ( keys %default ) {
+  for my $k ( keys %default, qw[ conditional_insert ] ) {
 
     next
       # Dictionary must be given in constructor.
@@ -1041,6 +1041,10 @@ sub add_subsys_obs {
 
         $added_files++;
 
+        my $old_cond = $self->conditional_insert;
+        $self->conditional_insert( 1 )
+          if $self->update_mode;
+
         # Create headers that don't exist
         $self->fill_headers_FILES( $inst, $subsys_hdrs, $subsys_obs );
 
@@ -1064,6 +1068,8 @@ sub add_subsys_obs {
 
           $error = shift @_;
         };
+
+        $self->conditional_insert( $old_cond );
 
         if ($error) {
 
@@ -1162,18 +1168,33 @@ sub insert_hash {
   my @insert_hashes = @{ $insert };
 
   my @fields = sort keys %{$insert_hashes[0]}; # sort required
-  my $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
-              $table,
-              join( "\n, ", @fields),
-              join( "\n, ", ('?') x scalar @fields )
-              ;
 
-  # cache the SQL statement
-  my $sth;
-  if (!$self->debug && $self->load_header_db) {
+  my ( $sql, $sth, $prim_key );
+  unless ( $self->conditional_insert ) {
 
-    $sth = $dbh->prepare($sql)
-      or die "Could not prepare sql statement for insert\n" . $dbh->errstr . "\n" ;
+    $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
+                $table,
+                join( "\n, ", @fields),
+                join( "\n, ", ('?') x scalar @fields )
+                ;
+
+    if (!$self->debug && $self->load_header_db ) {
+
+      $sth = $dbh->prepare($sql)
+        or die "Could not prepare sql statement for insert\n" . $dbh->errstr . "\n" ;
+    }
+  }
+  else {
+
+    $prim_key = _get_primary_key( $table );
+
+    # &DBI::prepare is not used for this SQL string as place holders do not work
+    # after SELECT clause, need to place the values directly.  See
+    # _make_insert_select_sql() && _fill_in_sql() methods.
+    $sql = $self->_make_insert_select_sql( 'table' => $table,
+                                            'columns' => \@fields,
+                                            'primary' => $prim_key,
+                                          );
   }
 
   # and insert all the rows
@@ -1186,11 +1207,151 @@ sub insert_hash {
       $self->_show_insert_sql( $table, \@fields, \@values );
     } elsif ($self->load_header_db) {
 
-      my $status = $sth->execute(@values);
+      my $status;
+
+      unless ( $self->conditional_insert ) {
+
+        $status = $sth->execute(@values);
+      }
+      else {
+
+        my $filled = $self->_fill_in_sql( 'sql' => $sql,
+                                          'dbhandle' => $dbh,
+                                          'table' => $table,
+                                          'columns' => \@fields,
+                                          'values' => \@values,
+                                        );
+
+        my @prim_val =
+          map { $row->{ $_ } }
+            ref $prim_key
+            ? @{ $prim_key }
+            : $prim_key
+            ;
+
+        $status = $dbh->do( $filled,
+                            $prim_key
+                            ? ( undef, @prim_val )
+                            : ()
+                          );
+      }
+
       return $status if !$status; # return if bad status
     }
   }
   return 1;
+}
+
+
+=item B<_make_insert_select_sql>
+
+Returns a SQL INSERT query string (to be first processed by
+C<sprintf>, see I<_fill_in_sql>), given a hash of ...
+
+  table - table name,
+  columns - array reference of ordered column names, and
+  primary - primary key name.
+
+Purpose of the generated INSERT query string is to avoid adding
+duplicate row by checking if the primary key already does not exist.
+
+  $string =
+    $self->_make_insert_select_sql( 'table' => $table_name,
+                                    'columns' => [ @column_names ],
+                                    'primary' => $key,
+                                  );
+
+
+The string returned has a DBI placeholder only for primary key value.
+(In DBD::Sybase, possibly within Sybase ASE 15 itself, placeholders
+are not allowed after "SELECT" clause.) Something like ...
+
+  INSERT INTO <table>
+    SELECT %s, %s, ...
+    WHERE NOT EXISTS
+      ( SELECT 1 FROM <table> WHERE <primary key> = ? )
+
+=cut
+
+sub _make_insert_select_sql {
+
+  my ( $self, %args ) = @_;
+
+  my ( $table, $cols, $primary ) = @args{qw[ table columns primary ]};
+
+  throw JSA::Error::BadArgs "No primary keys given."
+    unless defined $primary;
+
+  my @primary = ref $primary ? @{ $primary } : ( $primary );
+
+  my $where = '';
+  for my $k ( @primary ) {
+
+    $where .= ( $where ? ' AND ' : ' ' )
+            . qq[ $k = ? ]
+            ;
+  }
+
+  my @col = @{ $cols };
+  return
+    sprintf q[ INSERT INTO %s (%s) SELECT %s ]
+          . q[ WHERE NOT EXISTS ( SELECT 1 FROM %s WHERE %s ) ],
+          $table,
+          join( q[ , ], @col ),
+          join( q[ , ], ('%s') x scalar @col ),
+          $table,
+          $where
+          ;
+}
+
+=item B<_fill_in_sql>
+
+Returns a given format string substitued with given row values (as an
+array reference), in addition to a valid database handle, table name,
+and column names (as an array reference) in a hash.
+
+  $filled =
+    $self->_fill_in_sql( 'sql' => $sql_string,
+                          'dbhandle' => $dbh,
+                          'table' => $table,
+                          'columns' => [ @column_name ]
+                          'values' => [ @value ],
+                        );
+
+This is a workaround for lack of support of place holders in subquery
+(for the values to be SELECT'd; see definition of
+I<_make_insert_select_sql> method).
+
+=cut
+
+sub _fill_in_sql {
+
+  my ( $self, %args ) = @_;
+
+  my ( $sql, $dbh ) = @args{qw[ sql dbhandle ]};
+
+  my $types = $self->get_columns( $args{'table'}, $dbh );
+
+  my @val;
+
+  # Handle number type values (for consumption in Sybase ASE 15.0) outside of
+  # &DBI::quote as it puts quotes around such values.
+  my $int_re = qr{\b (?: int | float | real | boolean )}xi;
+
+  for ( my $i = 0; $i < scalar @{ $args{'values'} }; $i++ ) {
+
+    my $val = $args{'values'}->[ $i ];
+    my $type = $types->{ $args{'columns'}->[ $i ] };
+
+    push @val,
+      $type =~ m/$int_re/
+      ? $val
+      : $dbh->quote( $val, $type )
+      ;
+  }
+
+  return
+    sprintf $sql, @val;
 }
 
 =item B<update_hash>
@@ -1212,15 +1373,9 @@ sub prepare_update_hash {
   return if $table eq 'FILES';
 
   # work out which key uniquely identifies the row
-  my $unique_key;
+  my $unique_key = _get_primary_key( $table );
 
-  if ($table eq 'COMMON') {
-
-    $unique_key = "obsid";
-  } elsif ( grep { $table eq $_ } qw( ACSIS SCUBA2 FILES ) ) {
-
-    $unique_key = "obsid_subsysnr";
-  } else {
+  unless ( $unique_key ) {
 
     die "Major problem with table name: '$table'\n";
   }
@@ -1315,6 +1470,28 @@ sub prepare_update_hash {
       'unique_val' => $unique_val,
       'unique_key' => $unique_key,
     };
+}
+
+=item B<_get_primary_key>
+
+Returns the primary key for a given table in C<jcmt> database.
+
+  $primary = _get_primary_key( 'ACSIS' );
+
+=cut
+
+sub _get_primary_key {
+
+  my ( $table ) = @_;
+
+  my %keys =
+    ( 'ACSIS'  => 'obsid_subsysnr',
+      'COMMON' => 'obsid',
+      'FILES'  => [qw{ obsid_subsysnr file_id }],
+      'SCUBA2' => 'obsid_subsysnr',
+    );
+
+  return $keys{ $table };
 }
 
 sub update_hash {
