@@ -1009,7 +1009,7 @@ sub add_subsys_obs {
 
         my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subsys_hdrs );
 
-        if ( ! $self->update_mode ) {
+        #if ( ! $self->update_mode ) {
 
           try {
 
@@ -1023,7 +1023,7 @@ sub add_subsys_obs {
 
             $error = shift @_;
           };
-        }
+        #}
 
         if ($error) {
 
