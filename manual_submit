@@ -1,0 +1,77 @@
+#!/bin/env starperl
+
+=head1 NAME
+
+manual_submit - Submit a job to the CADC GridEngine for JSA processing.
+
+=head1 SYNOPSIS
+
+  manual_submit inlist.txt
+
+=head1 DESCRIPTION
+
+This program submits a processing request to the CADC GridEngine for
+the given files. The only argument is a filename whose file contains a
+list of raw files to process, one per line. It is assumed that the
+files are already at CADC.
+
+=cut
+
+use JAC::Setup qw/ sybase /;
+
+use strict;
+use warnings;
+
+use Net::SMTP;
+
+use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
+                     create_recipe_instance /;
+use JSA::Files qw/ file_to_uri /;
+
+my $BASEURL = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
+my $MAILHOST = 'mailhost.jach.hawaii.edu';
+my $MAILTO = 'jcmtarch@jach.hawaii.edu';
+my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
+
+my @messages;
+
+my $inputfile = $ARGV[0];
+if( ! defined( $inputfile ) ) {
+  die "Must supply input filename as first argument to manual_submit";
+}
+
+# Load the files.
+open my $fh, "<", $inputfile or die "Could not open $inputfile: $!\n";
+my @files = <$fh>;
+close $fh;
+chomp @files;
+
+push @messages, "Manual request for processing of the following files:\n";
+push @messages, map { "$_\n" } @files;
+my @members = map { file_to_uri( $_ ) } @files;
+
+my %opts;
+$opts{'mode'} = "night";
+
+push @messages, "Connecting to CADC data processing database...";
+my $dbh = connect_to_cadcdp;
+push @messages, "connected!\n";
+my $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
+push @messages, "Request submitted with recipe instance $recipe_id.\n";
+push @messages, "Recipe URL: $BASEURL" . hex( $recipe_id ) . "\n";
+push @messages, "Disconnecting from CADC data processing database...";
+disconnect_from_cadcdp( $dbh );
+push @messages, "disconnected!\n";
+
+# Send the email.
+my $smtp = Net::SMTP->new( $MAILHOST );
+$smtp->mail( $MAILFROM );
+$smtp->to( $MAILTO );
+
+$smtp->data();
+$smtp->datasend( "To: $MAILTO\n" );
+$smtp->datasend( "Subject: Manual CADC Processing request\n" );
+$smtp->datasend( "\n" );
+$smtp->datasend( @messages );
+
+$smtp->quit;
