@@ -1009,21 +1009,18 @@ sub add_subsys_obs {
 
         my $insert_ref = $self->get_insert_values( 'FILES', $cols, $dict, $subsys_hdrs );
 
-        #if ( ! $self->update_mode ) {
+        try {
 
-          try {
+          _verify_file_name( $insert_ref->{'file_id'} );
 
-            _verify_file_name( $insert_ref->{'file_id'} );
+          my $hash = $self->prepare_insert_hash( 'FILES', $insert_ref );
+          $self->insert_hash( 'FILES', $dbh, $hash )
+            or $error = $dbh->errstr;
+        }
+        catch JSA::Error with {
 
-            my $hash = $self->prepare_insert_hash( 'FILES', $insert_ref );
-            $self->insert_hash( 'FILES', $dbh, $hash )
-              or $error = $dbh->errstr;
-          }
-          catch JSA::Error with {
-
-            $error = shift @_;
-          };
-        #}
+          $error = shift @_;
+        };
 
         if ($error) {
 
