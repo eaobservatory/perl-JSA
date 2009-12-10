@@ -293,7 +293,7 @@ if (exists $ENV{TMPDIR}) {
 }
 
 print "Environment variables:\n";
-for my $env_variable ( sort qw/ PERL5LIB STARLINK_DIR SMURF_THREADS ORAC_DIR PATH / ) {
+for my $env_variable ( sort qw/ PERL5LIB STARLINK_DIR SMURF_THREADS ORAC_DIR PATH ADAM_USER TMPDIR HDS_SCRATCH / ) {
   print "$env_variable: " . ( defined( $ENV{$env_variable} ) ?
                               $ENV{$env_variable}            :
                               "undef" ) . "\n";
