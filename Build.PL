@@ -35,7 +35,7 @@ my $build = Module::Build->new
                   ],
    dist_version => '0.02',
    script_files => [ qw/
-                         dpRetrieve jsawrapdr dpCapture convert_dr_files cadc_drcopy.pl jsasubmit
+                         dpRetrieve jsawrapdr dpCapture convert_dr_files cadc_drcopy.pl jsasubmit manual_submit
                        / ],
    meta_merge => {
                resources =>  {
