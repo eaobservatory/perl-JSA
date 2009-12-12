@@ -2209,7 +2209,7 @@ sub _modify_db_on_obsend {
   # Obey update_mode() as usual.
   return $self->_update_or_insert( %args )
     if 'FILES' eq $args{'table'}
-    || ! $self->_exists_obs_end( $args{'headers'} );
+    || ! $self->_find_header( $args{'headers'}, 'OBSEND' );
 
   my $old_mode = $self->update_mode;
 
@@ -2229,9 +2229,9 @@ sub _modify_db_on_obsend {
   return $err_text;
 }
 
-sub _exists_obs_end {
+sub _find_header {
 
-  my ( $self, $head ) = @_;
+  my ( $self, $head, $name, $send_val ) = @_;
 
   my $array = ref $head eq 'ARRAY';
 
@@ -2240,14 +2240,15 @@ sub _exists_obs_end {
               : $head
              ) {
 
-    return 1
-      if grep { exists $h->{ $_ } && $h->{ $_ } } qw[ OBSEND ];
+    my @val = grep { exists $h->{ $_ } && $h->{ $_ } } $name;
+    scalar @val and
+      return $send_val ? @val : 1;
   }
 
   return unless $array;
 
   my $subh = 'SUBHEADERS';
-  return $self->_exists_obs_end( $head->{ $subh } )
+  return $self->_find_header( $head->{ $subh }, $name, $send_val )
     if exists $head->{ $subh };
 
   return;
