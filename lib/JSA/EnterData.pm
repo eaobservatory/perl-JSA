@@ -1956,9 +1956,9 @@ sub calc_radec {
   my ( $self, $inst, $obs, $headerref ) = @_;
 
   return 1
-    if 3 ==
+    if 3 <=
       scalar grep
-              { exists $headerref->{ $_ } && defined $headerref->{ $_ } }
+              $self->_find_header( 'headers' => $headerref, 'name' => $_ ),
               qw[ TRACKSYS BASEC1 BASEC2 ];
 
   # Filenames for a subsystem
@@ -2209,7 +2209,10 @@ sub _modify_db_on_obsend {
   # Obey update_mode() as usual.
   return $self->_update_or_insert( %args )
     if 'FILES' eq $args{'table'}
-    || ! $self->_find_header( $args{'headers'}, 'OBSEND' );
+    || ! $self->_find_header( 'headers' => $args{'headers'},
+                              'name' => 'OBSEND',
+                              'test' => 'true'
+                            );
 
   my $old_mode = $self->update_mode;
 
@@ -2229,9 +2232,58 @@ sub _modify_db_on_obsend {
   return $err_text;
 }
 
+=item B<_find_header>
+
+Returns a list of header values or a truth value, given a hash with
+I<headers> and I<name> as the required keys. Respective hash values
+are a header hash reference and header name to search for.  Default
+behaviour is to return a truth value if the given header exists.
+Returns nothing if the header is missing or specified test fails.
+C<SUBEHEADERS> are also searched along with the main header hash.
+
+  print 'OBSEND header exists'
+    if $enter->_find_header( 'headers' => $hdrhash,
+                             'name' => 'OBSEND',
+                             'test' => 'exists'
+                            );
+
+Test for the header value being true or defined can be specified by
+providing I<test> key with value of "true" or "defined".
+
+Instead of receiving a truth value, actual header values can be
+obtained by specifying I<value> key (associated with any value).
+
+  use Data::Dumper;
+  print "Defined OBSEND header value if present: ",
+    Dumper( $enter->_find_header( 'headers' => $hdrhash,
+                                  'name' => 'OBSEND',
+                                  'test' => 'defined',
+                                  'value' => undef
+                                )
+          );
+
+=cut
+
 sub _find_header {
 
-  my ( $self, $head, $name, $send_val ) = @_;
+  my ( $self, %args ) = @_;
+
+  my ( $head, $name ) = @args{qw[ headers name ]};
+
+  my $test =
+    sub {
+      my ( $head, $key ) = @_;
+
+      return unless exists $head->{ $key };
+      for ( $args{'test'} ) {
+
+        last unless defined $args{'test'};
+
+        $_ eq 'true' and return !! $head->{ $key };
+        $_ eq 'defined' and return defined $head->{ $key };
+      }
+      return 1;
+    };
 
   my $array = ref $head eq 'ARRAY';
 
@@ -2240,15 +2292,17 @@ sub _find_header {
               : $head
              ) {
 
-    my @val = grep { exists $h->{ $_ } && $h->{ $_ } } $name;
+    my @val = grep $test->( $h, $_ ), $name;
     scalar @val and
-      return $send_val ? @val : 1;
+      return exists $args{'value'} ? @val : 1;
   }
 
-  return unless $array;
+  # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
+  # pseudo header with array reference of hash references as value.
+  return if $array;
 
   my $subh = 'SUBHEADERS';
-  return $self->_find_header( $head->{ $subh }, $name, $send_val )
+  return $self->_find_header( %args, 'headers' => $head->{ $subh } )
     if exists $head->{ $subh };
 
   return;
