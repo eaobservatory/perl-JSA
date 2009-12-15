@@ -1336,7 +1336,7 @@ sub _fill_in_sql {
 
   # Handle number type values (for consumption in Sybase ASE 15.0) outside of
   # &DBI::quote as it puts quotes around such values.
-  my $int_re = qr{\b (?: int | float | real | boolean )}xi;
+  my $int_re = qr{\b (?: int | float | real | bit | boolean )}xi;
 
   for ( my $i = 0; $i < scalar @{ $args{'values'} }; $i++ ) {
 
@@ -1344,10 +1344,12 @@ sub _fill_in_sql {
     my $type = $types->{ $args{'columns'}->[ $i ] };
 
     push @val,
-      $type =~ m/$int_re/
-      ? $val
-      : $dbh->quote( $val, $type )
-      ;
+      ! defined $val
+      ? 'NULL'
+      : $type =~ m/$int_re/
+        ? $val
+        : $dbh->quote( $val, $type )
+        ;
   }
 
   return
