@@ -745,10 +745,10 @@ It is called by I<prepare_and_insert> method.
       $self->fill_headers_COMMON( $common_hdrs, $common_obs );
 
       my $error =
-        $self->_update_or_insert( %pass_args,
-                                  'table'   => 'COMMON',
-                                  'headers' => $common_hdrs,
-                                );
+        $self->_modify_db_on_obsend( %pass_args,
+                                    'table'   => 'COMMON',
+                                    'headers' => $common_hdrs,
+                                  );
 
       if ($error) {
 
@@ -1025,10 +1025,10 @@ sub add_subsys_obs {
       $inst->_fill_headers_obsid_subsys( $subh, $subsys_obs->obsid );
 
       my $error =
-        $self->_update_or_insert( %pass_args,
-                                  'table'   => $inst->table,
-                                  'headers' => $subh,
-                                );
+        $self->_modify_db_on_obsend( %pass_args,
+                                      'table'   => $inst->table,
+                                      'headers' => $subh,
+                                    );
 
       if ($error) {
 
@@ -2210,16 +2210,20 @@ sub _modify_db_on_obsend {
 
   # Obey update_mode() as usual.
   return $self->_update_or_insert( %args )
-    if 'FILES' eq $args{'table'}
-    || ! $self->_find_header( 'headers' => $args{'headers'},
+    if ! $self->_find_header( 'headers' => $args{'headers'},
                               'name' => 'OBSEND',
                               'test' => 'true'
                             );
 
+  my $old_insert = $self->conditional_insert;
   my $old_mode = $self->update_mode;
 
   # Force an INSERT.
   $self->update_mode( 0 );
+
+  # Use conditional insert so that on INSERT failure, $dbh->{'AutoCommit'} is
+  # NOT set to 1, which breaks the transaction thing going on elsewhere .
+  $self->conditional_insert( 1 );
   my $err_text = $self->_update_or_insert( %args );
 
   # Failing that, try UPDATE.
@@ -2230,6 +2234,7 @@ sub _modify_db_on_obsend {
   }
 
   $self->update_mode( $old_mode );
+  $self->conditional_insert( $old_insert );
 
   return $err_text;
 }
