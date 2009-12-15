@@ -2220,12 +2220,11 @@ sub _update_or_insert {
   }
   else {
 
-    $vals = $self->prepare_insert_hash( $table, $vals );
-
-    $vals = $self->_apply_kludge_for_COMMON( $vals )
-      if 'COMMON' eq $table ;
-
-    $ok = $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
+    $ok =
+      $self->
+        _combined_prepare_insert_hash( $vals,
+                                  map { $_ => $args{ $_ } } qw[ table dbhandle ]
+                                );
   }
 
   return $args{'dbhandle'}->errstr;
@@ -2255,12 +2254,37 @@ sub _modify_db_on_obsend {
 
   my ( $self, %args ) = @_;
 
-  # Obey update_mode() as usual.
-  return $self->_update_or_insert( %args )
-    if ! $self->_find_header( 'headers' => $args{'headers'},
-                              'name' => 'OBSEND',
-                              'test' => 'true'
-                            );
+  # (Try to) Obey update_mode() as usual.
+  unless ( $self->_find_header( 'headers' => $args{'headers'},
+                                'name' => 'OBSEND',
+                                'test' => 'true'
+                              )
+          ) {
+
+    my ( $err_text, $try_insert );
+    try {
+
+      $err_text = $self->_update_or_insert( %args )
+    }
+    catch JSA::Error::DBError with {
+
+      my ( $err ) = @_;
+
+      # Swallow case of zero rows affected.
+      throw JSA::Error::DBError $err
+        unless $err->text =~/Can.+update if the row exists previously/i;
+
+      $try_insert++;
+    };
+
+    return $err_text unless $try_insert;
+
+    return
+      $self->
+      _combined_prepare_insert_hash( $self->get_insert_values( %args ),
+                                map { $_ => $args{ $_ } } qw[ table dbhandle ]
+                              );
+  }
 
   my $old_insert = $self->conditional_insert;
 
@@ -2272,7 +2296,7 @@ sub _modify_db_on_obsend {
   my $val_count;
   {
     my $key = (keys %{ $vals } )[0];
-    $val_count = scalar $vals->{ $key }->[0];
+    $val_count = ref $vals->{ $key } ? scalar $vals->{ $key } : 1;
   }
   my $affected;
 
@@ -2306,18 +2330,30 @@ sub _modify_db_on_obsend {
     # NOT set to 1, which breaks the existing transaction setup elsewhere .
     $self->conditional_insert( 1 );
 
-    $vals = $self->prepare_insert_hash( $table, $vals );
-
-    $vals = $self->_apply_kludge_for_COMMON( $vals )
-      if 'COMMON' eq $table ;
-
-    $affected = $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
+    $self->
+      _combined_prepare_insert_hash( $vals,
+                                map { $_ => $args{ $_ } } qw[ table dbhandle ]
+                              );
   }
 
   $self->update_mode( $old_mode );
   $self->conditional_insert( $old_insert );
 
   return $args{'dbhandle'}->errstr;
+}
+
+sub _combined_prepare_insert_hash {
+
+  my ( $self, $vals, %args ) = @_;
+
+  my $table = $args{'table'};
+
+  $vals = $self->prepare_insert_hash( $table, $vals );
+
+  $vals = $self->_apply_kludge_for_COMMON( $vals )
+    if 'COMMON' eq $table ;
+
+  return $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
 }
 
 =item B<_find_header>
