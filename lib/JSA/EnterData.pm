@@ -1161,6 +1161,9 @@ sub insert_hash {
 
   my ( $self, $table, $dbh, $insert ) = @_;
 
+  return $self->conditional_insert_hash( $table, $dbh, $insert )
+    if $self->conditional_insert;
+
   # Get the fields in sorted order (so that we can match with values)
   # and create a template SQL statement. This can be done with the
   # first hash from @insert_hashes
@@ -1170,31 +1173,17 @@ sub insert_hash {
   my @fields = sort keys %{$insert_hashes[0]}; # sort required
 
   my ( $sql, $sth, $prim_key );
-  unless ( $self->conditional_insert ) {
 
-    $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
-                $table,
-                join( "\n, ", @fields),
-                join( "\n, ", ('?') x scalar @fields )
-                ;
+  $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
+              $table,
+              join( "\n, ", @fields),
+              join( "\n, ", ('?') x scalar @fields )
+              ;
 
-    if (!$self->debug && $self->load_header_db ) {
+  if (!$self->debug && $self->load_header_db ) {
 
-      $sth = $dbh->prepare($sql)
-        or die "Could not prepare sql statement for insert\n" . $dbh->errstr . "\n" ;
-    }
-  }
-  else {
-
-    $prim_key = _get_primary_key( $table );
-
-    # &DBI::prepare is not used for this SQL string as place holders do not work
-    # after SELECT clause, need to place the values directly.  See
-    # _make_insert_select_sql() && _fill_in_sql() methods.
-    $sql = $self->_make_insert_select_sql( 'table' => $table,
-                                            'columns' => \@fields,
-                                            'primary' => $prim_key,
-                                          );
+    $sth = $dbh->prepare($sql)
+      or die "Could not prepare sql statement for insert\n" . $dbh->errstr . "\n" ;
   }
 
   # and insert all the rows
@@ -1207,34 +1196,7 @@ sub insert_hash {
       $self->_show_insert_sql( $table, \@fields, \@values );
     } elsif ($self->load_header_db) {
 
-      my $status;
-
-      unless ( $self->conditional_insert ) {
-
-        $status = $sth->execute(@values);
-      }
-      else {
-
-        my $filled = $self->_fill_in_sql( 'sql' => $sql,
-                                          'dbhandle' => $dbh,
-                                          'table' => $table,
-                                          'columns' => \@fields,
-                                          'values' => \@values,
-                                        );
-
-        my @prim_val =
-          map { $row->{ $_ } }
-            ref $prim_key
-            ? @{ $prim_key }
-            : $prim_key
-            ;
-
-        $status = $dbh->do( $filled,
-                            $prim_key
-                            ? ( undef, @prim_val )
-                            : ()
-                          );
-      }
+      my $status = $sth->execute(@values);
 
       return $status if !$status; # return if bad status
     }
@@ -1242,6 +1204,85 @@ sub insert_hash {
   return 1;
 }
 
+=item B<conditional_insert_hash>
+
+Given a table name, a DBI database handle and a hash reference, insert
+the hash contents into the table.  Basically a named insert.  Returns
+a list or number of rows affected.
+
+If any of the values in C<%to_insert> are array references multiple
+rows will be inserted corresponding to the content.  If more than one
+row has an array reference the size of those arrays must be identical.
+
+  $status = $enter->conditional_insert_hash($table, $dbh, \%to_insert);
+
+=cut
+
+sub conditional_insert_hash {
+
+  my ( $self, $table, $dbh, $insert ) = @_;
+
+  return $self->insert_hash( $table, $dbh, $insert )
+    unless $self->conditional_insert;
+
+  # Get the fields in sorted order (so that we can match with values)
+  # and create a template SQL statement. This can be done with the
+  # first hash from @insert_hashes
+
+  my @insert_hashes = @{ $insert };
+
+  my @fields = sort keys %{$insert_hashes[0]}; # sort required
+
+  my $prim_key = _get_primary_key( $table );
+
+  # &DBI::prepare is not used for this SQL string as place holders do not work
+  # after SELECT clause, need to place the values directly.  See
+  # _make_insert_select_sql() && _fill_in_sql() methods.
+  my $sql = $self->_make_insert_select_sql( 'table' => $table,
+                                            'columns' => \@fields,
+                                            'primary' => $prim_key,
+                                          );
+
+  my @affected;
+  for my $row (@insert_hashes) {
+
+    my @values = @{$row}{@fields};
+
+    if ($self->debug) {
+
+      $self->_show_insert_sql( $table, \@fields, \@values );
+      next;
+    }
+
+    last unless $self->load_header_db;
+
+    my $filled = $self->_fill_in_sql( 'sql' => $sql,
+                                      'dbhandle' => $dbh,
+                                      'table' => $table,
+                                      'columns' => \@fields,
+                                      'values' => \@values,
+                                    );
+
+    my @prim_val =
+      map { $row->{ $_ } }
+        ref $prim_key
+        ? @{ $prim_key }
+        : $prim_key
+        ;
+
+    my $affected = $dbh->do( $filled,
+                              $prim_key
+                              ? ( undef, @prim_val )
+                              : ()
+                            );
+
+    return if ! defined $affected;
+
+    push @affected, $affected;
+  }
+
+  return @affected;
+}
 
 =item B<_make_insert_select_sql>
 
