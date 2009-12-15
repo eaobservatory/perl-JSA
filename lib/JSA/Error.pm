@@ -320,6 +320,9 @@ use base qw/ JSA::Error /;
 package JSA::Error::FatalError;
 use base qw/ JSA::Error /;
 
+package JSA::Error::DBError;
+use base qw/ JSA::Error /;
+
 package JSA::Error::Starlink;
 use base qw/ JSA::Error /;
 
