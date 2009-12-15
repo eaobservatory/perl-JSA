@@ -1281,7 +1281,11 @@ sub conditional_insert_hash {
     push @affected, $affected;
   }
 
-  return @affected;
+  return @affected if wantarray;
+
+  my $sum = 0;
+  $sum += $_ for @affected;
+  return $sum;
 }
 
 =item B<_make_insert_select_sql>
@@ -1440,8 +1444,9 @@ sub prepare_update_hash {
   # how many rows
   my $count = scalar @{ $ref };
 
-  die "Can only update if the row exists previously! Obsid $unique_val missing.\n"
-    if $count == 0;
+  throw JSA::Error::DBError
+    "Can only update if the row exists previously! Obsid $unique_val missing.\n"
+      if $count == 0;
 
   die "Should not be possible to have more than one row. Got $count\n"
     if $count > 1;
@@ -1583,7 +1588,7 @@ sub update_hash {
 
     my $status = $sth->execute( map { $differ{$_} } @sorted );
 
-    return $status if !$status; # return bad status
+    return $status;
   }
 
   return 1;
@@ -2210,7 +2215,8 @@ sub _update_or_insert {
   if ( $self->update_mode ) {
 
     my $change = $self->prepare_update_hash( @args{qw/ table dbhandle /}, $vals );
-    $ok = $self->update_hash( @args{qw/ table dbhandle /}, $change )
+    $ok = $self->update_hash( @args{qw/ table dbhandle /}, $change );
+    $ok = defined $ok;
   }
   else {
 
@@ -2257,27 +2263,61 @@ sub _modify_db_on_obsend {
                             );
 
   my $old_insert = $self->conditional_insert;
+
   my $old_mode = $self->update_mode;
+  $self->update_mode( 1 );
 
-  # Force an INSERT.
-  $self->update_mode( 0 );
+  my $table = $args{'table'};
+  my $vals = $self->get_insert_values( %args );
+  my $val_count;
+  {
+    my $key = (keys %{ $vals } )[0];
+    $val_count = scalar $vals->{ $key }->[0];
+  }
+  my $affected;
 
-  # Use conditional insert so that on INSERT failure, $dbh->{'AutoCommit'} is
-  # NOT set to 1, which breaks the transaction thing going on elsewhere .
-  $self->conditional_insert( 1 );
-  my $err_text = $self->_update_or_insert( %args );
+  # Try UPDATE.
+  unless ( $table eq 'FILES' ) {
 
-  # Failing that, try UPDATE.
-  if ( $self->_is_insert_dup_error( $err_text ) ) {
+    my $change;
+    try {
 
-    $self->update_mode( 1 );
-    $err_text = $self->_update_or_insert( %args );
+      $change =
+        $self->prepare_update_hash( @args{qw/ table dbhandle /}, $vals );
+    }
+    catch JSA::Error::DBError with {
+
+      my ( $err ) = @_;
+
+      # Swallow case of zero rows affected.
+      throw JSA::Error::DBError $err
+        unless $err->text =~/Can.+update if the row exists previously/i;
+    };
+
+    $affected =
+      $self->update_hash( @args{qw/ table dbhandle /}, $change );
+  }
+
+  if ( ! $affected || $val_count > $affected ) {
+
+    $self->update_mode( 0 );
+
+    # Use conditional insert so that on INSERT failure $dbh->{'AutoCommit'} is
+    # NOT set to 1, which breaks the existing transaction setup elsewhere .
+    $self->conditional_insert( 1 );
+
+    $vals = $self->prepare_insert_hash( $table, $vals );
+
+    $vals = $self->_apply_kludge_for_COMMON( $vals )
+      if 'COMMON' eq $table ;
+
+    $affected = $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
   }
 
   $self->update_mode( $old_mode );
   $self->conditional_insert( $old_insert );
 
-  return $err_text;
+  return $args{'dbhandle'}->errstr;
 }
 
 =item B<_find_header>
