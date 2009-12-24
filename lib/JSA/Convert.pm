@@ -248,7 +248,7 @@ sub convert_dr_files {
 
       print "Converting file $file\n" if $DEBUG;
 
-      my $outfile = rename_png( $file );
+      my $outfile = rename_png( $file, { "mode" => $mode } );
       push @pngs, $outfile;
 
     } else {
@@ -324,12 +324,20 @@ ingest. Returns the name of the copied PNG.
 
 sub rename_png {
   my $infile = shift;
+  my $opts = shift;
+
+  my $mode = $opts->{'mode'};
 
   # Read the EXIF header to find out what type of ASN_TYPE we have.
   my $exif = new Image::ExifTool;
+  $exif->ExtractInfo( $infile );
   my @keywords = $exif->GetValue('Keywords');
   my %keywords = map { split '=', $_ } @keywords;
   my $assoc = $keywords{'jsa:asn_type'};
+
+  if( defined( $assoc ) && $assoc eq 'night' ) {
+    $assoc = $mode;
+  }
 
   my $outfile;
   if( defined( $assoc ) ) {
