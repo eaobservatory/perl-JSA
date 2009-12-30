@@ -1069,7 +1069,7 @@ sub add_subsys_obs {
         if ($error) {
 
           $dbh->rollback;
-          $self->_print_text( "$error\n\n" );
+          $self->_print_error_simple_dup( $error );
           return;
         }
       }
