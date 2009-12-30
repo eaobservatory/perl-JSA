@@ -2456,6 +2456,29 @@ sub _is_insert_dup_error {
     && $text =~ /insert duplicate key row/i ;
 }
 
+=item <_print_error_simple_dup>
+
+Given a error string, prints the it.  If the string matches Sybase duplicate
+insert error message, then prints "File metadata already present".
+
+  $self->_print_error_simple_dup( $dbh->errstr );
+
+=cut
+
+sub _print_error_simple_dup {
+
+  my ( $self, $err ) = @_;
+
+  return
+    $self->
+    _print_text( $self->_is_insert_dup_error( $err )
+                  ? qq[File metadata already present\n]
+                  : ref $err
+                    ? $err->text . qq[\n\n]
+                    : qq[$err\n\n]
+                );
+}
+
 =item B<_verify_dict>
 
 Verifies that the data dictionary (set via I<new> method) is a
