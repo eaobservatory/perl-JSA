@@ -753,13 +753,8 @@ It is called by I<prepare_and_insert> method.
       if ($error) {
 
         $dbh->rollback;
-        if ( $self->_is_insert_dup_error( $error ) ) {
+        $self->_print_error_simple_dup( $error );
 
-          $self->_print_text( "File metadata already present\n" );
-        } else {
-
-          $self->_print_text( print "$error\n\n" );
-        }
         next RUN;
       }
 
