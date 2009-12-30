@@ -1194,12 +1194,14 @@ sub insert_hash {
     if ($self->debug) {
 
       $self->_show_insert_sql( $table, \@fields, \@values );
-    } elsif ($self->load_header_db) {
-
-      my $status = $sth->execute(@values);
-
-      return $status if !$status; # return if bad status
+      next;
     }
+
+    next unless $self->load_header_db;
+
+    my $status = $sth->execute(@values);
+
+    return $status if !$status;
   }
   return 1;
 }
