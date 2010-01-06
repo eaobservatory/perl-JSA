@@ -61,7 +61,7 @@ sub update_fits_headers {
   my $file = shift;
 
   my $options = shift;
-  my $mode = $options->{'mode'};
+  my $mode = lc( $options->{'mode'} );
 
   # Make sure we actually need to do this. FITSMOD adds a new
   # card even if it already exists.
