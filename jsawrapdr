@@ -252,6 +252,11 @@ if( ! defined( $mode ) ) {
   die "Must supply -mode parameter to jsawrapdr";
 }
 
+# Trim any leading or trailing single quotes from mode, which might
+# possibly creep in from database-based submissions.
+$mode =~ s/^\'//;
+$mode =~ s/\'$//;
+
 $cleanup = "cadc" unless defined $cleanup;
 
 # We require that STARLINK_DIR and ORAC_DIR are set
