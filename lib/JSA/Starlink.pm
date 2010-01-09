@@ -515,7 +515,9 @@ sub _check_parent_product {
     # The path stored in the file lacks the .sdf
     $path .= ".sdf" unless $path =~ /\.sdf$/;
 
-    if (looks_like_cadcfile($path)) {
+    if( basename( $file ) eq basename( $path ) ) {
+      print "Looks like original file ($file == $path)\n" if $DEBUG;
+    } elsif (looks_like_cadcfile($path)) {
       # assume that if the provenance already includes CADC form
       # that this file is okay
       print "Looks like CADCFILE\n" if $DEBUG;
