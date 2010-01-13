@@ -551,6 +551,12 @@ if ($useoracdr) {
   # Instrument
   $ENV{ORAC_INSTRUMENT} = $oracinst;
 
+  # ORAC_DATA_CAL.
+  if( ! exists( $ENV{'ORAC_DATA_CAL'} ) ) {
+    $ENV{'ORAC_DATA_CAL'} = File::Spec->catdir( $ENV{'ORAC_CAL_ROOT'},
+                                                lc( $ENV{'ORAC_INSTRUMENT'} ) );
+  }
+
   @drcommand = ( $^X,
                File::Spec->catfile($ENV{ORAC_DIR},"bin","oracdr"),
                "-nodisplay",
