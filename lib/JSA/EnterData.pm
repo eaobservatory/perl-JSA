@@ -1198,7 +1198,7 @@ sub insert_hash {
 
     return $status if !$status;
   }
-  return 1;
+  return ;
 }
 
 =item B<conditional_insert_hash>
