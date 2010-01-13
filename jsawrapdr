@@ -163,6 +163,7 @@ use Pod::Usage;
 use File::Spec;
 use File::Temp;
 use Carp;
+use Data::Dumper;
 use Astro::FITS::Header;
 use Astro::FITS::Header::NDF;
 use Astro::FITS::Header::CFITSIO;
@@ -191,6 +192,11 @@ BEGIN {
   $ENV{ADAM_USER} = "$adamuser";
 
 }
+
+print "Debugging information:\n*** ARGV:\n";
+print Dumper \@ARGV;
+print "*** ENV:\n";
+print Dumper \%ENV;
 
 # Options
 my( $cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
@@ -237,6 +243,11 @@ if( defined( $parameters ) ) {
   $status = GetOptionsFromString( $parameters,
                                   "mode=s" => \$mode,
                                   "drparameters=s" => \$drparameters );
+
+  print "Parsed --parameters to give:\n";
+  print "mode = $mode\n";
+  print "drparameters = $drparameters\n";
+
 }
 
 # Check the UT and instrument parameters. If one's defined but not the
