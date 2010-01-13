@@ -229,6 +229,11 @@ if ($version) {
 
 # Handle the "parameters" option.
 if( defined( $parameters ) ) {
+
+  # Strip off any leading or trailing double quotes.
+  $parameters =~ s/^\"//;
+  $parameters =~ s/\"$//;
+
   $status = GetOptionsFromString( $parameters,
                                   "mode=s" => \$mode,
                                   "drparameters=s" => \$drparameters );
