@@ -1694,14 +1694,32 @@ sub fill_headers_COMMON {
         || JSA::EnterData::SCUBA2->name_is_scuba2( $header->{'BACKEND'} )
       ) {
 
-    $release_date = DateTime->new( 'month' => 6,
-                                  'year' => 2010,
-                                  'day' => 15,
-                                  'hour' => 12,
-                                  'minute' => 0,
-                                  'second' => 0,
-                                  'time_zone' => 0
-                                );
+    # Default currently not to release EC data
+    if ($obs->projectid =~ /ec/i) {
+      $release_date = DateTime->new( 'month' => 1,
+                                     'year' => 2031,
+                                     'day' => 1,
+                                     'hour' => 0,
+                                     'minute' => 0,
+                                     'second' => 0,
+                                     'time_zone' => 0
+                                   );
+    } elsif ( $obs->isScience ) {
+      # Treat this as SRO for now
+      $release_date = DateTime->new( 'month' => 5,
+                                     'year' => 2010,
+                                     'day' => 1,
+                                     'hour' => 0,
+                                     'minute' => 0,
+                                     'second' => 0,
+                                     'time_zone' => 0
+                                   );
+
+    } else {
+      # Release it
+      $release_date = OMP::General->yesterday(1);
+    }
+
   }
   elsif ($obs->isScience) {
 
