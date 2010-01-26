@@ -632,17 +632,38 @@ reference, with keys being the files at CADC. If the UT date is in an
 incorrect format, this method returns undef. If no files are returned,
 this method returns an empty hash reference.
 
+Accepts also an optional list of instrument prefixes, out of...
+
+  a,
+  s4a,
+  s4b,
+  s4c,
+  s4d,
+  s8a,
+  s8b,
+  s8c,
+  s8d
+
+
+If no list is given, all of the above prefixes are used.
+
+  my $at_cadc = at_cadc( $ut, qw[ s4a s8d ] );
+
 =cut
 
 sub at_cadc {
-  my $ut = shift;
+
+  my ( $ut, @prefix ) = @_;
 
   return if $ut !~ /^\d{8}$/;
+
+  @prefix = qw/ a s4a s4b s4c s4d s8a s8b s8c s8d /
+    unless scalar @prefix;
 
   # Go through each instrument prefix and push the list of files onto
   # our array.
   my @uploaded;
-  foreach my $instprefix ( qw/ a s4a s4b s4c s4d s8a s8b s8c s8d / ) {
+  foreach my $instprefix ( @prefix ) {
     my @instuploaded = `/home/cadcops/bin/jcmtInfo ${instprefix}$ut%`;
     next if $instuploaded[0] =~ /No such file/;
     push @uploaded, @instuploaded;
