@@ -2047,11 +2047,15 @@ sub calc_radec {
   # run_star_command() throws Error when $systat != 0.
   return if ! defined $systat || $systat != 0;
 
+  # Get the bounds
+  my %result =
+    ( 'REFLAT' => undef,
+      'REFLON' => undef,
+    );
+
   require File::Basename;
   my $prog = File::Basename::fileparse( $command[0], '' );
 
-  # Get the bounds
-  my %result;
   for my $k ( qw/ FTL FBR FTR FBL /) {
 
     my $res = qx{ /star/bin/kappa/parget $k $prog };
@@ -2072,12 +2076,33 @@ sub calc_radec {
   # This means we have to look at JCMTSTATE anyway (but we still ask SMURF because that
   # will save us doing coordinate conversion)
 
-  my (undef, %state ) = $self->read_ndf( $filenames[0], qw/ TCS_TR_SYS / );
-  die "Error reading state information from file $filenames[0]\n"
-    unless keys %state;
+  my $tracksys =
+    $self->_find_header( 'headers' => $headerref,
+                          'name' => 'TRACKSYS',
+                          'value' => 1,
+                          'test' => 'true',
+                        );
+
+  my %state;
+  unless ( $tracksys ) {
+
+    ( undef, %state ) = $self->read_ndf( $filenames[0], qw/ TCS_TR_SYS / );
+    die "Error reading state information from file $filenames[0]\n"
+      unless keys %state;
+  }
+
+  my $not_app_azel =
+    sub {
+      return
+        defined $_[0]
+        && length $_[0]
+        && $_[0] !~ m/^(?:APP|AZEL)/i
+    };
 
   # check for APP or AZEL (should never be AZEL!)
-  if ($state{TCS_TR_SYS} !~ /^(APP|AZ)/) {
+  if ( $not_app_azel->( $tracksys )
+        || ( exists $state{TCS_TR_SYS} && $not_app_azel->( $state{TCS_TR_SYS} ) )
+      ) {
 
     for my $k (qw/ REFLON REFLAT / ) {
 
@@ -2090,10 +2115,6 @@ sub calc_radec {
     $result{REFLON} = Astro::Coords::Angle::Hour->new( $result{REFLON}, units => 'sex', range => '2PI' )->degrees;
     $result{REFLAT} = Astro::Coords::Angle->new( $result{REFLAT}, units => 'sex', range => 'PI' )->degrees;
 
-  } else {
-
-    $result{REFLON} = undef;
-    $result{REFLAT} = undef;
   }
 
   $headerref->{obsra} = $result{REFLON};
@@ -2425,9 +2446,12 @@ sub _find_header {
               : $head
              ) {
 
-    my @val = grep $test->( $h, $_ ), $name;
-    scalar @val and
-      return exists $args{'value'} ? @val : 1;
+    my $val = $test->( $h, $name ) ? $h->{ $name } : undef;
+    if ( $val  ) {
+
+      return
+        exists $args{'value'} ? $val : 1 ;
+    }
   }
 
   # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
