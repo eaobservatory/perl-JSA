@@ -891,8 +891,17 @@ sub _get_obs_group {
     }
     else {
 
-      my @obs =
-        map { OMP::Info::Obs->readfile( $_ , %obs ) } @{ $files } ;
+      my @obs;
+      for my $file (  @{ $files } ) {
+
+        unless ( -r $file && -s _ ) {
+
+          warn "Unreadble or empty file: $file; skipped";
+          next;
+        }
+
+        push @obs, OMP::Info::Obs->readfile( $file , %obs );
+      }
 
       my @headers;
       for my $ob ( @obs ) {
