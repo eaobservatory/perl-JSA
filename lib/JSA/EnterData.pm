@@ -896,7 +896,7 @@ sub _get_obs_group {
 
         unless ( -r $file && -s _ ) {
 
-          warn "Unreadble or empty file: $file; skipped.\n"
+          warn "Unreadble or empty file: $file; skipped.\n";
           next;
         }
 
