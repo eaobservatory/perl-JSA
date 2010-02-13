@@ -136,6 +136,7 @@ BEGIN {
       'end-date'   => undef,
 
       'verbose' => 0,
+      'dry-run' => 0,
 
       # Indicator if to force upload.
       'force' => undef,
@@ -144,7 +145,7 @@ BEGIN {
         '/jcmtdata/cadc/new',
     ) ;
 
-  # Make cadc_dir(), force(), verbose() accessors.
+  # Make cadc_dir(), dry_run(), force(), verbose() accessors.
   for my $key ( keys %default ) {
 
     next
@@ -497,11 +498,20 @@ sub make_symlink {
   ( $obsnum, $link) =
       map { File::Spec->catfile( "$_", $base ) } $obsnum, $self->cadc_dir ;
 
+
+  my $message = "Created link: $link -> $obsnum\n";
+
+  if ( $self->dry_run ) {
+
+    print $message;
+    return;
+  }
+
   symlink $obsnum, $link
     or throw JSA::Error::FatalError
         sprintf "Can't create symlink %s to %s: %s.\n", $link, $obsnum, $!;
 
-  $self->verbose and print "Created link: $link -> $obsnum\n";
+  $self->verbose and print $message;
 
   return;
 }
@@ -512,6 +522,12 @@ sub make_empty_file {
   my ( $self, $path ) = @_;
 
   return if -e $path;
+
+  if ( $self->dry_run ) {
+
+    print "Created $path\n";
+    return;
+  }
 
   umask 0117;
 
@@ -621,36 +637,21 @@ sub find_start_dates {
   }
 }
 
-=item B<at_cadc>
-
-Return a list of files uploaded to CADC for a specific UT date.
-
-  my $at_cadc = at_cadc( $ut );
-
-The UT date must be in YYYYMMDD format. This function returns a hash
-reference, with keys being the files at CADC. If the UT date is in an
-incorrect format, this method returns undef. If no files are returned,
-this method returns an empty hash reference.
-
-Accepts also an optional list of instrument prefixes, out of...
-
-  a,
-  s4a,
-  s4b,
-  s4c,
-  s4d,
-  s8a,
-  s8b,
-  s8c,
-  s8d
-
-
-If no list is given, all of the above prefixes are used.
-
-  my $at_cadc = at_cadc( $ut, qw[ s4a s8d ] );
-
-=cut
-
+# This function returns a hash reference, with keys being the files at CADC. If
+# the UT date is in an incorrect format, this method returns undef. If no files
+# are returned, this method returns an empty hash reference.
+#
+# Accepts also an optional list of instrument prefixes, out of...
+#
+#   a,
+#   s4a,
+#   s4b,
+#   s4c,
+#   s4d,
+#   s8a,
+#   s8b,
+#   s8c,
+#   s8d
 sub at_cadc {
 
   my ( $ut, @prefix ) = @_;
@@ -738,6 +739,41 @@ This module prepares data to be transferred to the CADC by creating
 links from the data to the staging area.  It creates F<*.cadc_ok>
 files to skip related data files in future.
 
+=head2 FUNCTIONS
+
+=over 2
+
+=item B<at_cadc>
+
+Return a list of files uploaded to CADC for a specific UT date.
+
+  my $at_cadc = at_cadc( $ut );
+
+The UT date must be in YYYYMMDD format. This function returns a hash
+reference, with keys being the files at CADC. If the UT date is in an
+incorrect format, this method returns undef. If no files are returned,
+this method returns an empty hash reference.
+
+Return a list of files uploaded to CADC for a specific UT date.
+Accepts also an optional list of instrument prefixes, out of...
+
+  a,
+  s4a,
+  s4b,
+  s4c,
+  s4d,
+  s8a,
+  s8b,
+  s8c,
+  s8d
+
+
+If no list is given, all of the above prefixes are used.
+
+  my $at_cadc = at_cadc( $ut, qw[ s4a s8d ] );
+
+=back
+
 =head2 CLASS METHODS
 
 =over 4
@@ -760,6 +796,10 @@ Specify the date of data to be linked, either as a L<Time::Piece>
 object or a string in C<YYYYMMDD> format.
 
 If given, it overrides given I<start-> or I<end-date>.
+
+=item B<dry_run>
+
+Show what would have been done, without actually moving or creating files.
 
 =item I<end-date>
 
@@ -1145,6 +1185,8 @@ Returns the verbosity value if no arguments are given.
 Sets the directory to the given argument, returns nothing.
 
   $copy->verbose( 2 );
+
+=back
 
 =head1 AUTHORS
 
