@@ -11,7 +11,6 @@ use Time::Seconds qw[ ONE_DAY ];
 
 use JSA::Error qw[ :try ];
 use OMP::Config;
-use OMP::DBbackend;
 
 BEGIN {
 
@@ -323,11 +322,13 @@ sub get_file_ids {
 
   my ( $self, $start, $end ) = @_;
 
-  throw JSA::Error::BadArgs qq[Need start & end dates in "YYYYMMDD" format.\n]
+  my $time_re = qr/^ \d{8} [ T] \d{2}:\d{2}:\d{2} $/x;
+
+  throw JSA::Error::BadArgs qq[Need start & end dates in "yyyymmddThh:mm:ss" format.\n]
     unless defined $start
     and    defined $end
-    and $start =~ /^\d{8}$/
-    and $end   =~ /^ \d{8} [ T] \d{2}:\d{2}:\d{2} $/x
+    and $start =~ m/$time_re/
+    and $end   =~ m/$time_re/
     ;
 
   ( my $sql =
@@ -340,7 +341,8 @@ sub get_file_ids {
   ) =~ s/[ ]{2,}/ /g;
 
   # Connect to the CADC mirror DB
-  my $back = OMP::DBbackend->new;
+  require OMP::DBbackend::Archive;
+  my $back = OMP::DBbackend::Archive->new;
   my $dbh = $back->handle;
 
   my $trace =
