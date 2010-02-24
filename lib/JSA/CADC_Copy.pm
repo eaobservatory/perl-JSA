@@ -335,8 +335,8 @@ sub get_file_ids {
     q[ SELECT f.file_id
         FROM COMMON c, FILES f
         WHERE c.obsid = f.obsid
-          AND c.date_obs > ?
-          AND c.date_obs < ?
+          AND c.date_obs >= ?
+          AND c.date_obs <= ?
       ]
   ) =~ s/[ ]{2,}/ /g;
 
