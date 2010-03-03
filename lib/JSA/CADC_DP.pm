@@ -25,6 +25,8 @@ use DBD::Sybase;
 use Math::BigInt;
 use JSA::Error;
 
+use OMP::Config;
+
 use Exporter 'import';
 our @EXPORT_OK = qw/ connect_to_cadcdp disconnect_from_cadcdp
                      create_recipe_instance /;
@@ -36,8 +38,8 @@ my $READDATABASE = "jcmtmd";
 my $WRITEDATABASE = "data_proc";
 my $DBSERVER = "CADC_ASE";
 my $AD = "JCMT";
-my $DBUSER = 'jennesst';
-my $DBPSWD = 'welcome';
+my $DBUSER = OMP::Config->getData( 'cadc_dp.user' );
+my $DBPSWD = OMP::Config->getData( 'cadc_dp.password' );
 
 =head1 FUNCTIONS
 
