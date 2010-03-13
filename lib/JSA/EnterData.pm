@@ -362,13 +362,14 @@ sub force_db {
 
   my $self = shift;
 
-  return $self->{'force-db'} unless scalar @_;
+  return
+    ! ( $OMP::ArchiveDB::FallbackToFiles && $OMP::ArchiveDB::SkipDBLookup )
+      unless scalar @_;
 
   my ( $force ) = @_;
 
-  $self->{'force-db'} = !! $force;
-
-  $self->force_disk( 0 ) if $self->{'force-db'};
+  $OMP::ArchiveDB::FallbackToFiles =
+  $OMP::ArchiveDB::SkipDBLookup = ! $force;
 
   return;
 }
@@ -391,14 +392,15 @@ sub force_disk {
 
   my $self = shift;
 
-  return $OMP::ArchiveDB::SkipDBLookup unless scalar @_;
+  return
+    $OMP::ArchiveDB::FallbackToFiles && $OMP::ArchiveDB::SkipDBLookup
+      unless scalar @_;
 
   my ( $force ) = @_;
 
   # Force observation queries to query files on disk rather than the database.
+  $OMP::ArchiveDB::FallbackToFiles =
   $OMP::ArchiveDB::SkipDBLookup = !! $force;
-
-  $self->force_db( 0 ) if $self->{'force-disk'};
 
   return;
 }
