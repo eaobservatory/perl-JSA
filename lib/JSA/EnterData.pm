@@ -881,6 +881,7 @@ sub _get_obs_group {
 
   my %obs = ( 'nocomments' => 1,
               'retainhdr' => 1,
+              'db_entry' => 1,
             );
 
     unless ( $self->files_given ) {
