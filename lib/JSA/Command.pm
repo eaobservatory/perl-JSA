@@ -85,27 +85,43 @@ sub run_command {
   # Get some temp handles for stdout and stderr
   my ($out1, $err1, $out2, $err2) = tmpfh_out_err();
 
-  my $conv = Proc::SafeExec->new( { exec => \@args,
-                                    stdout => $out1,
-                                    stderr => $err1,
-                                  } );
+  my $exstat;
+  my $conv = eval {
+    # If the command is missing Proc::SafeExec dies
+    Proc::SafeExec->new( { exec => \@args,
+                           stdout => $out1,
+                           stderr => $err1,
+                         } );
+  };
 
-  $conv->wait;
+  my (@stdout, @stderr);
+  if (! defined $conv) {
+    @stderr = split( /\n/, $@);
+    $exstat = -1;
+  } else {
+    $conv->wait;
+    $exstat = $conv->exit_status;
 
-  # Now read back
-  seek($out2, 0,0);
-  my @stdout = <$out2>;
+    # Now read back
+    seek($out2, 0,0);
+    @stdout = <$out2>;
+
+    seek($err2, 0,0);
+    @stderr = <$err2>;
+  }
+
   chomp(@stdout);
-  seek($err2, 0,0);
-  my @stderr = <$err2>;
   chomp(@stderr);
 
-  my $exstat = $conv->exit_status;
   # see perlvar documentation
   my $exit_status = $exstat >> 8;
   my $signal = $exstat & 127;
   my $sigtext = '';
-  if ($signal) {
+  if ($exstat == -1) {
+    # Triggered from eval above
+    $sigtext = "(via die) ";
+    $exit_status = 1;
+  } elsif ($signal) {
     $sigtext =  "(signal $signal) ";
   } elsif ($exit_status == 255) {
     $sigtext = "(via die) ";
