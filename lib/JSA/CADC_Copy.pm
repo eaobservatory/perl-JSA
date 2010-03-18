@@ -9,6 +9,7 @@ use Scalar::Util qw[ blessed looks_like_number ];
 use Time::Piece;
 use Time::Seconds qw[ ONE_DAY ];
 
+use JSA::Command qw/ run_command /;
 use JSA::Error qw[ :try ];
 use OMP::Config;
 
@@ -667,9 +668,14 @@ sub at_cadc {
   # our array.
   my @uploaded;
   foreach my $instprefix ( @prefix ) {
-    my @instuploaded = `/home/cadcops/bin/jcmtInfo ${instprefix}$ut%`;
-    next if $instuploaded[0] =~ /No such file/;
-    push @uploaded, @instuploaded;
+    # Use a sybase wildcard to get all matching files
+    my ($stdout, $stderr, $stat) = run_command( { nothrow => 1},
+                                                "/home/cadcops/bin/jcmtInfo",
+                                                "${instprefix}$ut%" );
+    next if $stat != 0;
+    next unless @$stdout;
+    next if $stdout->[0] =~ /No such file/;
+    push @uploaded, @$stdout;
   }
 
   # Now make the hash that we'll return.
