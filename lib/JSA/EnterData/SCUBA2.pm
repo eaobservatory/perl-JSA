@@ -642,8 +642,13 @@ sub group_by_subarray {
       }
     }
 
-    throw JSA::Error "Failed to find subarray type."
-      unless $array;
+    unless ( $array ) {
+
+      throw JSA::Error
+        sprintf "Failed to find subarray type. (Subheaders:\n%s)",
+        _dump( $subheaders );
+    }
+
 
     for ( @keys ) {
 
@@ -824,6 +829,20 @@ sub fill_max_subscan {
     && exists $header->{ $subar };
 
   return;
+}
+
+sub _dump {
+
+  my ( @thing ) = @_;
+
+  require Data::Dumper;
+
+  local $Data::Dumper::Sortkeys = 1;
+  local $Data::Dumper::Indent = 1;
+  local $Data::Dumper::Deepcopy = 1;
+
+  return
+    Data::Dumper::Dumper( \@thing );
 }
 
 
