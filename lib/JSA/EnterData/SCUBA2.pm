@@ -620,6 +620,10 @@ sub group_by_subarray {
 
   my ( $self, $subheaders, $header_arr ) = @_;
 
+  return
+    unless $subheaders
+    && scalar @{ $subheaders };
+
   my $group = {};
 
   my $array_re = qr{^( s[48] .? )$}ix;
