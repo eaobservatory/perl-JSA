@@ -1,7 +1,7 @@
 #!/stardev/Perl/bin/perl
 
 eval 'exec perl  -S $0 ${1+"$@"}'
-    if 0; # not running under some shell
+  if 0;                         # not running under some shell
 
 
 =head1 NAME
@@ -20,7 +20,7 @@ written here is a compatibility version to allow the data processing
 system to be tested outside of the CADC environment.
 
 The test version of dpRetrieve can work on file URIs, full paths
-to local files, or file names relative to the value of the 
+to local files, or file names relative to the value of the
 ORAC_DATA_IN environment variable. Current working directory is used
 if ORAC_DATA_IN is unset or if the file does not exist in that directory.
 
@@ -113,7 +113,7 @@ my $absdir = File::Spec->rel2abs($outdir);
 my $file = $inputs;
 die "dpRetrieve: No file supplied so unable to retrieve any data files" unless defined $file;
 open (my $fh, "<", $file)
-    || die "Could not open supplied filename '$file': $!";
+  || die "Could not open supplied filename '$file': $!";
 my @lines = <$fh>;
 close($fh) || die "Could not close file '$file': $!";
 
@@ -158,46 +158,46 @@ if ($lines[0] =~ /^\s*http/) {
 
       # see if it exists already in the current dir
       if (-e $file) {
-	# We first have to decide whether it is the same
-	# file or note
-	my @statcurr = stat($file);
-	my @statnew  = stat($fullpath);
+        # We first have to decide whether it is the same
+        # file or note
+        my @statcurr = stat($file);
+        my @statnew  = stat($fullpath);
 
-	my $same = 1;
-	for my $i (0..$#statcurr) {
-	  if ($statcurr[$i] != $statnew[$i]) {
-	    $same = 0;
-	    last;
-	  }
-	}
-	if (!$same) {
-	  die "Unable to retrieve file '$fullpath' because a file named '$file' already exists in the retrieve directory ($absdir) and it is different";
-	}
+        my $same = 1;
+        for my $i (0..$#statcurr) {
+          if ($statcurr[$i] != $statnew[$i]) {
+            $same = 0;
+            last;
+          }
+        }
+        if (!$same) {
+          die "Unable to retrieve file '$fullpath' because a file named '$file' already exists in the retrieve directory ($absdir) and it is different";
+        }
 
-	# we know they are the same file
-	if (-l $file) {
-	  # remove the link and remake it
-	  if (unlink $file) {
-	    symlink $fullpath, $file
-	      || die "Could not make soft link to '$file' in retrieve directory ($absdir)\n";
-	    print STDERR "Re-making soft link for '$file'\n"
-	      if $debug;
-	  }
-	} else {
-	  # it is a real file locally and it is the same so we touch
-	  # it to allow the wrapper script to know that it is required
-	  my $atime = time;
-	  my $mtime = $atime;
-	  utime($atime, $mtime, $file)
-	    or die "Error touching file '$file' in current directory ($absdir)";
-	  print STDERR "Touching pre-existing file '$file'\n"
-	    if $debug;
-	}
+        # we know they are the same file
+        if (-l $file) {
+          # remove the link and remake it
+          if (unlink $file) {
+            symlink $fullpath, $file
+              || die "Could not make soft link to '$file' in retrieve directory ($absdir)\n";
+            print STDERR "Re-making soft link for '$file'\n"
+              if $debug;
+          }
+        } else {
+          # it is a real file locally and it is the same so we touch
+          # it to allow the wrapper script to know that it is required
+          my $atime = time;
+          my $mtime = $atime;
+          utime($atime, $mtime, $file)
+            or die "Error touching file '$file' in current directory ($absdir)";
+          print STDERR "Touching pre-existing file '$file'\n"
+            if $debug;
+        }
       } else {
-	# make a soft link
-	symlink $fullpath, $file
-	  || print STDERR "Could not make soft link to '$file' in current directory ($absdir)\n";
-	print STDERR "Making new soft link for file '$file'\n";
+        # make a soft link
+        symlink $fullpath, $file
+          || print STDERR "Could not make soft link to '$file' in current directory ($absdir)\n";
+        print STDERR "Making new soft link for file '$file'\n";
       }
 
     } else {
@@ -235,7 +235,7 @@ sub parse_retrieve_line {
   } else {
     croak "Unsupported URI scheme '".$uri->scheme."'";
   }
-  
+
   # see if we need to attach a directory. We do this if the
   # file is relative.
   if (!File::Spec->file_name_is_absolute($path)) {
