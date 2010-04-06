@@ -110,8 +110,15 @@ sub run_command {
     @stderr = <$err2>;
   }
 
-  chomp(@stdout);
-  chomp(@stderr);
+  # Sometimes we get a \r in the response so must clean it
+  for (@stdout) {
+    chomp;
+    s/\r$//;
+  }
+  for (@stderr) {
+    chomp;
+    s/\r$//;
+  }
 
   # see perlvar documentation
   my $exit_status = $exstat >> 8;
