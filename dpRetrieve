@@ -56,6 +56,13 @@ CADC and should not be used by the wrapper script.
 =item B<--inputs>
 
 The name of a text file containing either file URIs or path to a file.
+If the file contains http: URLs they are immediately given to
+curl without further analysis.
+
+If the file contains strings starting with a "%" they are assumed to
+be file ids or patterns of file ids. The leading "%" is stripped and
+the remainder is either retrieved directly from CADC or else any
+wild-carding is expanded to file IDs.
 
 =cut
 
@@ -68,6 +75,7 @@ use File::Spec;
 use File::HomeDir;
 use Carp;
 use URI;
+use Compress::Zlib;
 
 # Work out where we are so that we can run from a build directory
 # and still find the JSA classes
@@ -117,32 +125,50 @@ open (my $fh, "<", $file)
 my @lines = <$fh>;
 close($fh) || die "Could not close file '$file': $!";
 
-# have two branches here. There is a "it looks like a http url so we use wget"
-# and "it looks local so we'll just copy"
+# have three branches here. There is a "it looks like a http url so we use curl directly",
+# a "have file_ids so convert to urls" and "it looks local so we'll just copy"
 
 if ($lines[0] =~ /^\s*http/) {
-  # looks like a collection of URLs. See if we have a .cadcuser file
-  my $userinfo = File::Spec->catfile( File::HomeDir->my_home, ".cadcuser");
-  my @wget_args;
-  if ( open(my $CADC, "<", $userinfo) ) {
-    print "Reading CADC user information...\n";
-    my $line = <$CADC>;
-    chomp($line);
-    my ($user,$password) = split /:/, $line;
-    push(@wget_args, "--http-user=$user", "--http-password=$password");
-    print "Found user $user\n";
-    close($CADC);
-  }
-  print "Running wget\n";
-  my ($stdout, $stderr, $status) = run_command( "wget", @wget_args, "--input-file", $file);
-  print join("\n",@$stdout) if $stdout;
-  print "Errors: ". join("\n",@$stderr) if $stderr;
+  # looks like a collection of URLs.
+  geturls( @lines );
 
-  opendir(my $DIR, File::Spec->curdir);
-  for my $i (readdir $DIR) {
-    next unless $i =~ /\.gz$/;
-    system ("gunzip", $i);
+} elsif ($lines[0] =~ /^\%/ ) {
+
+  # Keep a list of all file ids to be retrieved
+  my @file_ids;
+
+  for my $id (@lines) {
+    # trim leading % and leading/trailing whitespace
+    chomp($id);
+    $id =~ s/\#.*//; # remove comment
+    $id =~ s/\s*$//;
+    $id =~ s/^\s*\%//;
+    next unless length($id) > 0;
+
+    # if we still have a % we assume it is a wildcard for jcmtInfo
+    if ($id =~ /\%/) {
+
+      # Need a URL
+      my $url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=' . $id;
+
+      my ($stdout, $stderr, $status) = run_command( "curl",
+                                                    "--silent",
+                                                    "--location",
+                                                    $url);
+      # each line should be a new file id
+      push( @file_ids, @$stdout );
+
+    } else {
+      # Just a straight file id
+      push(@file_ids, $id);
+    }
   }
+
+  # Now convert the file ids to a url at CADC
+  my @urls = map { "http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/getData/?archive=JCMT&file_id=".$_ } @file_ids;
+
+  # and retrieve the data
+  geturls( @urls );
 
 } else {
   for my $line (@lines) {
@@ -251,6 +277,107 @@ sub parse_retrieve_line {
   return $path;
 }
 
+# Reads .cadcuser file and returns list of $user, $password.
+# Empty list if no file or if file does not have a first line of user:password
+
+sub get_cadc_user_info {
+  my $userinfo = File::Spec->catfile( File::HomeDir->my_home, ".cadcuser");
+  my @results;
+  if ( open(my $CADC, "<", $userinfo) ) {
+    print "Reading CADC user information\n";
+    my $line = <$CADC>;
+    chomp($line);
+    if (defined $line && $line =~ /\w:/) {
+      $line =~ s/\s+$//;
+      $line =~ s/^\s+//;
+      push(@results, split /:/, $line, 2);
+      print "Found CADC user $results[0]\n" if $debug;
+    }
+    close($CADC);
+  }
+  return @results;
+}
+
+# Given an array of URLs, retrieves them
+# Currently uses curl through run_command. Tsk tsk.
+# Have not got round to using LWP or WWW::Curl yet.
+
+sub geturls {
+
+  # Read the URLs and remove blank entries
+  my @urls;
+  for my $arg (@_) {
+    chomp($arg);
+    $arg =~ s/\#.*//; # remove comment
+    $arg =~ s/\s*$//;
+    $arg =~ s/^\s*//;
+    push(@urls, $arg) if length($arg) > 0;
+  }
+
+  # See if we have a .cadcuser file
+  my ($user, $password) = get_cadc_user_info();
+
+  # use curl
+  my @curl_args;
+  if (defined $user && defined $password) {
+    push(@curl_args, "--user", "$user:$password");
+  }
+
+  for my $url (@urls) {
+    my $tmpfile = "yes_should_be_random";
+    my ($stdout, $stderr, $status) = run_command( "curl",
+                                                  @curl_args,
+                                                  "--location",
+                                                  "-o", $tmpfile,
+                                                  "-v","--silent",
+                                                  $url);
+    print join("\n",@$stdout) if $stdout;
+    print "Errors: ". join("\n",@$stderr) if ($stderr && $status);
+
+    # Get the filename
+    my $outfile;
+    for my $out (@$stderr) {
+      if ($out =~ /filename=(.*)\s*$/) {
+        $outfile = $1;
+      }
+    }
+    if (defined $outfile) {
+      print "Retrieved file '$outfile'\n";
+
+      # gunzip if necessary
+      if ($outfile =~ /\.gz$/) {
+        $outfile =~ s/\.gz$//;
+        print "Gunzipping to $outfile\n";
+        # Open the gzipped file for read
+        my $gz = gzopen( $tmpfile, "rb" );
+        die "Could not open gzipped file" unless defined $gz;
+
+        # and the output file for write
+        open( my $outfh, ">", $outfile ) or die "Error opening output file $outfile: $!";
+
+        while (1) {
+          my $buffer;
+          my $bytesread = $gz->gzread( $buffer );
+          if ( $bytesread > 0 ) {
+            syswrite( $outfh, $buffer, $bytesread );
+          } elsif ( $bytesread == 0 ) {
+            last;
+          } else {
+            die "Error reading bytes from gzipped file";
+          }
+        }
+        close( $outfh );
+      } else {
+        # simple rename
+        rename( $tmpfile, $outfile );
+      }
+    } else {
+      print STDERR "WARNING: Could not determine local file name\n";
+    }
+  }
+
+}
+
 
 =head1 AUTHORS
 
@@ -258,7 +385,7 @@ Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>,
 
 =head1 COPYRIGHT
 
-Copyright (C) 2008 Science and Technology Facilities Council.
+Copyright (C) 2008, 2010 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
