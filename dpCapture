@@ -34,8 +34,10 @@ may have existed prior to running the wrapper.
 
 =item B<--archive>
 
-Name of the archive to be used for ingestion. Ignored in this
-implementation but should ordinarily be JCMT.
+Name of the archive to be used for ingestion. Ordinarily this would
+be "JCMT". If "CANFAR" is given then additional products will be
+copied in addition to the standard .fits and .png files. These
+will include ".sdf" and ORAC-DR log files.
 
 =item B<--id>
 
@@ -52,6 +54,12 @@ to the transfer directory.
 Override the CADC transfer drectory. Defaults to the standard CADC
 transfer directory (/jcmtdata/cadc/new). This directory is used
 to receive the output files if the "-persist" option is true.
+
+If the directory does not exist but the parent does, an attempt will
+be made to create it first. In CANFAR mode (see "archive" option) the
+"id" will be added to the supplied transdir if "id" is given and an
+"id" directory will be created if necessary. If this happens the
+supplied "transdir" must exist.
 
 =item B<-debug>
 
@@ -94,9 +102,7 @@ pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
 if ($version) {
-  my $id = '$Id: racover.pl 14421 2007-09-05 02:37:29Z agarwal $ ';
   print "dpCapture - compatibility capture script for jsawrapdr\n";
-  print " Source code revision: $id\n";
   exit;
 }
 
@@ -106,11 +112,39 @@ if( defined( $transdir ) ) {
   $transdir = $CADCDIR;
 }
 
+# Regex
+my $regexp;
+my $persistall;
+if (defined $archive && $archive =~ /canfar/i) {
+  $persistall = 1;
+  $regexp = qr/.*\.(fits|png|log|sdf)/;
+
+  # Append recipe id to transdir if supplied
+  if (defined $id) {
+    $transdir = File::Spec->catdir( $transdir, $id );
+  }
+} else {
+  # Standard CADC compliant capture
+  $regexp = qr/^jcmt.*\.(fits|png)$/;
+}
+
+# Sort out output directory
+if ($persist) {
+  if (! -d $transdir ) {
+    my $updir = _parentdir( $transdir );
+    if (-d $updir ) {
+      mkdir( $transdir ) || die "Could not create directory '$transdir' required to receive data files";
+    } else {
+      die "$transdir does not exist and neither does its parent. Can not copy data";
+    }
+  }
+}
+
 # Scan the directory for plausible fits or png files
-my %files = scan_dir( qr/^jcmt.*\.(fits|png)$/ );
+my %files = scan_dir( $regexp );
 for my $f (sort keys %files) {
 
-  if (looks_like_cadcfile( $f )) {
+  if ($persistall || looks_like_cadcfile( $f )) {
 
     if( $persist ) {
 
@@ -132,6 +166,18 @@ for my $f (sort keys %files) {
 
 
 exit 0;
+
+# Given a directory path, returns the path of the parent.
+#  $parent = _parentdir( $dir );
+
+sub _parentdir {
+  my $path = shift;
+  my @dirs = File::Spec->splitdir( $path );
+  pop(@dirs);
+  my $updir = File::Spec->catdir(@dirs);
+  return $updir;
+}
+
 
 =head1 AUTHORS
 
