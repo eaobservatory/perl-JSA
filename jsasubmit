@@ -49,6 +49,9 @@ $OMP::ArchiveDB::FallbackToFiles = 0;
 # Use DB for any date.
 $OMP::ArchiveDB::AnyDate = 1;
 
+# Fix search criteria to avoid being reset just before querying for data.
+OMP::ArchiveDB->use_existing_criteria( 1 );
+
 # Handle command-line options.
 my ( $help, $man, $mode, $project, $ut, $version );
 my $status = GetOptions( "help"      => \$help,
