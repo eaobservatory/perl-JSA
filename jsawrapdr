@@ -387,7 +387,12 @@ if( ! $skipdp ) {
   # First thing we have to do is copy the files locally by calling the
   # dpRetrieve command. We hope it is in the path.
 
-  run_command("dpRetrieve","--id=$id", "--debug", "--inputs=$inputs");
+  my ($dprstdout, $dprstderr, $extat) = run_command("dpRetrieve",
+                                                    "--id=$id",
+                                                    "--debug",
+                                                    "--inputs=$inputs");
+  log_command( "dpRetrieve", $dprstdout, $dprstderr );
+
 
   # Now scan the directory again
   %post_retrieve = scan_dir();
@@ -652,6 +657,7 @@ log_message( "\n*** calling dpCapture --id=$id " . ( join " ", @args ) . "\n" );
 
 
 my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", "--archive=JCMT", @args);
+log_command( "dpCapture", $dpcstdout, $dpcstderr );
 
 if ($cleanup ne 'none') {
   # Clean up the output directory.
@@ -672,7 +678,7 @@ exit;
 
 #############################################################################################
 
-# Simple logging routine
+# Simple logging routines
 
 sub log_message {
   my $message = shift;
@@ -682,6 +688,20 @@ sub log_message {
 
 sub log_warning {
   log_message( $_[0] );
+}
+
+sub log_command {
+  my ($cmd, $stdout, $stderr) = @_;
+  if ($stdout) {
+    for my $line (@$stdout) {
+      log_message( "$cmd: $line\n" );
+    }
+  }
+  if ($stderr) {
+    for my $line (@$stderr) {
+      log_message( "$cmd ERROR: $line\n");
+    }
+  }
 }
 
 =head1 NOTES
