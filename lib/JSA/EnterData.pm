@@ -663,7 +663,6 @@ It is called by I<prepare_and_insert> method.
   sub insert_obs {
 
     my ( $self, %args ) = @_ ;
-  #my ( $self, $dbh, $inst, obs, $cols, $dict ) = @_ ;
 
     # Pass everything but observations hash reference to other subs.
     my %pass_args =
@@ -988,7 +987,6 @@ It is called by I<insert_obs> method.
 sub add_subsys_obs {
 
   my ( $self, %args ) = @_;
-  #my ( $self, $dbh, $inst, $obs, $cols, $dict ) = @_;
 
   for my $k ( qw[ instrument dbhandle columns dict obs ] ) {
 
