@@ -99,6 +99,8 @@ This function takes one optional parameter: a hash reference with the
 following optional keys:
 
  - mode: Grouping mode ("night", "project", "public")
+ - priority: Relative priority of job as an integer. Default
+             priority will be 0. Range is between -1023 and 1024.
 
 This function returns the recipe instance ID on success, or undef for failure.
 
@@ -112,6 +114,19 @@ sub create_recipe_instance {
 
   my $mode = $options->{'mode'};
   my $project = defined( $options->{'project'} ) ? uc( $options->{'project'} ) : undef;
+
+  # Default to medium priority. Note that this differs to the CADC default of -500.
+  my $priority = 1;
+  if (exists $options->{priority} && defined $options->{priority} ) {
+    my $override = $options->{priority};
+    if ($override < -1023) {
+      $priority = -1000;
+    } elsif ($override > 1024) {
+      $priority = 1024;
+    } else {
+      $priority = $override;
+    }
+  }
 
   my $sql;
 

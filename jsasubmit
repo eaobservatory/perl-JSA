@@ -53,11 +53,12 @@ $OMP::ArchiveDB::AnyDate = 1;
 OMP::ArchiveDB->use_existing_criteria( 1 );
 
 # Handle command-line options.
-my ( $help, $man, $mode, $project, $ut, $version );
+my ( $help, $man, $mode, $project, $ut, $version, $priority );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
                          "ut=s"      => \$ut,
+                         "priority=i"=> \$priority,
                          "version"   => \$version,
                        );
 
@@ -75,12 +76,17 @@ if( ! defined $ut && ! defined $project ) {
   die "Must include either -ut or -project parameter";
 }
 
+my $pristring = 'with default priority';
+if (defined $priority) {
+  $pristring = "with priority $priority";
+}
+
 if( defined( $project ) ) {
   $mode = "project";
   $project = uc( $project );
-  push @mailmessages, "Running jsasubmit for project $project.\n";
+  push @mailmessages, "Running jsasubmit for project $project $pristring.\n";
 } else {
-  push @mailmessages, "Running jsasubmit for UT date $ut.\n";
+  push @mailmessages, "Running jsasubmit for UT date $ut $pristring.\n";
   $mode = "night";
 }
 
@@ -237,6 +243,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       if( $mode eq 'project' ) {
         $opts{'project'} = $project;
       }
+      $opts{priority} = $priority if defined $priority;
 
       $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
     }
