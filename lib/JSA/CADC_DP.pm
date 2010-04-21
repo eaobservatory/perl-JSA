@@ -99,6 +99,8 @@ This function takes one optional parameter: a hash reference with the
 following optional keys:
 
  - mode: Grouping mode ("night", "project", "public")
+ - project: A recipe parameters override. Assumes a recpars-$project.ini
+            recipe file exists in ORAC-DR.
  - priority: Relative priority of job as an integer. Default
              priority will be 0. Range is between -1023 and 1024.
 
