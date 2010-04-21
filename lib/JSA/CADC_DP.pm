@@ -195,13 +195,13 @@ $sql = "select input_id from dp_file_input order by input_id";
   ###############################################
 
   $sql = "insert into dp_recipe_instance\n";
-  $sql .= "  ( recipe_instance_id, recipe_id, state";
+  $sql .= "  ( recipe_instance_id, recipe_id, state, priority";
   if( defined( $mode ) || defined( $project ) ) {
     $sql .= ", parameters";
   }
   $sql .= " )\n";
   $sql .= "  values\n";
-  $sql .= "  ( $dp_recipe_instance_id, 0x$dp_recipe_id, \" \"";
+  $sql .= "  ( $dp_recipe_instance_id, 0x$dp_recipe_id, \" \", $priority";
   if( defined( $mode ) && defined( $project ) ) {
     $sql .= ", \"-mode='$mode' -drparameters='-recpars recpars-$project.ini'\"";
   } elsif( defined( $mode ) ) {
