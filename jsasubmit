@@ -308,10 +308,14 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       my $Error = shift;
       $Error->throw;
     };
-    exit if ! defined $recipe_id;
-    log_message( "Request submitted with recipe instance $recipe_id.\n");
-    log_message( "Recipe URL: $BASEURL" . hex($recipe_id) . "\n");
-    log_message( "\n");
+    if (!defined $recipe_id) {
+      log_message( "Error submitting. No recipe id returned\n");
+      last;
+    } else {
+      log_message( "Request submitted with recipe instance $recipe_id.\n");
+      log_message( "Recipe URL: $BASEURL" . hex($recipe_id) . "\n");
+      log_message( "\n");
+    }
   }
 
   log_message( "Disconnecting from CADC data processing database...");
