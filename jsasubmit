@@ -84,9 +84,6 @@ my $MAILHOST = 'mailhost.jach.hawaii.edu';
 my $MAILTO = 'jcmtarch@jach.hawaii.edu';
 my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
 
-# Array to hold messages that will be mailed out.
-my @mailmessages;
-
 # Don't fall back to files.
 $OMP::ArchiveDB::FallbackToFiles = 0;
 
@@ -132,9 +129,9 @@ if (defined $priority) {
 if( defined( $project ) ) {
   $mode = "project";
   $project = uc( $project );
-  push @mailmessages, "Running jsasubmit for project $project $pristring.\n";
+  log_message( "Running jsasubmit for project $project $pristring.\n");
 } else {
-  push @mailmessages, "Running jsasubmit for UT date $ut $pristring.\n";
+  log_message( "Running jsasubmit for UT date $ut $pristring.\n");
   $mode = "night";
 }
 
@@ -151,9 +148,9 @@ if( $mode eq 'project' ) {
 }
 
 if( scalar( @{$grp->obs} ) == 0 ) {
-  push @mailmessages, "No observations were retrieved from the database.\n";
+  log_message( "No observations were retrieved from the database.\n");
 } else {
-  push @mailmessages, scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n";
+  log_message( scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n");
 
   # Hash to hold list of groups.
   my %group;
@@ -255,32 +252,32 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
   }
 
-  push @mailmessages, "Connecting to CADC data processing database...";
+  log_message( "Connecting to CADC data processing database...");
   my $dbh = connect_to_cadcdp;
-  push @mailmessages, "connected!\n\n";
+  log_message( "connected!\n\n");
 
   foreach my $group ( sort keys %group ) {
-    push @mailmessages, "Requesting CADC processing of the following files:\n";
-    push @mailmessages, map { "$_\n" } @{$group{$group}};
+    log_message( "Requesting CADC processing of the following files:\n");
+    log_message( map { "$_\n" } @{$group{$group}});
     my @members = map { file_to_uri( $_ ) } @{$group{$group}};
 
     # Only check for night mode. If we're in project mode, assume the
     # files are at CADC.
     if( $mode eq 'night' ) {
-      push @mailmessages, "Checking to ensure files are at CADC...\n";
+      log_message( "Checking to ensure files are at CADC...\n");
       my $there = 1;
       foreach my $file ( @{$group{$group}} ) {
         $file =~ s/\.sdf$//;
         if( ! exists( $atCADC->{$file} ) ) {
           $there = 0;
-          push @mailmessages, "$file is not at CADC!\n";
+          log_message( "$file is not at CADC!\n");
         }
       }
       if( ! $there ) {
-        push @mailmessages, "One or more files from current group not at CADC.\nSkipping to next group.\n";
+        log_message( "One or more files from current group not at CADC.\nSkipping to next group.\n");
         next;
       }
-      push @mailmessages, "All files are at CADC. Submitting processing request.\n";
+      log_message( "All files are at CADC. Submitting processing request.\n");
     }
 
     # Submit the job.
@@ -294,9 +291,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $opts{priority} = $priority if defined $priority;
 
       if ($debug) {
-        push(@mailmessages, "Would be submitting job with options:\n");
+        log_message( "Would be submitting job with options:\n");
         for my $k (sort keys %opts) {
-           push(@mailmessage, "\t$k : ".(defined $opts{$k} ? $opts{$k} : "<undef>")."\n");
+           log_message( "\t$k : ".(defined $opts{$k} ? $opts{$k} : "<undef>")."\n");
         }
       } else {
         $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
@@ -304,28 +301,28 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
     catch JSA::Error::CADCDB with {
       my $Error = shift;
-      push @mailmessages, "Error in CADC DB connectivity: $Error";
-      push @mailmessages, "Skipping to next group.\n";
+      log_message( "Error in CADC DB connectivity: $Error");
+      log_message( "Skipping to next group.\n");
     }
     otherwise {
       my $Error = shift;
       $Error->throw;
     };
     exit if ! defined $recipe_id;
-    push @mailmessages, "Request submitted with recipe instance $recipe_id.\n";
-    push @mailmessages, "Recipe URL: $BASEURL" . hex($recipe_id) . "\n";
-    push @mailmessages, "\n";
+    log_message( "Request submitted with recipe instance $recipe_id.\n");
+    log_message( "Recipe URL: $BASEURL" . hex($recipe_id) . "\n");
+    log_message( "\n");
   }
 
-  push @mailmessages, "Disconnecting from CADC data processing database...";
+  log_message( "Disconnecting from CADC data processing database...");
   disconnect_from_cadcdp( $dbh );
-  push @mailmessages, "disconnected!\n\n";
-  push @mailmessages, "Data processing requests complete.\n";
+  log_message( "disconnected!\n\n");
+  log_message( "Data processing requests complete.\n");
 
 }
 
 if ($noemail || $debug) {
-  print @mailmessages;
+  # do not need to send an email message
 } else {
   # Send the email.
   my $smtp = Net::SMTP->new( $MAILHOST );
@@ -336,11 +333,31 @@ if ($noemail || $debug) {
   $smtp->datasend( "To: $MAILTO\n" );
   $smtp->datasend("Subject: CADC Processing for " . ( defined( $ut ) ? $ut : $project ) . "\n");
   $smtp->datasend("\n");
-  $smtp->datasend( @mailmessages );
+  $smtp->datasend( all_messages() );
 
   $smtp->quit;
 }
 
+exit;
+
+# Cache for messages, or we just print them straight out
+{
+  my @MESSAGES;
+
+  sub log_message {
+    my @msg = @_;
+    if ($debug) {
+      print @msg;
+    } else {
+      push(@MESSAGES, @msg);
+    }
+  }
+
+  sub all_messages {
+    return @MESSAGES;
+  }
+
+}
 
 =head1 AUTHORS
 
