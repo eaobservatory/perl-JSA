@@ -102,7 +102,7 @@ following optional keys:
  - project: A recipe parameters override. Assumes a recpars-$project.ini
             recipe file exists in ORAC-DR.
  - priority: Relative priority of job as an integer. Default
-             priority will be 0. Range is between -1023 and 1024.
+             priority will be -1. Range is between -500 and 0.
 
 This function returns the recipe instance ID on success, or undef for failure.
 
@@ -118,13 +118,13 @@ sub create_recipe_instance {
   my $project = defined( $options->{'project'} ) ? uc( $options->{'project'} ) : undef;
 
   # Default to medium priority. Note that this differs to the CADC default of -500.
-  my $priority = 1;
+  my $priority = -1;
   if (exists $options->{priority} && defined $options->{priority} ) {
     my $override = $options->{priority};
-    if ($override < -1023) {
-      $priority = -1000;
-    } elsif ($override > 1024) {
-      $priority = 1024;
+    if ($override < -500) {
+      $priority = -500;
+    } elsif ($override > 0) {
+      $priority = 0;
     } else {
       $priority = $override;
     }
