@@ -1066,8 +1066,15 @@ sub add_subsys_obs {
           _verify_file_name( $insert_ref->{'file_id'} );
 
           my $hash = $self->prepare_insert_hash( 'FILES', $insert_ref );
-          $self->insert_hash( 'FILES', $dbh, $hash )
-            or $error = $dbh->errstr;
+
+          $error =
+            $self->insert_hash( 'table'    => 'FILES',
+                                'dbhandle' => $dbh,
+                                'insert' => $hash,
+                              );
+
+          $error = $dbh->errstr
+            if $error;
         }
         catch JSA::Error with {
 
@@ -1100,7 +1107,13 @@ If any of the values in C<%to_insert> are array references multiple
 rows will be inserted corresponding to the content.  If more than one
 row has an array reference the size of those arrays must be identical.
 
-  $status = $enter->insert_hash($table, $dbh, \%to_insert);
+In case of error, returns the value as returned by C<DBI->execute>.
+
+  $status =
+    $enter->insert_hash( 'table'     => $table,
+                          'dbhandle' => $dbh,
+                          'insert'   => \%to_insert,
+                        );
 
 =cut
 
@@ -1164,9 +1177,12 @@ sub prepare_insert_hash {
 
 sub insert_hash {
 
-  my ( $self, $table, $dbh, $insert ) = @_;
+  my ( $self, %args ) = @_;
 
-  return $self->conditional_insert_hash( $table, $dbh, $insert )
+  my ( $table, $dbh, $insert ) =
+    @args{ qw[ table dbhandle insert ] };
+
+  return $self->conditional_insert_hash( %args )
     if $self->conditional_insert;
 
   # Get the fields in sorted order (so that we can match with values)
@@ -1177,7 +1193,7 @@ sub insert_hash {
 
   my @fields = sort keys %{$insert_hashes[0]}; # sort required
 
-  my ( $sql, $sth, $prim_key );
+  my ( $sql, $sth );
 
   $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
               $table,
@@ -1189,6 +1205,13 @@ sub insert_hash {
 
     $sth = $dbh->prepare($sql)
       or die "Could not prepare sql statement for insert\n" . $dbh->errstr . "\n" ;
+  }
+
+  my ( @prim_key );
+  if ( $table eq 'FILES' ) {
+
+    my $prim_key = _get_primary_key( $table );
+    @prim_key = ref $prim_key ? @{ $prim_key } : $prim_key ;
   }
 
   # and insert all the rows
@@ -1206,9 +1229,17 @@ sub insert_hash {
 
     my $status = $sth->execute(@values);
 
+    if ( $table eq 'FILES' && $status > 0 ) {
+
+      $self->_insert_ingest_status( 'dbhandle' => $dbh,
+                                    'files' => $row->{'file_id'},
+                                  );
+    }
+
     return $status if !$status;
   }
-  return ;
+
+  return;
 }
 
 =item B<conditional_insert_hash>
@@ -1221,15 +1252,23 @@ If any of the values in C<%to_insert> are array references multiple
 rows will be inserted corresponding to the content.  If more than one
 row has an array reference the size of those arrays must be identical.
 
-  $status = $enter->conditional_insert_hash($table, $dbh, \%to_insert);
+  $status =
+    $enter->conditional_insert_hash( 'table' => $table,
+                                      'dbhandle' => $dbh,
+                                      'insert' => \%to_insert,
+                                    );
 
 =cut
 
 sub conditional_insert_hash {
 
-  my ( $self, $table, $dbh, $insert ) = @_;
+  #my ( $self, $table, $dbh, $insert ) = @_;
+  my ( $self, %args ) = @_;
 
-  return $self->insert_hash( $table, $dbh, $insert )
+  my ( $table, $dbh, $insert ) =
+    @args{ qw[ table dbhandle insert ] };
+
+  return $self->insert_hash( %args )
     unless $self->conditional_insert;
 
   # Get the fields in sorted order (so that we can match with values)
@@ -1250,7 +1289,9 @@ sub conditional_insert_hash {
                                             'primary' => $prim_key,
                                           );
 
-  my @affected;
+  my ( $err, @prim_key, @affected );
+  @prim_key = ref $prim_key ? @{ $prim_key } : ( $prim_key ) ;
+
   for my $row (@insert_hashes) {
 
     my @values = @{$row}{@fields};
@@ -1270,18 +1311,19 @@ sub conditional_insert_hash {
                                       'values' => \@values,
                                     );
 
-    my @prim_val =
-      map { $row->{ $_ } }
-        ref $prim_key
-        ? @{ $prim_key }
-        : $prim_key
-        ;
-
+    my @prim_val = map { $row->{ $_ } } @prim_key;
     my $affected = $dbh->do( $filled,
                               $prim_key
                               ? ( undef, @prim_val )
                               : ()
                             );
+
+    if ( $table eq 'FILES' && $affected > 0 ) {
+
+      $self->_insert_ingest_status( 'dbhandle' => $dbh,
+                                    'files' => $row->{'file_id'},
+                                  );
+    }
 
     return if ! defined $affected;
 
@@ -1354,6 +1396,34 @@ sub _make_insert_select_sql {
           $table,
           $where
           ;
+}
+
+sub _insert_ingest_status {
+
+  my ( $self, %args ) = @_;
+
+  my ( $dbh, $files, $status ) = @args{qw[ dbhandle files status ]};
+
+  return unless $files;
+
+  $status = 'i' unless defined $status;
+
+  my $table = 'transfer';
+  my $sql =
+    qq[INSERT INTO $table ( file_id, status ) VALUES ( ? , ? )];
+
+  for my $file ( ref $files ? @{ $files } : $files ) {
+
+    my $affected =
+      $dbh->do ( $sql,
+                 undef,
+                 $file, $status
+                );
+
+    return $affected if !$affected;
+  }
+
+  return;
 }
 
 =item B<_fill_in_sql>
@@ -1544,8 +1614,10 @@ sub _get_primary_key {
       'COMMON' => 'obsid',
       'FILES'  => [qw{ obsid_subsysnr file_id }],
       'SCUBA2' => 'obsid_subsysnr',
+      'transfer' => 'file_id',
     );
 
+  return unless exists $keys{ $table };
   return $keys{ $table };
 }
 
@@ -2407,7 +2479,9 @@ sub _combined_prepare_insert_hash {
   $vals = $self->_apply_kludge_for_COMMON( $vals )
     if 'COMMON' eq $table ;
 
-  return $self->insert_hash( @args{qw/ table dbhandle /}, $vals );
+  return $self->insert_hash( %args,
+                              'insert' => $vals
+                            );
 }
 
 =item B<_find_header>
