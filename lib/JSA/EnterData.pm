@@ -59,6 +59,7 @@ use JSA::EnterData::SCUBA2;
 use JSA::Error qw[ :try ];
 use JSA::Files qw[ looks_like_rawfile ];
 use JSA::Starlink qw[ run_star_command ];
+use JSA::Transfer;
 use JCMT::DataVerify;
 
 use OMP::ArchiveDB;
@@ -1214,6 +1215,8 @@ sub insert_hash {
     @prim_key = ref $prim_key ? @{ $prim_key } : $prim_key ;
   }
 
+  my $xfer = $self->_get_xfer( $dbh );
+
   # and insert all the rows
   for my $row (@insert_hashes) {
 
@@ -1231,9 +1234,7 @@ sub insert_hash {
 
     if ( $table eq 'FILES' && defined $status && $status > 0 ) {
 
-      $self->_insert_ingest_status( 'dbhandle' => $dbh,
-                                    'files' => $row->{'file_id'},
-                                  );
+      $xfer->add_status( 'ingested', [ $row->{'file_id'} ] );
     }
 
     return $status if !$status;
@@ -1292,6 +1293,8 @@ sub conditional_insert_hash {
   my ( $err, @prim_key, @affected );
   @prim_key = ref $prim_key ? @{ $prim_key } : ( $prim_key ) ;
 
+  my $xfer = $self->_get_xfer( $dbh );
+
   for my $row (@insert_hashes) {
 
     my @values = @{$row}{@fields};
@@ -1320,9 +1323,7 @@ sub conditional_insert_hash {
 
     if ( $table eq 'FILES' && $affected > 0 ) {
 
-      $self->_insert_ingest_status( 'dbhandle' => $dbh,
-                                    'files' => $row->{'file_id'},
-                                  );
+      $xfer->add_status( 'ingested', [ $row->{'file_id'} ] );
     }
 
     return if ! defined $affected;
@@ -1398,33 +1399,33 @@ sub _make_insert_select_sql {
           ;
 }
 
-sub _insert_ingest_status {
-
-  my ( $self, %args ) = @_;
-
-  my ( $dbh, $files, $status ) = @args{qw[ dbhandle files status ]};
-
-  return unless $files;
-
-  $status = 'i' unless defined $status;
-
-  my $table = 'transfer';
-  my $sql =
-    qq[INSERT INTO $table ( file_id, status ) VALUES ( ? , ? )];
-
-  for my $file ( ref $files ? @{ $files } : $files ) {
-
-    my $affected =
-      $dbh->do ( $sql,
-                 undef,
-                 $file, $status
-                );
-
-    return $affected if !$affected;
-  }
-
-  return;
-}
+#sub _insert_ingest_status {
+#
+#  my ( $self, %args ) = @_;
+#
+#  my ( $dbh, $files, $status ) = @args{qw[ dbhandle files status ]};
+#
+#  return unless $files;
+#
+#  $status = 'i' unless defined $status;
+#
+#  my $table = 'transfer';
+#  my $sql =
+#    qq[INSERT INTO $table ( file_id, status ) VALUES ( ? , ? )];
+#
+#  for my $file ( ref $files ? @{ $files } : $files ) {
+#
+#    my $affected =
+#      $dbh->do ( $sql,
+#                 undef,
+#                 $file, $status
+#                );
+#
+#    return $affected if !$affected;
+#  }
+#
+#  return;
+#}
 
 =item B<_fill_in_sql>
 
@@ -1608,6 +1609,11 @@ Returns the primary key for a given table in C<jcmt> database.
 sub _get_primary_key {
 
   my ( $table ) = @_;
+
+if ( $table eq 'transfer' )
+{
+  die;
+}
 
   my %keys =
     ( 'ACSIS'  => 'obsid_subsysnr',
@@ -2683,6 +2689,28 @@ sub _print_text {
   print $text;
   return;
 }
+
+# JSA::Transfer object, to be created as needed.
+{
+  my $xfer;
+
+  sub _get_xfer {
+
+    my ( $self, $dbh ) = @_;
+
+    return $xfer if $xfer;
+
+    $xfer = JSA::Transfer->new();
+
+    $xfer->verbose( $self->verbosity );
+
+    # Use own $dbh instead of making J::Transfer to create one for us.
+    $xfer->dbhandle( $dbh ) if $dbh;
+
+    return $xfer;
+  }
+}
+
 
 1;
 
