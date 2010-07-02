@@ -1229,7 +1229,7 @@ sub insert_hash {
 
     my $status = $sth->execute(@values);
 
-    if ( $table eq 'FILES' && $status > 0 ) {
+    if ( $table eq 'FILES' && defined $status && $status > 0 ) {
 
       $self->_insert_ingest_status( 'dbhandle' => $dbh,
                                     'files' => $row->{'file_id'},
