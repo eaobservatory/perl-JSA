@@ -8,18 +8,33 @@ JSA::Transfer - Check file replication, transfer files to CADC
 
 =head1 SYNOPSIS
 
+Make an object ...
+
+  $xfer = JSA::Transfer->new( 'verbose' => 1 );
+
+Pass jcmt database handle already being used if desired ...
+
+  $xfer->dbhandle( $dbh );
+
+Set replicated status for a file ...
+
+  $xfer->set_replicated( [ 'a20100612_00005_01_0001.sdf',
+                            'a20100612_00006_01_0001.sdf'
+                          ]
+                      );
+
 Find replicated files in CADC database ...
 
-...
+  $xfer->get_replicated_files( 20100612 );
 
-Copy replicated files to CADC ...
+=head1 DESCRIPTION
 
-...
+This package manipulates the database table to track progress of raw file data
+ingestion and replication to CADC.
 
-"Finish" transfer by consulting CADC if it has got all the files,
-update file status accordingly ...
-
-...
+The file ingestion process adds a row on successful ingestion; file copy to CADC
+& table replication tracking processes update the status. Disk cleaning process
+should delete the rows (to be implemented).
 
 =cut
 
@@ -67,6 +82,40 @@ my %_config =
 
 my $_status_table = 'transfer';
 
+=head1 METHODS
+
+All the C<get_*_files> methods will be changed to not require partial file name
+in future.  All of C<get_*_files> and C<set_*> methods may be replaced with
+versions which require a status type, similar to I<add_status> method.
+
+The status types are ...
+
+  copied
+  error
+  found
+  ignored
+  ingested
+  replicated
+  transferred
+
+=over 2
+
+=item B<new> constructor
+
+Make a C<JSA::Transfer> object.  It takes a hash of two optional parameters ...
+
+  verbose   - set verbosity level; default is 0;
+  db-config - pass filename with database log in information in "ini" format;
+              default is /home/jcmtarch/enterdata-cfg/enterdata.cfg.
+
+  $xfer =
+    JSA::Transfer->new( 'verbose'   => 1,
+                        'db-config' =>
+                          '/home/jcmtarch/enterdata-cfg/enterdata.cfg'
+                      );
+
+=cut
+
 sub new {
 
   my ( $class, %arg ) = @_;
@@ -110,6 +159,99 @@ BEGIN {
       'transferred' => 't',
     );
 
+=item B<get_copied_files>
+
+Return a array reference of files with C<copied> status, given a partial file
+name.
+
+  $files = $xfer->get_copied_files( 20100612 );
+
+=item B<set_copied>
+
+Set status to C<copied> of given array reference of files (base names).
+
+  $xfer->set_copied( [ @files ] );
+
+=item B<get_error_files>
+
+Return a array reference of files with C<error> status, given a partial file
+name.
+
+  $files = $xfer->get_error_files( 20100612 );
+
+=item B<set_error>
+
+Set status to C<error> of given array reference of files (base names).
+
+  $xfer->set_error( [ @files ] );
+
+=item B<get_found_files>
+
+Return a array reference of files with C<found> status, given a partial file
+name.
+
+  $files = $xfer->get_found_files( 20100612 );
+
+=item B<set_found>
+
+Set status to C<found> of given array reference of files (base names).
+
+  $xfer->set_found( [ @files ] );
+
+=item B<get_ignored_files>
+
+Return a array reference of files with C<ignored> status, given a partial file
+name.
+
+  $files = $xfer->get_ignored_files( 20100612 );
+
+=item B<set_ignored>
+
+Set status to C<ignored> of given array reference of files (base names).
+
+  $xfer->set_ignored( [ @files ] );
+
+=item B<get_ingested_files>
+
+Return a array reference of files with C<ingested> status, given a partial file
+name.
+
+  $files = $xfer->get_ingested_files( 20100612 );
+
+=item B<set_ingested>
+
+Set status to C<ingested> of given array reference of files (base names).
+
+  $xfer->set_ingested( [ @files ] );
+
+=item B<get_replicated_files>
+
+Return a array reference of files with C<replicated> status, given a partial file
+name.
+
+  $files = $xfer->get_replicated_files( 20100612 );
+
+=item B<set_replicated>
+
+Set status to C<replicated> of given array reference of files (base names).
+
+  $xfer->set_replicated( [ @files ] );
+
+=item B<get_transferred_files>
+
+Return a array reference of files with C<transferred> status, given a partial file
+name.
+
+  $files = $xfer->get_transferred_files( 20100612 );
+
+=item B<set_transferred>
+
+Set status to C<transferred> of given array reference of files (base names).
+
+  $xfer->set_transferred( [ @files ] );
+
+=cut
+
     for my $key ( qw[ found error ignored ingested replicated copied transferred ] ) {
 
       my $set = qq[set_${key}];
@@ -140,6 +282,15 @@ while ( my ( $k, $v ) = each %_status ) {
   push @{ $_rev_status{  $v } }, $k;
 }
 
+=item B<add_status>
+
+Add rows in the table with file names and status, given a status type and an
+array reference of base file names.
+
+  $xfer->add_status( 'ingested', [ $file ] );
+
+=cut
+
 sub add_status {
 
   my ( $self, $type, $files ) = @_;
@@ -159,7 +310,6 @@ sub add_status {
                               );
 }
 
-
 sub code_to_descr {
 
   my ( $code ) = @_;
@@ -177,15 +327,40 @@ sub descr_to_code {
 }
 
 
+=item B<verbose>
+
+If nothing is given, then returns the current verbosity level.
+
+  $xfer->verbose() and warn "Verbose mode set";
+
+Sets verbosity level, given an integer.
+
+  $xfer->verbose( 2 );
+
+=cut
+
 sub verbose {
 
   my $self = shift @_;
 
   return $self->{'verbose'} unless scalar @_;
 
-  $self->{'verbose'} = shift @_;
+  $self->{'verbose'} = 0 + shift @_;
   return;
 }
+
+=item B<dbhandle>
+
+Returns the database handle if no value is given. If no handle is given, one is
+generated internally from I<db-config> parameter (see I<new> method).
+
+  $dbh = $xfer->dbhandle();
+
+Override internal database handle to jcmt database ...
+
+  $xfer->dbhandle( $dbh );
+
+=cut
 
 sub dbhandle {
 
@@ -207,6 +382,7 @@ sub dbhandle {
   $self->{ $extern } = shift @_;
   return;
 }
+
 
 sub _get_files {
 
@@ -462,51 +638,6 @@ sub _check_hashref {
 1;
 
 __END__
-
-=head1  DESCRIPTION
-
-This program checks file replication status at CADC in database and on
-disk for a given date (and an instrument in one case).  Based on file
-status, it copies a file to CADC transfer directory.
-
-Without any arguments, it process the files for current UTC date.
-Provide any other UTC date in C<yyyymmdd> format via I<-date> option.
-
-=head1 OPTIONS
-
-Specifying any *-wait option will initiate an endless loop, and only
-the related action will be taken.
-
-=over 2
-
-=item B<-help>
-
-Show synopsis & options.
-
-=item B<-man>
-
-Show the complete help document.
-
-=item B<-copy>
-
-Put those files in CADC transfer directory which CADC database knows
-about.
-
-=item B<-replication>
-
-Check if files with "ingested" status listed in JAC database have been
-replicated in CADC database.  If they are, then copy the files to CADC
-transfer directory; change the file status to "replicated".
-
-=item B<-transfer>
-
-Check if files with "replicated" status have appeared on disk at CADC.
-If they have, change the status to "transferred".
-
-=item B<-verbose>
-
-Show verbose output; specify multiple times to increase verbosity.
-
 
 =back
 
