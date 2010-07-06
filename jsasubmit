@@ -43,6 +43,12 @@ Used to override the default priority for all jobs. Must be an integer between
 Name of a project to be processed. Should not be used with the "-ut" option. Files
 are not verified to be present at CADC in this mode.
 
+=item B<-queue>
+
+Can be used to override the queue that should be used for the data processing
+at CADC. Can be left unset. Useful values are "JAC_REPROC" for low priority
+reprocessing.
+
 =item B<-ut>
 
 Specify the UT date to be processed. Should not be used with the "-project" option.
@@ -94,7 +100,7 @@ $OMP::ArchiveDB::AnyDate = 1;
 OMP::ArchiveDB->use_existing_criteria( 1 );
 
 # Handle command-line options.
-my ( $help, $man, $mode, $project, $ut, $version, $priority, $noemail, $debug );
+my ( $help, $man, $mode, $project, $ut, $version, $priority, $noemail, $debug, $queue );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -103,6 +109,7 @@ my $status = GetOptions( "help"      => \$help,
                          "version"   => \$version,
                          "debug"     => \$debug,
                          "noemail"   => \$noemail,
+                         "queue"     => \$queue,
                        );
 
 pod2usage( 1 ) if $help;
@@ -289,6 +296,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         $opts{'project'} = $project;
       }
       $opts{priority} = $priority if defined $priority;
+      $opts{queue} = $queue if defined $queue;
 
       if ($debug) {
         log_message( "Would be submitting job with options:\n");

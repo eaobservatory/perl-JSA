@@ -103,6 +103,7 @@ following optional keys:
             recipe file exists in ORAC-DR.
  - priority: Relative priority of job as an integer. Default
              priority will be -1. Range is between -500 and 0.
+ - queue: Name of CADC processing queue (can be undef)
 
 This function returns the recipe instance ID on success, or undef for failure.
 
@@ -116,6 +117,7 @@ sub create_recipe_instance {
 
   my $mode = $options->{'mode'};
   my $project = defined( $options->{'project'} ) ? uc( $options->{'project'} ) : undef;
+  my $queue = ( defined $options->{queue} ? uc( $options->{queue} ) : undef );
 
   # Default to medium priority. Note that this differs to the CADC default of -500.
   my $priority = -1;
@@ -201,6 +203,9 @@ $sql = "select input_id from dp_file_input order by input_id";
   if( defined( $mode ) || defined( $project ) ) {
     $sql .= ", parameters";
   }
+  if (defined $queue) {
+    $sql .= ", project";
+  }
   $sql .= " )\n";
   $sql .= "  values\n";
   $sql .= "  ( $dp_recipe_instance_id, 0x$dp_recipe_id, \" \", $priority";
@@ -210,6 +215,9 @@ $sql = "select input_id from dp_file_input order by input_id";
     $sql .= ", \"-mode='$mode'\"";
   } elsif( defined( $project ) ) {
     $sql .= ", \"-drparameters='-recpars recpars-$project.ini'\"";
+  }
+  if (defined $queue) {
+    $sql .= ", \"$queue\"";
   }
   $sql .= " )";
   print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
