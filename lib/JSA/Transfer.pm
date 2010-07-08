@@ -403,7 +403,7 @@ sub _get_files {
   my $dbh = $self->dbhandle();
 
   my $files =
-    $self->_run_select_sql( 'select', $dbh, $_status{ $type }, $fragment )
+    $self->_run_select_sql( $dbh, $_status{ $type }, $fragment )
       or return;
 
   return
@@ -590,6 +590,8 @@ sub _run_change_sql {
 
       return $_handles{ $key };
     }
+
+    require DBI;
 
     my $dbh =
       DBI->connect( "dbi:Sybase:server=$server" , $user, $pass
