@@ -109,7 +109,7 @@ my $status = GetOptions( "help"      => \$help,
                          "version"   => \$version,
                          "debug"     => \$debug,
                          "noemail"   => \$noemail,
-                         "queue"     => \$queue,
+                         "queue=s"     => \$queue,
                        );
 
 pod2usage( 1 ) if $help;
