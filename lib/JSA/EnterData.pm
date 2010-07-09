@@ -2705,7 +2705,13 @@ sub _print_text {
     $xfer->verbose( $self->verbosity );
 
     # Use own $dbh instead of making J::Transfer to create one for us.
-    $xfer->dbhandle( $dbh ) if $dbh;
+    if ( $dbh ) {
+
+      $xfer->dbhandle( $dbh );
+
+      # Database transactions are handled internally.
+      $xfer->use_transaction( 0 );
+    }
 
     return $xfer;
   }
