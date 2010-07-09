@@ -127,7 +127,10 @@ sub new {
       exists $arg{ $k } ? $arg{ $k } : $_config{ $k } ;
   }
 
-  return bless $obj, $class;
+  $obj = bless $obj, $class;
+  $obj->use_transaction( 1 );
+
+  return $obj;
 }
 
 BEGIN {
@@ -380,6 +383,34 @@ sub dbhandle {
   $self->verbose() and warn "Setting external database handle\n";
 
   $self->{ $extern } = shift @_;
+
+  return;
+}
+
+=item B<use_transaction>
+
+Purpose is to control database transactions externally in combination with
+external database handle (see I<dbhandle> method).  Default is to use
+transactions.
+
+Returns a truth value to indicate if database transaction should be used, if no
+value is given.
+
+  $dbh = $xfer->use_transaction();
+
+Else, given truth value is set for later use.
+
+  $xfer->use_transaction( 1 );
+
+=cut
+
+sub use_transaction {
+
+  my $self = shift @_;
+
+  return $self->{'trans'} unless scalar @_;
+
+  $self->{'trans'} = !! shift @_;
   return;
 }
 
@@ -499,6 +530,8 @@ sub _change_add_status {
 
   my $run = "_${mode}";
 
+  $dbh->begin_work if $self->use_transaction();
+
   my @affected;
   for my $file ( keys %{ $file_status } ) {
 
@@ -518,7 +551,7 @@ sub _change_add_status {
     push @affected, $affected if $affected;
   }
 
-  $dbh->commit;
+  $dbh->commit if $self->use_transaction();
 
   my $sum = 0;
   $sum += $_ for @affected;
@@ -611,6 +644,8 @@ sub _run_change_sql {
     }
 
     $_handles{ $key } = $dbh;
+
+    $self->use_transaction( 1 );
 
     return $dbh ;
   }
