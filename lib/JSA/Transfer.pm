@@ -265,7 +265,7 @@ Set status to C<transferred> of given array reference of files (base names).
         sub {
            my ( $self, $files ) = @_;
 
-           return $self->_set_status( $key, $files );
+           return $self->_set_status( 'status' => $key, 'file' => $files );
         };
 
         *$get =
@@ -434,7 +434,10 @@ sub _get_files {
   my $dbh = $self->dbhandle();
 
   my $files =
-    $self->_run_select_sql( $dbh, $_status{ $type }, $fragment )
+    $self->_run_select_sql( $dbh,
+                            'status' => $_status{ $type },
+                            'file' => $fragment
+                          )
       or return;
 
   return
@@ -483,7 +486,10 @@ sub _check_filename_part {
 
 sub _run_select_sql {
 
-  my ( $self, $dbh, $type, @bind ) = @_;
+  my ( $self, $dbh, %bind ) = @_;
+
+  my ( $file, $status ) =
+    @bind{qw[ file status ]};
 
   my $sql =
     qq[ SELECT file_id from $_status_table
@@ -491,7 +497,7 @@ sub _run_select_sql {
         ORDER BY file_id
       ];
 
-  my $out = $dbh->selectall_arrayref( $sql, undef, @bind )
+  my $out = $dbh->selectall_arrayref( $sql, undef, $file, $status )
       or croak $dbh->errstr;
 
   return
@@ -502,7 +508,10 @@ sub _run_select_sql {
 
 sub _set_status {
 
-  my ( $self, $type, $files ) = @_;
+  my ( $self, %bind ) = @_;
+
+  my ( $files, $type ) =
+    @bind{qw[ file status ]};
 
   exists $_status{ $type }
     or croak sprintf "Unknown status type, %s, given, exiting ...",
