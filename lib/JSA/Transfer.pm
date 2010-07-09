@@ -627,11 +627,11 @@ sub _run_change_sql {
     require DBI;
 
     my $dbh =
-      DBI->connect( "dbi:Sybase:server=$server" , $user, $pass
-                    , { 'RaiseError' => 1
-                      , 'PrintError' => 0
-                      , 'AutoCommit' => 0
-                      }
+      DBI->connect( "dbi:Sybase:server=$server" , $user, $pass,
+                    { 'RaiseError' => 1,
+                      'PrintError' => 0,
+                      'AutoCommit' => 1,
+                    }
                   )
         or die $DBI::errstr;
 
