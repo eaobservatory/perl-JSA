@@ -270,9 +270,9 @@ Set status to C<transferred> of given array reference of files (base names).
 
         *$get =
           sub {
-            my ( $self, $frag ) = @_;
+            my ( $self, %filter ) = @_;
 
-            return $self->_get_files( $frag, $key );
+            return $self->_get_files( %filter, 'type' => $key );
           };
     }
 
@@ -417,16 +417,32 @@ sub use_transaction {
 
 sub _get_files {
 
-  my ( $self, $fragment, $type ) = @_;
+  my ( $self, %filter ) = @_;
+
+  my ( $type, $date, $instr ) =
+    @filter{qw[ type date instrument ]};
+
+  unless ( $instr ) {
+
+    $instr = '';
+  }
+  elsif ( $instr =~ m/^scuba-?2\b/i ) {
+
+    $instr = 's';
+  }
+  elsif ( $instr =~ m/^acsis\b/i ) {
+
+    $instr = 'a';
+  }
 
   exists $_status{ $type }
     or croak sprintf 'Unknown status type, %s, given.',
               ( defined $type ? $type : 'undef' );
 
-  $self->_check_filename_part( $fragment )
-    or croak 'No valid date or other file name fragment given to check for files.';
+  $self->_check_filename_part( $date )
+    or croak 'No valid date given to check for files.';
 
-  $fragment = join $fragment, ( '%' ) x 2;
+  my $fragment = sprintf '%s%%', join '%', $instr, $date;
 
   $self->verbose()
     and warn "Getting files from JAC database with status of ${type}\n";
