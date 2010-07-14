@@ -637,10 +637,9 @@ sub _run_change_sql {
         { $omp_cf->getData( "database.$_" ) }
         qw[ server  database  user  password ];
 
-    my $key = join ':', ( $server, $db, $user, $pass );
-    $key = crypt( $key, $pass );
+    my $key = join ':', ( $server, $db, $user );
 
-    $self->verbose() and warn "Connecting to ${server}.${db} as ${user}\n";
+    $self->verbose() and warn "Connecting to ${server}..${db} as ${user}\n";
 
     if ( exists $_handles{ $key } && $_handles{ $key } ) {
 
