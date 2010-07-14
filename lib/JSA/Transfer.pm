@@ -642,7 +642,7 @@ sub _run_change_sql {
 
     $self->verbose() and warn "Connecting to ${server}.${db} as ${user}\n";
 
-    if ( exists $_handles{ $key } ) {
+    if ( exists $_handles{ $key } && $_handles{ $key } ) {
 
       $self->verbose() and warn "(found cached connection)\n";
 
@@ -679,7 +679,10 @@ sub _run_change_sql {
 
     for my $v ( values %_handles ) {
 
-      $v and $v->disconnect;
+      if ( $v ) {
+
+        $v->disconnect() and undef $v;
+      }
     }
     return
   }
