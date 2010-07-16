@@ -47,6 +47,7 @@ use DateTime::Duration;
 use Pod::Usage;
 use Getopt::Long qw[ :config gnu_compat no_ignore_case no_debug ];
 use List::Util qw[ min sum ];
+use List::MoreUtils qw[ any ];
 
 use JAC::Setup qw[ omp ];
 
@@ -64,12 +65,12 @@ my %_config =
   );
 
 my $_state_table = 'transfer';
+my $_state_descr_table = 'transfer_state';
 
 =head1 METHODS
 
 All the C<get_*_files> methods will be changed to not require partial file name
-in future.  All of C<get_*_files> and C<set_*> methods may be replaced with
-versions which require a state type, similar to I<add_state> method.
+in future.
 
 The state types are ...
 
@@ -152,6 +153,12 @@ name.
 
   $files = $xfer->get_copied_files( 20100612 );
 
+=item B<add_copied>
+
+Add state of C<copied> of given array reference of files (base names).
+
+  $xfer->add_copied( [ @files ] );
+
 =item B<set_copied>
 
 Set state to C<copied> of given array reference of files (base names).
@@ -164,6 +171,12 @@ Return a array reference of files with C<error> state, given a partial file
 name.
 
   $files = $xfer->get_error_files( 20100612 );
+
+=item B<add_error>
+
+Add state of C<error> of given array reference of files (base names).
+
+  $xfer->add_error( [ @files ] );
 
 =item B<set_error>
 
@@ -178,6 +191,12 @@ name.
 
   $files = $xfer->get_found_files( 20100612 );
 
+=item B<add_found>
+
+Add state of C<found> of given array reference of files (base names).
+
+  $xfer->add_found( [ @files ] );
+
 =item B<set_found>
 
 Set state to C<found> of given array reference of files (base names).
@@ -190,6 +209,12 @@ Return a array reference of files with C<ignored> state, given a partial file
 name.
 
   $files = $xfer->get_ignored_files( 20100612 );
+
+=item B<add_ignored>
+
+Add state of C<ignored> of given array reference of files (base names).
+
+  $xfer->add_ignored( [ @files ] );
 
 =item B<set_ignored>
 
@@ -204,6 +229,12 @@ name.
 
   $files = $xfer->get_ingested_files( 20100612 );
 
+=item B<add_ingested>
+
+Add state of C<ingested> of given array reference of files (base names).
+
+  $xfer->add_ingested( [ @files ] );
+
 =item B<set_ingested>
 
 Set state to C<ingested> of given array reference of files (base names).
@@ -216,6 +247,12 @@ Return a array reference of files with C<replicated> state, given a partial file
 name.
 
   $files = $xfer->get_replicated_files( 20100612 );
+
+=item B<add_replicated>
+
+Add state of C<replicated> of given array reference of files (base names).
+
+  $xfer->add_replicated( [ @files ] );
 
 =item B<set_replicated>
 
@@ -230,6 +267,12 @@ name.
 
   $files = $xfer->get_transferred_files( 20100612 );
 
+=item B<add_transferred>
+
+Add state of C<transferred> of given array reference of files (base names).
+
+  $xfer->add_transferred( [ @files ] );
+
 =item B<set_transferred>
 
 Set state to C<transferred> of given array reference of files (base names).
@@ -241,6 +284,7 @@ Set state to C<transferred> of given array reference of files (base names).
     for my $key ( qw[ found error ignored ingested replicated copied transferred ] ) {
 
       my $set = qq[set_${key}];
+      my $add = qq[add_${key}];
       my $get = qq[get_${key}_files];
 
       no strict 'refs';
@@ -248,17 +292,25 @@ Set state to C<transferred> of given array reference of files (base names).
         sub {
            my ( $self, $files ) = @_;
 
-           return $self->_set_state( 'state' => $key, 'file' => $files );
+           return $self->_change_add_state( 'mode' => 'change',
+                                            'state' => $key, 'file' => $files );
         };
 
-        *$get =
-          sub {
-            my ( $self, %filter ) = @_;
+      *$add =
+        sub {
+           my ( $self, $files ) = @_;
 
-            return $self->_get_files( %filter, 'type' => $key );
-          };
+           return $self->_change_add_state( 'mode' => 'add',
+                                            'state' => $key, 'file' => $files );
+        };
+
+      *$get =
+        sub {
+          my ( $self, %filter ) = @_;
+
+          return $self->_get_files( %filter, 'state' => $key );
+        };
     }
-
 }
 our %_state;
 
@@ -266,34 +318,6 @@ my %_rev_state;
 while ( my ( $k, $v ) = each %_state ) {
 
   push @{ $_rev_state{  $v } }, $k;
-}
-
-=item B<add_state>
-
-Add rows in the table with file names and state, given a state type and an
-array reference of base file names.
-
-  $xfer->add_state( 'ingested', [ $file ] );
-
-=cut
-
-sub add_state {
-
-  my ( $self, $type, $files ) = @_;
-
-  exists $_state{ $type }
-    or croak sprintf "Unknown state type, %s, given, exiting ...",
-              ( defined $type ? $type : 'undef' );
-
-  croak "A populated array reference was expected."
-    unless $files
-    && ref $files
-    && scalar @{ $files };
-
-  return
-    $self->_change_add_state( 'insert',
-                                { map { $_ => $_state{ $type } } @{ $files } }
-                              );
 }
 
 sub code_to_descr {
@@ -312,6 +336,30 @@ sub descr_to_code {
   return $_state{ $descr };
 }
 
+=item -
+
+=cut
+
+sub get_files_not_end_state {
+
+  my ( $self ) = @_;
+
+  my $sql =
+    qq[SELECT s.file_id, s.status, d.descr
+        FROM $_state_table s , $_state_descr_table d
+        WHERE s.status <> ? AND s.status = d.state
+        ORDER BY file_id
+      ];
+
+  my $dbh = $self->dbhandle();
+  my $out = $dbh->selectall_hashref( $sql, 'file_id', undef, $_state{'transferred'} )
+      or croak $dbh->errstr;
+
+  return
+    unless $out && keys %{ $out };
+
+  return $out;
+}
 
 =item B<verbose>
 
@@ -328,6 +376,9 @@ Sets verbosity level, given an integer.
 sub verbose {
 
   my $self = shift @_;
+
+  $self->{'verbose'} = 0
+    unless defined $self->{'verbose'};
 
   return $self->{'verbose'} unless scalar @_;
 
@@ -363,7 +414,7 @@ sub dbhandle {
       ;
   }
 
-  $self->verbose() and warn "Setting external database handle\n";
+  $self->_make_noise( 0, "Setting external database handle\n" );
 
   $self->{ $extern } = shift @_;
 
@@ -402,46 +453,50 @@ sub _get_files {
 
   my ( $self, %filter ) = @_;
 
-  my ( $type, $date, $instr ) =
-    @filter{qw[ type date instrument ]};
-
-  unless ( $instr ) {
-
-    $instr = '';
-  }
-  elsif ( $instr =~ m/^scuba-?2\b/i ) {
-
-    $instr = 's';
-  }
-  elsif ( $instr =~ m/^acsis\b/i ) {
-
-    $instr = 'a';
-  }
-
-  exists $_state{ $type }
-    or croak sprintf 'Unknown state type, %s, given.',
-              ( defined $type ? $type : 'undef' );
-
-  $self->_check_filename_part( $date )
-    or croak 'No valid date given to check for files.';
+  my ( $state, $date, $instr ) = _extract_filter( %filter );
 
   my $fragment = sprintf '%s%%', join '%', $instr, $date;
 
-  $self->verbose()
-    and warn "Getting files from JAC database with state of ${type}\n";
+  $self->_make_noise( 1, "Getting files from JAC database with state '${state}'\n" );
 
   my $dbh = $self->dbhandle();
 
   return
     $self->_run_select_sql( $dbh,
-                            'state' => $_state{ $type },
+                            'state' => $_state{ $state },
                             'file' => $fragment
                           );
 }
 
+sub _extract_filter {
+
+  my ( %filter ) = @_;
+
+  my ( $state, $date, $instr ) =
+    @filter{qw[ state date instrument ]};
+
+  _check_state( $state );
+  _check_filename_part( $date );
+
+  $instr = _translate_instrument( $instr );
+
+  return ( $state, $date, $instr );
+}
+
+sub _translate_instrument {
+
+  my ( $instr ) = @_;
+
+  return '' unless $instr;
+  return 's' if $instr =~ m/^scuba-?2\b/i;
+  return 'a' if $instr =~ m/^acsis\b/i;
+
+  croak qq[Unknown instrument, '$instr', given.];
+}
+
 sub _check_filename_part {
 
-  my ( $self, $part ) = @_;
+  my ( $part ) = @_;
 
   my $parse_date =
     qr/ ^
@@ -452,13 +507,15 @@ sub _check_filename_part {
       /x;
 
   return
-    $part
+    if $part
     && length $part > 1
     && (  # Assume partial file name to be a date if it is a 8-digit number.
           $part =~ m/^\d{8}/
           ? $part =~ $parse_date
           : 1
         );
+
+  croak 'No valid date given to check for files.';
 }
 
 {
@@ -483,14 +540,18 @@ sub _run_select_sql {
 
   my ( $self, $dbh, %bind ) = @_;
 
-  my ( $file, $state ) =
-    @bind{qw[ file state ]};
+  my ( $file, $state ) = @bind{qw[ file state ]};
 
-  my $sql =
-    qq[ SELECT file_id from $_state_table
-        WHERE file_id like ? AND status = ?
-        ORDER BY file_id
-      ];
+  my $sql = qq[SELECT file_id from $_state_table];
+  if ( any { $_ } ( $file, $state ) ) {
+
+    $sql .=
+      ' WHERE'
+      . join ' AND ',
+          $file ? ' file_id like ?' : (),
+          $state ? ' status = ?' : (),
+  }
+  $sql .= ' ORDER BY file_id';
 
   my $out = $dbh->selectall_arrayref( $sql, undef, $file, $state )
       or croak $dbh->errstr;
@@ -512,56 +573,46 @@ sub _simplify_arrayref {
     [ map { $_->[0] } @{ $in } ];
 }
 
-sub _set_state {
-
-  my ( $self, %bind ) = @_;
-
-  my ( $files, $type ) =
-    @bind{qw[ file state ]};
-
-  exists $_state{ $type }
-    or croak sprintf "Unknown state type, %s, given, exiting ...",
-              ( defined $type ? $type : 'undef' );
-
-  $self->verbose() and warn qq[Setting "${type}" state\n];
-
-  return
-    $self->_change_add_state( 'update',
-                                { map { $_ => $_state{ $type } } @{ $files } }
-                              );
-}
-
 sub _change_add_state {
 
-  my ( $self, $mode, $file_state ) = @_;
+  my ( $self, %args ) = @_;
 
-  croak "A populated hash reference was expected."
-    unless _check_hashref( $file_state );
+  my ( $mode, $files, $state ) =
+    map { $args{ $_ } } qw[ mode file state ];
 
-  $self->verbose() and warn qq[Setting state for files\n];
+  eval { _check_state( $state ) }; croak $@ if $@;
 
   # Use the same $dbh during a transaction.
   my $dbh = $self->dbhandle();
 
-  my $run = "_${mode}";
-
   $dbh->begin_work if $self->use_transaction();
 
+  my $run =
+    'add' eq $mode
+    ? sub { return $self->_insert( @_ ) ; }
+    : sub { return $self->_update( @_ ) ; }
+    ;
+
+  $self->_make_noise( 0,
+                      ( 'add' eq $mode
+                        ? qq[Before adding]
+                        : qq[Before setting]
+                      ),
+                      qq[ '${state}' state for files\n]
+                    );
+
   my @affected;
-  for my $file ( keys %{ $file_state } ) {
+  for my $file ( sort @{ $files } ) {
 
     my $alt = _fix_file_name( $file );
 
-    my $state = $file_state->{ $file };
-
-    $self->verbose() > 1
-      and warn qq[  Setting state of '${state}' for ${alt}\n];
+    $self->_make_noise( 1, qq[  ${alt}\n] );
 
     # Explicitly pass $dbh.
-    my $affected = $self->$run( 'dbhandle' => $dbh,
-                                'file'     => $alt,
-                                'state'   => $state
-                              );
+    my $affected = $run->( 'dbhandle' => $dbh,
+                            'file'     => $alt,
+                            'state'   => $state
+                          );
 
     push @affected, $affected if $affected;
   }
@@ -593,10 +644,21 @@ sub _update {
   my $sql =
     qq[UPDATE $_state_table SET status = ? WHERE file_id = ?];
 
-  return
-    $self->_run_change_sql( $sql,
-                            map { $arg{ $_ } } qw[ dbhandle state file ]
-                          );
+  my ( $dbh, @bind ) = map { $arg{ $_ } } qw[ dbhandle state file ];
+
+  # Avoid resetting 't' multiple times when the transferred file list is same as
+  # the list generated by jcmtInfo, where state of some of the files would have
+  # been already been changed to transferred.
+  #
+  # As of Jul 16, 2010, other of the states is changed from one to the other, so
+  # same rows are not updated with the old information.
+  if ( 't' eq $arg{'state'} ) {
+
+    $sql = join ' AND ', $sql, q[state <> ?];
+    push @bind, $arg{'state'};
+  }
+
+  return $self->_run_change_sql( $sql, $dbh, @bind );
 }
 
 sub _run_change_sql {
@@ -629,11 +691,11 @@ sub _run_change_sql {
 
     my $key = join ':', ( $server, $db, $user );
 
-    $self->verbose() and warn "Connecting to ${server}..${db} as ${user}\n";
+    $self->_make_noise( 2, "Connecting to ${server}..${db} as ${user}\n" );
 
     if ( exists $_handles{ $key } && $_handles{ $key } ) {
 
-      $self->verbose() and warn "(found cached connection)\n";
+      $self->_make_noise( 2, "  found cached connection\n" );
 
       return $_handles{ $key };
     }
@@ -686,6 +748,28 @@ sub _check_hashref {
   my ( $h ) = @_;
 
   return $h && ref $h && keys %{ $h };
+}
+
+sub _check_state {
+
+  my ( $type ) = @_;
+
+  return if exists $_state{ $type };
+
+  croak sprintf "Unknown state type, %s, given, exiting ...\n",
+            ( defined $type ? $type : 'undef' );
+}
+
+sub _make_noise {
+
+  my ( $self, $min, @msg ) = @_;
+
+  return unless scalar @msg;
+
+  ( $min || 0 ) < $self->verbose()
+    and print STDERR @_;
+
+  return;
 }
 
 
