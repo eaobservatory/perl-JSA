@@ -1234,7 +1234,7 @@ sub insert_hash {
 
     if ( $table eq 'FILES' && defined $status && $status > 0 ) {
 
-      $xfer->add_state( 'ingested', [ $row->{'file_id'} ] );
+      $xfer->add_ingested( [ $row->{'file_id'} ] );
     }
 
     return $status if !$status;
@@ -1323,7 +1323,7 @@ sub conditional_insert_hash {
 
     if ( $table eq 'FILES' && $affected > 0 ) {
 
-      $xfer->add_state( 'ingested', [ $row->{'file_id'} ] );
+      $xfer->add_ingested( [ $row->{'file_id'} ] );
     }
 
     return if ! defined $affected;
