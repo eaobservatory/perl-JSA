@@ -432,15 +432,11 @@ sub _get_files {
 
   my $dbh = $self->dbhandle();
 
-  my $files =
+  return
     $self->_run_select_sql( $dbh,
                             'status' => $_status{ $type },
                             'file' => $fragment
-                          )
-      or return;
-
-  return
-    { map { $_->[0] => undef } @{ $files } };
+                          );
 }
 
 sub _check_filename_part {
@@ -502,7 +498,18 @@ sub _run_select_sql {
   return
     unless $out && scalar @{ $out };
 
-  return $out;
+  return _simplify_arrayref( $out );
+}
+
+sub _simplify_arrayref {
+
+  my ( $in ) = @_;
+
+  return
+    unless $in && scalar @{ $in };
+
+  return
+    [ map { $_->[0] } @{ $in } ];
 }
 
 sub _set_status {
