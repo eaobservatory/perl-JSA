@@ -50,23 +50,6 @@ use List::Util qw[ min sum ];
 
 use JAC::Setup qw[ omp ];
 
-#BEGIN {
-#
-#  our $omp_lib =
-#    #'/jac_sw/omp/msbserver'
-#    '/home/agarwal/src/jac-git/omp-perl'
-#    ;
-#
-#  $ENV{'OMP_CFG_DIR'} = File::Spec->catfile( $omp_lib, 'cfg' );
-#
-#}
-#our $omp_lib;
-#
-#use lib
-#  $omp_lib,
-#  '/home/agarwal/src/jac-git/perl-JSA/lib',
-#  ;
-
 use OMP::Config;
 
 $OMP::Config::DEBUG = 0;
