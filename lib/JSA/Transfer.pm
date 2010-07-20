@@ -336,23 +336,39 @@ sub descr_to_code {
   return $_state{ $descr };
 }
 
-=item -
+=item I<get_files_not_end_state>
+
+Returns a list of files not in transferred state at CADC.
+
+  $all = $xfer->get_files_not_end_state();
+
+It takes an optional file name SQL pattern to return only the matching
+files.
+
+  $jun12 = $xfer->get_files_not_end_state( '%20100612%' );
 
 =cut
 
 sub get_files_not_end_state {
 
-  my ( $self ) = @_;
+  my ( $self, $pattern ) = @_;
 
   my $sql =
     qq[SELECT s.file_id, s.status, d.descr
         FROM $_state_table s , $_state_descr_table d
         WHERE s.status <> ? AND s.status = d.state
-        ORDER BY file_id
       ];
 
+  $sql .= ' AND file_id like ? '
+    if $pattern;
+
+  $sql .= ' ORDER BY file_id';
+
   my $dbh = $self->dbhandle();
-  my $out = $dbh->selectall_hashref( $sql, 'file_id', undef, $_state{'transferred'} )
+  my $out = $dbh->selectall_hashref( $sql, 'file_id', undef,
+                                      $_state{'transferred'},
+                                      ( $pattern ? $pattern : () )
+                                    )
       or croak $dbh->errstr;
 
   return
