@@ -767,7 +767,7 @@ sub _make_noise {
   return unless scalar @msg;
 
   ( $min || 0 ) < $self->verbose()
-    and print STDERR @_;
+    and print STDERR @msg;
 
   return;
 }
