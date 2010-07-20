@@ -16,7 +16,7 @@ Pass jcmt database handle already being used if desired ...
 
   $xfer->dbhandle( $dbh );
 
-Set replicated status for a file ...
+Set replicated state for a file ...
 
   $xfer->set_replicated( [ 'a20100612_00005_01_0001.sdf',
                             'a20100612_00006_01_0001.sdf'
@@ -33,7 +33,7 @@ This package manipulates the database table to track progress of raw file data
 ingestion and replication to CADC.
 
 The file ingestion process adds a row on successful ingestion; file copy to CADC
-& table replication tracking processes update the status. Disk cleaning process
+& table replication tracking processes update the state. Disk cleaning process
 should delete the rows (to be implemented).
 
 =cut
@@ -63,15 +63,15 @@ my %_config =
       #'/home/agarwal/src/jac-git/archiving/jcmt/.enterdata-cfg/enterdata.cfg',
   );
 
-my $_status_table = 'transfer';
+my $_state_table = 'transfer';
 
 =head1 METHODS
 
 All the C<get_*_files> methods will be changed to not require partial file name
 in future.  All of C<get_*_files> and C<set_*> methods may be replaced with
-versions which require a status type, similar to I<add_status> method.
+versions which require a state type, similar to I<add_state> method.
 
-The status types are ...
+The state types are ...
 
   copied
   error
@@ -117,7 +117,7 @@ sub new {
 }
 
 BEGIN {
-  our %_status =
+  our %_state =
     (
       #  File found on JAC disk (table has full path).
       'found' => 'f',
@@ -147,92 +147,92 @@ BEGIN {
 
 =item B<get_copied_files>
 
-Return a array reference of files with C<copied> status, given a partial file
+Return a array reference of files with C<copied> state, given a partial file
 name.
 
   $files = $xfer->get_copied_files( 20100612 );
 
 =item B<set_copied>
 
-Set status to C<copied> of given array reference of files (base names).
+Set state to C<copied> of given array reference of files (base names).
 
   $xfer->set_copied( [ @files ] );
 
 =item B<get_error_files>
 
-Return a array reference of files with C<error> status, given a partial file
+Return a array reference of files with C<error> state, given a partial file
 name.
 
   $files = $xfer->get_error_files( 20100612 );
 
 =item B<set_error>
 
-Set status to C<error> of given array reference of files (base names).
+Set state to C<error> of given array reference of files (base names).
 
   $xfer->set_error( [ @files ] );
 
 =item B<get_found_files>
 
-Return a array reference of files with C<found> status, given a partial file
+Return a array reference of files with C<found> state, given a partial file
 name.
 
   $files = $xfer->get_found_files( 20100612 );
 
 =item B<set_found>
 
-Set status to C<found> of given array reference of files (base names).
+Set state to C<found> of given array reference of files (base names).
 
   $xfer->set_found( [ @files ] );
 
 =item B<get_ignored_files>
 
-Return a array reference of files with C<ignored> status, given a partial file
+Return a array reference of files with C<ignored> state, given a partial file
 name.
 
   $files = $xfer->get_ignored_files( 20100612 );
 
 =item B<set_ignored>
 
-Set status to C<ignored> of given array reference of files (base names).
+Set state to C<ignored> of given array reference of files (base names).
 
   $xfer->set_ignored( [ @files ] );
 
 =item B<get_ingested_files>
 
-Return a array reference of files with C<ingested> status, given a partial file
+Return a array reference of files with C<ingested> state, given a partial file
 name.
 
   $files = $xfer->get_ingested_files( 20100612 );
 
 =item B<set_ingested>
 
-Set status to C<ingested> of given array reference of files (base names).
+Set state to C<ingested> of given array reference of files (base names).
 
   $xfer->set_ingested( [ @files ] );
 
 =item B<get_replicated_files>
 
-Return a array reference of files with C<replicated> status, given a partial file
+Return a array reference of files with C<replicated> state, given a partial file
 name.
 
   $files = $xfer->get_replicated_files( 20100612 );
 
 =item B<set_replicated>
 
-Set status to C<replicated> of given array reference of files (base names).
+Set state to C<replicated> of given array reference of files (base names).
 
   $xfer->set_replicated( [ @files ] );
 
 =item B<get_transferred_files>
 
-Return a array reference of files with C<transferred> status, given a partial file
+Return a array reference of files with C<transferred> state, given a partial file
 name.
 
   $files = $xfer->get_transferred_files( 20100612 );
 
 =item B<set_transferred>
 
-Set status to C<transferred> of given array reference of files (base names).
+Set state to C<transferred> of given array reference of files (base names).
 
   $xfer->set_transferred( [ @files ] );
 
@@ -248,7 +248,7 @@ Set status to C<transferred> of given array reference of files (base names).
         sub {
            my ( $self, $files ) = @_;
 
-           return $self->_set_status( 'status' => $key, 'file' => $files );
+           return $self->_set_state( 'state' => $key, 'file' => $files );
         };
 
         *$get =
@@ -260,29 +260,29 @@ Set status to C<transferred> of given array reference of files (base names).
     }
 
 }
-our %_status;
+our %_state;
 
-my %_rev_status;
-while ( my ( $k, $v ) = each %_status ) {
+my %_rev_state;
+while ( my ( $k, $v ) = each %_state ) {
 
-  push @{ $_rev_status{  $v } }, $k;
+  push @{ $_rev_state{  $v } }, $k;
 }
 
-=item B<add_status>
+=item B<add_state>
 
-Add rows in the table with file names and status, given a status type and an
+Add rows in the table with file names and state, given a state type and an
 array reference of base file names.
 
-  $xfer->add_status( 'ingested', [ $file ] );
+  $xfer->add_state( 'ingested', [ $file ] );
 
 =cut
 
-sub add_status {
+sub add_state {
 
   my ( $self, $type, $files ) = @_;
 
-  exists $_status{ $type }
-    or croak sprintf "Unknown status type, %s, given, exiting ...",
+  exists $_state{ $type }
+    or croak sprintf "Unknown state type, %s, given, exiting ...",
               ( defined $type ? $type : 'undef' );
 
   croak "A populated array reference was expected."
@@ -291,8 +291,8 @@ sub add_status {
     && scalar @{ $files };
 
   return
-    $self->_change_add_status( 'insert',
-                                { map { $_ => $_status{ $type } } @{ $files } }
+    $self->_change_add_state( 'insert',
+                                { map { $_ => $_state{ $type } } @{ $files } }
                               );
 }
 
@@ -300,16 +300,16 @@ sub code_to_descr {
 
   my ( $code ) = @_;
 
-  return unless exists $_rev_status{ $code };
-  return $_rev_status{ $code };
+  return unless exists $_rev_state{ $code };
+  return $_rev_state{ $code };
 }
 
 sub descr_to_code {
 
   my ( $descr ) = @_;
 
-  return unless exists $_status{ $descr };
-  return $_status{ $descr };
+  return unless exists $_state{ $descr };
+  return $_state{ $descr };
 }
 
 
@@ -418,8 +418,8 @@ sub _get_files {
     $instr = 'a';
   }
 
-  exists $_status{ $type }
-    or croak sprintf 'Unknown status type, %s, given.',
+  exists $_state{ $type }
+    or croak sprintf 'Unknown state type, %s, given.',
               ( defined $type ? $type : 'undef' );
 
   $self->_check_filename_part( $date )
@@ -428,13 +428,13 @@ sub _get_files {
   my $fragment = sprintf '%s%%', join '%', $instr, $date;
 
   $self->verbose()
-    and warn "Getting files from JAC database with status of ${type}\n";
+    and warn "Getting files from JAC database with state of ${type}\n";
 
   my $dbh = $self->dbhandle();
 
   return
     $self->_run_select_sql( $dbh,
-                            'status' => $_status{ $type },
+                            'state' => $_state{ $type },
                             'file' => $fragment
                           );
 }
@@ -483,16 +483,16 @@ sub _run_select_sql {
 
   my ( $self, $dbh, %bind ) = @_;
 
-  my ( $file, $status ) =
-    @bind{qw[ file status ]};
+  my ( $file, $state ) =
+    @bind{qw[ file state ]};
 
   my $sql =
-    qq[ SELECT file_id from $_status_table
+    qq[ SELECT file_id from $_state_table
         WHERE file_id like ? AND status = ?
         ORDER BY file_id
       ];
 
-  my $out = $dbh->selectall_arrayref( $sql, undef, $file, $status )
+  my $out = $dbh->selectall_arrayref( $sql, undef, $file, $state )
       or croak $dbh->errstr;
 
   return
@@ -512,33 +512,33 @@ sub _simplify_arrayref {
     [ map { $_->[0] } @{ $in } ];
 }
 
-sub _set_status {
+sub _set_state {
 
   my ( $self, %bind ) = @_;
 
   my ( $files, $type ) =
-    @bind{qw[ file status ]};
+    @bind{qw[ file state ]};
 
-  exists $_status{ $type }
-    or croak sprintf "Unknown status type, %s, given, exiting ...",
+  exists $_state{ $type }
+    or croak sprintf "Unknown state type, %s, given, exiting ...",
               ( defined $type ? $type : 'undef' );
 
-  $self->verbose() and warn qq[Setting "${type}" status\n];
+  $self->verbose() and warn qq[Setting "${type}" state\n];
 
   return
-    $self->_change_add_status( 'update',
-                                { map { $_ => $_status{ $type } } @{ $files } }
+    $self->_change_add_state( 'update',
+                                { map { $_ => $_state{ $type } } @{ $files } }
                               );
 }
 
-sub _change_add_status {
+sub _change_add_state {
 
-  my ( $self, $mode, $file_status ) = @_;
+  my ( $self, $mode, $file_state ) = @_;
 
   croak "A populated hash reference was expected."
-    unless _check_hashref( $file_status );
+    unless _check_hashref( $file_state );
 
-  $self->verbose() and warn qq[Setting status for files\n];
+  $self->verbose() and warn qq[Setting state for files\n];
 
   # Use the same $dbh during a transaction.
   my $dbh = $self->dbhandle();
@@ -548,19 +548,19 @@ sub _change_add_status {
   $dbh->begin_work if $self->use_transaction();
 
   my @affected;
-  for my $file ( keys %{ $file_status } ) {
+  for my $file ( keys %{ $file_state } ) {
 
     my $alt = _fix_file_name( $file );
 
-    my $status = $file_status->{ $file };
+    my $state = $file_state->{ $file };
 
     $self->verbose() > 1
-      and warn qq[  Setting status of '${status}' for ${alt}\n];
+      and warn qq[  Setting state of '${state}' for ${alt}\n];
 
     # Explicitly pass $dbh.
     my $affected = $self->$run( 'dbhandle' => $dbh,
                                 'file'     => $alt,
-                                'status'   => $status
+                                'state'   => $state
                               );
 
     push @affected, $affected if $affected;
@@ -578,11 +578,11 @@ sub _insert {
   my ( $self, %arg ) = @_;
 
   my $sql =
-    qq[INSERT INTO $_status_table ( file_id, status ) VALUES ( ? , ? )];
+    qq[INSERT INTO $_state_table ( file_id, status ) VALUES ( ? , ? )];
 
   return
     $self->_run_change_sql( $sql,
-                            map { $arg{ $_ } } qw[ dbhandle file status ]
+                            map { $arg{ $_ } } qw[ dbhandle file state ]
                           );
 }
 
@@ -591,11 +591,11 @@ sub _update {
   my ( $self, %arg ) = @_;
 
   my $sql =
-    qq[UPDATE $_status_table SET status = ? WHERE file_id = ?];
+    qq[UPDATE $_state_table SET status = ? WHERE file_id = ?];
 
   return
     $self->_run_change_sql( $sql,
-                            map { $arg{ $_ } } qw[ dbhandle status file ]
+                            map { $arg{ $_ } } qw[ dbhandle state file ]
                           );
 }
 
