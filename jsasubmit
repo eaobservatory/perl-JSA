@@ -18,7 +18,8 @@ Submits a processing job to the CADC data processing system.
 
 =item B<-debug>
 
-Enable debug messages and do not actually submit a processing job.
+Enable debug messages and do not actually submit a processing job. Also
+disables emailing.
 
 =item B<-help>
 
@@ -259,9 +260,14 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
   }
 
-  log_message( "Connecting to CADC data processing database...");
-  my $dbh = connect_to_cadcdp;
-  log_message( "connected!\n\n");
+  my $dbh;
+  if ($debug) {
+    log_message( "Would be connecting to CADC data processing database here\n" );
+  } else {
+    log_message( "Connecting to CADC data processing database...");
+    $dbh = connect_to_cadcdp;
+    log_message( "connected!\n\n");
+  }
 
   foreach my $group ( sort keys %group ) {
     log_message( "Requesting CADC processing of the following files:\n");
@@ -303,6 +309,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         for my $k (sort keys %opts) {
            log_message( "\t$k : ".(defined $opts{$k} ? $opts{$k} : "<undef>")."\n");
         }
+        $recipe_id = "0xFabCADC";
       } else {
         $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
       }
@@ -326,9 +333,13 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
   }
 
-  log_message( "Disconnecting from CADC data processing database...");
-  disconnect_from_cadcdp( $dbh );
-  log_message( "disconnected!\n\n");
+  if ($debug) {
+    log_message( "Would be disconnecting from CADC data processing database here\n");
+  } else {
+    log_message( "Disconnecting from CADC data processing database...");
+    disconnect_from_cadcdp( $dbh );
+    log_message( "disconnected!\n\n");
+  }
   log_message( "Data processing requests complete.\n");
 
 }
