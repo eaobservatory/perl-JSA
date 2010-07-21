@@ -207,7 +207,7 @@ sub make_logfile {
 
   return
     File::Spec->catfile( $dir || $_log_dir,
-                          join '.', $prefix, _get_datetime(), $$
+                          join '.', $prefix, _get_datetime()
                         );
 
 }
