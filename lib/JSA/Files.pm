@@ -160,34 +160,6 @@ sub can_send_to_cadc_guess {
 
 }
 
-=item B<cadc_transfer_check>
-
-Check to see if a list of files has been transferred to CADC.
-
-  ( $transferred, $not_transferred ) = cadc_transfer_check( @files );
-
-Takes a list of files, with or without file suffices. Returns two array references, one pointing to an array of files that have been successfully transferred to CADC, and one pointing to an array of files that have not been transferred.
-
-=cut
-
-sub cadc_transfer_check {
-  my @files = @_;
-
-  my( @transferred, @not_transferred );
-
-  foreach my $file ( @files ) {
-    my $orig = $file;
-    $file =~ s/\.sdf$//;
-    my $result = `$JCMTINFO $file`;
-    if( $result =~ /No such file/ ) {
-      push @not_transferred, $orig;
-    } else {
-      push @transferred, $orig;
-    }
-  }
-  return( \@transferred, \@not_transferred );
-}
-
 =item B<merge_pngs>
 
 Given a list of acceptable PNGs, merge them so that the rimg is on the
