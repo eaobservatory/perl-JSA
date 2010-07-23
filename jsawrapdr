@@ -105,6 +105,8 @@ conjunction with the C<-ut> option.
 Specify the grouping mode. This does not change grouping behaviour; it
 only changes collection IDs as stored by CADC. Can be one of 'night'
 (for night grouping), 'project' (for project grouping) or 'public'.
+If 'obs' is used group files will not be converted to FITS for
+ingestion.
 
 =item B<-outdir>
 

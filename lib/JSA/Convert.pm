@@ -41,7 +41,7 @@ use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    looks_like_drfile looks_like_cadcfile
                    can_send_to_cadc looks_like_drthumb
-                   merge_pngs /;
+                   merge_pngs want_to_send_to_cadc /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf convert_dr_files list_convert_plan /;
@@ -150,7 +150,7 @@ allowed keys:
  - indir: the input directory
  - outdir: the output directory
  - tempdir: a temporary directory for file conversion.
- - mode: Processing mode ("night", "project", "public").
+ - mode: Processing mode ("obs", "night", "project", "public").
 
 =cut
 
@@ -166,7 +166,7 @@ sub convert_dr_files {
 
     if( looks_like_drfile( $file ) ) {
 
-      if ( can_send_to_cadc( $href->{$file} ) ) {
+      if ( can_send_to_cadc( $href->{$file} ) && want_to_send_to_cadc( $mode, header => $href->{$file} ) ) {
 
         print "Converting file $file\n" if $DEBUG;
 
@@ -237,14 +237,14 @@ sub convert_dr_files {
 
         if ($DEBUG) {
           my $can_send = can_send_to_cadc( $href->{$file} );
-          my $isdr = looks_like_drfile( $file );
+          my $want = want_to_send_to_cadc( $mode, header => $href->{$file} );
           print "File $file not suitable for conversion (is ".
             ( $can_send ? "" : "not ") . "valid product) (is ".
-            ( $isdr ? "" : "not ") . "valid DR filename)\n";
+            ( $want ? "" : "not ") . "wanted at CADC)\n";
         }
 
       }
-    } elsif( looks_like_drthumb( $file ) ) {
+    } elsif( looks_like_drthumb( $file ) && want_to_send_to_cadc( $mode, filename => $file ) ) {
 
       print "Converting file $file\n" if $DEBUG;
 
@@ -255,9 +255,11 @@ sub convert_dr_files {
       if ($DEBUG) {
         my $can_send = can_send_to_cadc( $href->{$file} );
         my $isdr = looks_like_drfile( $file );
+        my $want = want_to_send_to_cadc( $mode, filename => $href->{$file} );
         print "File $file not suitable for conversion (is ".
           ( $can_send ? "" : "not ") . "valid product) (is ".
-          ( $isdr ? "" : "not ") . "valid DR filename)\n";
+          ( $isdr ? "" : "not ") . "valid DR filename) (is ".
+          ( $want ? "" : "not " ) . "wanted at CADC)\n";
       }
     }
   }

@@ -34,7 +34,7 @@ our @EXPORT_OK = qw( uri_to_file file_to_uri drfilename_to_cadc
                      looks_like_rawfile cadc_transfer_check
                      compare_file_lists scan_dir construct_rawfile
                      can_send_to_cadc can_send_to_cadc_guess
-                     looks_like_drthumb merge_pngs );
+                     looks_like_drthumb merge_pngs want_to_send_to_cadc );
 
 our $DEBUG = 0;
 
@@ -120,6 +120,50 @@ sub can_send_to_cadc {
 
   return _can_send_to_cadc_quick( $assoc, $product );
 
+}
+
+=item B<want_to_send_to_cadc>
+
+All we really know is whether we are interested in group
+files or just "obs" files. If we are given a mode
+string that is "obs" we only return true if the supplied
+file header is an "obs". For others we return true.
+
+  $want_file = want_to_send_to_cadc( $mode, %opts );
+
+Options hash indicates whether we are comparing to a
+header hash, mode string, or filename, in that priority
+order.
+
+  header => Astro::FITS::Header object
+  mode => mode from file
+  filename => Name of file
+
+=cut
+
+sub want_to_send_to_cadc {
+  my $mode = uc(shift);
+  my %opts = @_;
+
+  # Short circuit test
+  return 1 if $mode ne "OBS";
+
+  my $assoc;
+  if (exists $opts{header}) {
+    $assoc = uc( $opts{header}->value( "ASN_TYPE" ));
+  } elsif (exists $opts{mode} && defined $opts{mode} ) {
+    $assoc = uc( $opts{mode} );
+  } elsif (exists $opts{filename} && defined $opts{filename} ) {
+    my @parts = dissect_drfile( $opts{filename} );
+    $assoc = ($parts[0] ? "NIGHT" : "OBS" );
+  } else {
+    return 0;
+  }
+
+  if ( $mode eq "OBS" &&  $assoc eq "OBS" ) {
+    return 1;
+  }
+  return 0;
 }
 
 =item B<can_send_to_cadc_guess>
