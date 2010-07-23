@@ -80,6 +80,7 @@ use OMP::ArchiveDB;
 use OMP::Info::Obs;
 use OMP::Info::ObsGroup;
 use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
+use OMP::Constants qw/ :obs /;
 
 use Getopt::Long;
 use Net::SMTP;
@@ -163,6 +164,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
   # Hash to hold list of groups.
   my %group;
 
+  # Hash to hold mode overrides for certain groups
+  my %group_mode;
+
   # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
   my %frameclassloaded;
 
@@ -223,6 +227,28 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $frameclassloaded{$frameclass}++;
     }
 
+    # If the observation is NOT GOOD we don't want to combine it with other
+    # members of the group so we just want to submit it standalone.
+    # REJECT status could arguably be included in full coadds but for now
+    # we only combine GOOD.
+
+    # Observations to be processed standalone need to be reduced in "obs" mode.
+
+    # We do not process bad observations in PROJECT mode since we assume they have
+    # already been done in NIGHT mode
+
+    my $not_in_group = "";
+    my $thismode = $mode;
+    if ( $obs->status != OMP__OBS_GOOD ) {
+      # Do not care about group so add a disambiguater based on obsid
+      log_message( "Observation with OBSID ". $obs->obsid ." is not good so will not be included in a group\n" );
+      $not_in_group = $obs->obsid;
+      $thismode = "obs";
+
+      # Skip to next observation unless we are in night mode
+      next if $mode ne "night";
+    }
+
     if( defined( $hdr->{'SUBHEADERS'} ) ) {
       foreach my $subhdr ( @{$hdr->{'SUBHEADERS'}} ) {
         my $tmphdr = $hdr;
@@ -249,14 +275,16 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         my $frm = new $frameclass;
         $frm->hdr( %{$tmphdr} );
         my $group = $frm->findgroup;
-        push @{$group{$group}}, $tmphdr->{'FILE_ID'};
+        push @{$group{$not_in_group.$group}}, $tmphdr->{'FILE_ID'};
+        $group_mode{$not_in_group.$group} = $thismode;
       }
     } else {
 
       my $frm = new $frameclass;
       $frm->hdr( %{$hdr} );
       my $group = $frm->findgroup;
-      push @{$group{$group}}, $obs->filename;
+      push @{$group{$not_in_group.$group}}, $obs->filename;
+      $group_mode{$not_in_group.$group} = $thismode;
     }
   }
 
@@ -297,7 +325,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $recipe_id;
     try {
       my %opts;
-      $opts{'mode'} = $mode;
+      $opts{'mode'} = ( exists $group_mode{$group} ? $group_mode{$group} : $mode);
       if( $mode eq 'project' ) {
         $opts{'project'} = $project;
       }
