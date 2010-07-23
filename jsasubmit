@@ -144,6 +144,40 @@ if( defined( $project ) ) {
   $mode = "night";
 }
 
+# SLEDGE HAMMER HACK
+#  We need to be able to control pipeline recipe names when doing night
+#  processing. Currently the submission script will supply an project
+#  based recipe parameter file in project mode but not in night mode. This
+#  will not trigger a completely different recipe though. For now we
+#  have a local hash rather than an external config file during submission.
+#  We provide a recipe override based on the most recent project id added
+#  to the group. We only need to override blank field observations for SCUBA-2
+
+my %DR_RECIPES = (
+                  M09BI152 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI155 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI143 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI115 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI128 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI136 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI120 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI101 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI109 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI130 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI104 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI149 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI134 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI145 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI114 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI142 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH101A => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH102A => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH103A => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH105A => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH106B => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+);
+
+
 my $grp;
 my $atCADC;
 if( $mode eq 'project' ) {
@@ -166,6 +200,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
   # Hash to hold mode overrides for certain groups
   my %group_mode;
+
+  # Hash indexed by group name to indicate any DR parameters
+  my %group_drparams;
 
   # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
   my %frameclassloaded;
@@ -249,6 +286,11 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next if $mode ne "night";
     }
 
+    my $this_drparams;
+    if ( exists $DR_RECIPES{$obs->projectid} ) {
+      $this_drparams = $DR_RECIPES{$obs->projectid};
+    }
+
     if( defined( $hdr->{'SUBHEADERS'} ) ) {
       foreach my $subhdr ( @{$hdr->{'SUBHEADERS'}} ) {
         my $tmphdr = $hdr;
@@ -277,6 +319,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         my $group = $frm->findgroup;
         push @{$group{$not_in_group.$group}}, $tmphdr->{'FILE_ID'};
         $group_mode{$not_in_group.$group} = $thismode;
+        $group_drparams{$not_in_group.$group} = $this_drparams if defined $this_drparams;
       }
     } else {
 
@@ -285,6 +328,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       my $group = $frm->findgroup;
       push @{$group{$not_in_group.$group}}, $obs->filename;
       $group_mode{$not_in_group.$group} = $thismode;
+      $group_drparams{$not_in_group.$group} = $this_drparams if defined $this_drparams;
     }
   }
 
@@ -331,6 +375,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       }
       $opts{priority} = $priority if defined $priority;
       $opts{queue} = $queue if defined $queue;
+      if ( exists $group_drparams{$group} ) {
+        $opts{drparams} = $group_drparams{$group};
+      }
 
       if ($debug) {
         log_message( "Would be submitting job with options:\n");
