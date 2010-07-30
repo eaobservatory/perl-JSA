@@ -242,6 +242,8 @@ In insert mode, nothing is inserted in "FILES" table.
       $_->debug( 1 ) for $obj->instruments;
     }
 
+    $obj->skip_state_setting( 0 );
+
     return $obj;
   }
 
@@ -631,6 +633,32 @@ set.
 
     return \@files_added;
   }
+
+=item B<skip_state_setting>
+
+Returns truth value to indicate if to skip state setting in transfer
+table, when no arguments given.  Default is not to skip.
+
+  print "Not setting state" if $enter->skip_state_setting();
+
+If a truth value is given, it is stored for later use.
+
+  $enter->skip_state_setting( 0 );
+
+=cut
+
+sub skip_state_setting {
+
+  my $self = shift @_;
+
+  my $store = 'skip-state';
+
+  return $self->{ $store } unless scalar @_;
+
+  $self->{ $store } = !! $_[0];
+  return;
+}
+
 
 =item B<insert_obs>
 
@@ -1234,7 +1262,8 @@ sub insert_hash {
 
     if ( $table eq 'FILES' && defined $status && $status > 0 ) {
 
-      $xfer->add_ingested( [ $row->{'file_id'} ] );
+      $self->skip_state_setting()
+        or $xfer->add_ingested( [ $row->{'file_id'} ] );
     }
 
     return $status if !$status;
@@ -1323,7 +1352,8 @@ sub conditional_insert_hash {
 
     if ( $table eq 'FILES' && $affected > 0 ) {
 
-      $xfer->add_ingested( [ $row->{'file_id'} ] );
+      $self->skip_state_setting()
+        or $xfer->add_ingested( [ $row->{'file_id'} ] );
     }
 
     return if ! defined $affected;
