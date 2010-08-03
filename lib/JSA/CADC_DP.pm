@@ -146,7 +146,7 @@ sub create_recipe_instance {
   $sql = <<ENDRECIPEID;
 select recipe_id
    from $WRITEDATABASE..dp_recipe
-   where script_name="jsawrapdr"
+   where script_name="jsawrapdr" and resource_reqts like '%8G%'
 ENDRECIPEID
   print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
 
