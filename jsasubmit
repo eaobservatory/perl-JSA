@@ -316,19 +316,19 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
         my $frm = new $frameclass;
         $frm->hdr( %{$tmphdr} );
-        my $group = $frm->findgroup;
-        push @{$group{$not_in_group.$group}}, $tmphdr->{'FILE_ID'};
-        $group_mode{$not_in_group.$group} = $thismode;
-        $group_drparams{$not_in_group.$group} = $this_drparams if defined $this_drparams;
+        my $group = $not_in_group . $frm->findgroup;
+        push @{$group{$group}}, $tmphdr->{'FILE_ID'};
+        $group_mode{$group} = $thismode;
+        $group_drparams{$group} = $this_drparams if defined $this_drparams;
       }
     } else {
 
       my $frm = new $frameclass;
       $frm->hdr( %{$hdr} );
-      my $group = $frm->findgroup;
-      push @{$group{$not_in_group.$group}}, $obs->filename;
-      $group_mode{$not_in_group.$group} = $thismode;
-      $group_drparams{$not_in_group.$group} = $this_drparams if defined $this_drparams;
+      my $group = $not_in_group . $frm->findgroup;
+      push @{$group{$group}}, $obs->filename;
+      $group_mode{$group} = $thismode;
+      $group_drparams{$group} = $this_drparams if defined $this_drparams;
     }
   }
 
