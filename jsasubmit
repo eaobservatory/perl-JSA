@@ -204,6 +204,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
   # Hash indexed by group name to indicate any DR parameters
   my %group_drparams;
 
+  # Hash indexed by group name to indicate dprecipe to use
+  my %group_dprecipe;
+
   # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
   my %frameclassloaded;
 
@@ -286,6 +289,33 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next if $mode ne "night";
     }
 
+    # Make an estimate of the resources required to process the observation
+    # The rule is something like:
+    #  ACSIS
+    #     - HARP scan maps: 16G
+    #     - Everything else: 8G
+    #  SCUBA-2
+    #     - Observations longer than about 20 minutes: 16G
+    #     - Everything else: 8G
+    #    When we have multiple subarrays the 20 minutes will scale accordingly.
+    #    and we'll need to switch to a 64G queue for those.
+    my $this_dprecipe = JSA::CADC_DP::CADC_DPREC_8G;
+    if ( $instrume eq 'SCUBA-2' ) {
+      my $duration = $obs->endobs - $obs->startobs;
+      # We currently have a problem with the database ingestion so we
+      # do not really know the duration of the observation. We therefore
+      # count the number of files as a surrogate (noting that this count
+      # includes all subarrays so we need to divide by two for the
+      # wavelength); This is not accurate.
+      my @files = $obs->filename;
+      my $nfiles = @files / 2;
+      if ($nfiles > 35) {
+        $this_dprecipe = JSA::CADC_DP::CADC_DPREC_16G;
+      }
+    } elsif ( $instrume eq 'HARP' && $hdr->{SAM_MODE} =~ /scan|raster/i) {
+      $this_dprecipe = JSA::CADC_DP::CADC_DPREC_16G;
+    }
+
     my $this_drparams;
     if ( exists $DR_RECIPES{$obs->projectid} ) {
       $this_drparams = $DR_RECIPES{$obs->projectid};
@@ -320,6 +350,21 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         push @{$group{$group}}, $tmphdr->{'FILE_ID'};
         $group_mode{$group} = $thismode;
         $group_drparams{$group} = $this_drparams if defined $this_drparams;
+        # Only set if either we have no previous value for dprecipe or if the
+        # previous value is lower than the current value (so this observation
+        # needs more resources than a previous group member)
+        if (defined $this_dprecipe) {
+          if (exists $group_dprecipe{$group}) {
+            print "This DP recipe $this_dprecipe but previous is $group_dprecipe{$group}\n";
+          }
+          if (!exists $group_dprecipe{$group} ||
+              (exists $group_dprecipe{$group} && $group_dprecipe{$group} < $this_dprecipe)) {
+            if (exists $group_dprecipe{$group}) {
+              print "Using DP recipe $this_dprecipe and overriding $group_dprecipe{$group}\n";
+            }
+            $group_dprecipe{$group} = $this_dprecipe;
+          }
+        }
       }
     } else {
 
@@ -329,6 +374,17 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       push @{$group{$group}}, $obs->filename;
       $group_mode{$group} = $thismode;
       $group_drparams{$group} = $this_drparams if defined $this_drparams;
+      $group_dprecipe{$group} = $this_dprecipe if defined $this_dprecipe;
+      # Only set if either we have no previous value for dprecipe or if the
+      # previous value is lower than the current value (so this observation
+      # needs more resources than a previous group member)
+      if (defined $this_dprecipe) {
+        if (!exists $group_dprecipe{$group} ||
+            (exists $group_dprecipe{$group} && $group_dprecipe{$group} < $this_dprecipe)) {
+          $group_dprecipe{$group} = $this_dprecipe;
+        }
+      }
+
     }
   }
 
@@ -377,6 +433,10 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $opts{queue} = $queue if defined $queue;
       if ( exists $group_drparams{$group} ) {
         $opts{drparams} = $group_drparams{$group};
+      }
+
+      if (exists $group_dprecipe{$group}) {
+        $opts{dprecipe} = $group_dprecipe{$group};
       }
 
       if ($debug) {
