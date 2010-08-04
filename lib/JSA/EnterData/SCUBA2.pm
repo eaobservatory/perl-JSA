@@ -516,28 +516,24 @@ sub push_date_obs_end {
     unless $subheaders
     && scalar @{ $subheaders };
 
-  my @dark;
+  my ( $start, $end ) = ( 'DATE-OBS', 'DATE-END' );
+  my ( @start, @end );
   for my $sub ( @{ $subheaders } ) {
 
-    next
-      if $skip_dark
-      && ! $self->_is_dark( $sub );
+    my ( $s, $e ) =
+      map { exists $sub->{ $_ } ? $sub->{ $_ } : () } ( $start, $end );
 
-    push @dark, $sub;
+    push @start, $s if $s;
+    push @end,   $e if $e;
   }
 
-  my $dates =
-    scalar @dark
-    ? \@dark
-    : # Plan B: use first & last subheaders for could not find dark
-      # subheaders.
-      [ map { @{ $_ }[0,-1] } $subheaders ]
-      ;
+  my ( %new, $alt_end );
+  ( $new{ $start }, $alt_end ) = ( sort @start )[0,-1];
+  $new{ $end }   = ( sort @end )[-1];
+  for ( $new{ $end } ) {
 
-  my %new;
-  my ( $start, $end ) = ( 'DATE-OBS', 'DATE-END' );
-  $new{ $_ } = $dates->[0]->{ $_ } for $start;
-  $new{ $_ } = $dates->[-1]->{ $_ } || $new{ $start } for $end;
+    $_ = $alt_end unless defined $_;
+  }
 
   return
     $self->push_header( $header, { %new } );
