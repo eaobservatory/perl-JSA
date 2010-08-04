@@ -41,6 +41,25 @@ my $AD = "JCMT";
 my $DBUSER = OMP::Config->getData( 'cadc_dp.user' );
 my $DBPSWD = OMP::Config->getData( 'cadc_dp.password' );
 
+=head1 DATA PROCESSING CONSTANTS
+
+The following constants are available to define a data processing recipe.
+
+ CADC_DPREC_8G  - 8GB 64bit system
+ CADC_DPREC_16G - 16GB 64bit system
+
+You can assume they are numerical constants where a higher value indicates
+more resources are required.
+
+=cut
+
+# We use a constant integer indicating a resource
+# level so that we can compare whether a particular observation needs
+# more resources than previously thought. We then need to map that
+# constant to a dprecipe tag known to the processing system
+use constant CADC_DPREC_8G => 8;
+use constant CADC_DPREC_16G => 16;
+
 =head1 FUNCTIONS
 
 =over 4
@@ -106,6 +125,8 @@ following optional keys:
  - queue: Name of CADC processing queue (can be undef)
  - drparams: Additional options for jsawrapdr pipeline. Would usually be
           a recipe name.
+ - dprecipe: Constant indicating which CADC processing recipe to use to reduce the data.
+          Default will be CADC_DPREC_8G.
 
 This function returns the recipe instance ID on success, or undef for failure.
 
@@ -143,10 +164,26 @@ sub create_recipe_instance {
   # First, find the recipe_id for jsawrapdr
   ###############################################
 
+  # Default to 8G
+  my $dp_recipe_const = ( defined $options->{dprecipe} ? $options->{dprecipe} :
+                          CADC_DPREC_8G );
+
+  # Need to map the processing constant to something that can be looked for
+  # in the database table
+  my %DPRECMAP = (# Do not use => as the key is the value of the constant
+                  CADC_DPREC_8G, "8G",
+                  CADC_DPREC_16G, "16G",
+               );
+
+  # Work out the corresponding string
+  throw JSA::Error::CADCDB( "DP recipe constant does not match a known value" )
+    unless exists $DPRECMAP{$dp_recipe_const};
+  my $dp_recipe_tag = $DPRECMAP{$dp_recipe_const};
+
   $sql = <<ENDRECIPEID;
 select recipe_id
    from $WRITEDATABASE..dp_recipe
-   where script_name="jsawrapdr" and resource_reqts like '%8G%'
+   where script_name="jsawrapdr" and description like '%$dp_recipe_tag'
 ENDRECIPEID
   print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
 
