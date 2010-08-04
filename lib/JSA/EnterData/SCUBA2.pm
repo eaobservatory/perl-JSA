@@ -301,9 +301,9 @@ end.  For the list of fields see I<_find_first_field>.
       && scalar @{ $subheaders };
 
     my @subh =
-          grep
-          { exists $_->{ $seq[0] } && exists $_->{ $seq[1] } } @{ $subheaders }
-          or return ;
+      grep
+      { exists $_->{ $seq[0] } && exists $_->{ $seq[1] } } @{ $subheaders }
+      or return ;
 
     my @start =
       sort { $a->{ $seq[0] } <=> $b->{ $seq[0] } }
