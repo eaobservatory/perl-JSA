@@ -253,7 +253,8 @@ sub prov_update_parent_path {
     $prov->RemoveProv( \@toremove, $status );
 
     print "Validated: ". join(" ", @validated)."\n" if $DEBUG;
-    print "Removed: " . join( " ", @rejected ) . "\n" if $DEBUG;
+    print "Removed ".@rejected.": " . join( " ", @rejected ) . "\n" if $DEBUG;
+    print "Sent to remove: ".join( " ", @toremove). "\n" if $DEBUG;
 
     # Get the parent indices again. These should all be valid
     @parind = _get_prov_parents( $prov, 0, $status );
