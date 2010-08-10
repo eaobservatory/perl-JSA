@@ -288,7 +288,10 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $thismode = "obs";
 
       # Skip to next observation unless we are in night mode
-      next if $mode ne "night";
+      if ($mode ne "night") {
+        log_message("Not including this observation in $mode processing\n");
+        next;
+      }
     }
 
     # Make an estimate of the resources required to process the observation
