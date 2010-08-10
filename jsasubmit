@@ -354,14 +354,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         # previous value is lower than the current value (so this observation
         # needs more resources than a previous group member)
         if (defined $this_dprecipe) {
-          if (exists $group_dprecipe{$group}) {
-            print "This DP recipe $this_dprecipe but previous is $group_dprecipe{$group}\n";
-          }
           if (!exists $group_dprecipe{$group} ||
               (exists $group_dprecipe{$group} && $group_dprecipe{$group} < $this_dprecipe)) {
-            if (exists $group_dprecipe{$group}) {
-              print "Using DP recipe $this_dprecipe and overriding $group_dprecipe{$group}\n";
-            }
             $group_dprecipe{$group} = $this_dprecipe;
           }
         }
