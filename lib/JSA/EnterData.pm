@@ -54,6 +54,8 @@ use Scalar::Util qw[ blessed looks_like_number ];
 use Astro::Coords::Angle::Hour;
 
 use JSA::Headers qw/ read_jcmtstate read_wcs /;
+use JSA::Datetime;
+use JSA::DB::TableCOMMON;
 use JSA::EnterData::ACSIS;
 use JSA::EnterData::SCUBA2;
 use JSA::Error qw[ :try ];
@@ -1541,7 +1543,26 @@ sub prepare_update_hash {
   # one entry can be returned - we trap that because FILES for the minute
   # should not need updating
 
-  my $sql = "select * from $table where $unique_key = '$unique_val'";
+
+  my $sql = 'select * ';
+
+  if ( $table eq 'COMMON' ) {
+
+    my %col_date;
+    @col_date{ JSA::DB::TableCOMMON::date_columns() } = ();
+
+    $sql = 'select '
+            . join ', ',
+                map
+                { ! exists $col_date{ $_ }
+                  ? $_
+                  : qq[CONVERT( VARCHAR, $_, 23 ) AS $_]
+                }
+                JSA::DB::TableCOMMON::column_names()
+                ;
+  }
+
+  $sql .= " from $table where $unique_key = '$unique_val'";
 
   my $ref = $dbh->selectall_arrayref( $sql, { Columns=>{} })
     or die "Error retrieving existing content using [$sql]: " . $dbh->errstr;
@@ -1578,8 +1599,8 @@ sub prepare_update_hash {
         # Dates
         if ($old =~ /\d\d[AP]M$/ && $new =~ /^\d\d\d\d-\d\d-\d\d/) {
 
-          # just assume that if both dates are there they are correct without parsing
-          $new = $old;
+          $new = $old
+            unless _compare_dates( $new, $old );
         }
 
         if (looks_like_number($new)) {
@@ -2745,6 +2766,20 @@ sub _print_text {
 
     return $xfer;
   }
+}
+
+sub _compare_dates {
+
+  my ( $new, $old ) = @_;
+
+  # Sometimes a date-time value only has date, in which case time is appended
+  # without a 'T'.
+  $new =~ s/ /T/;
+
+  $new = JSA::Datetime::make( $new );
+  $old = JSA::Datetime::make( $old );
+
+  return $new > $old;
 }
 
 
