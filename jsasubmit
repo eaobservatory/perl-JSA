@@ -326,33 +326,55 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $this_drparams = $DR_RECIPES{$obs->projectid};
     }
 
-    if( defined( $hdr->{'SUBHEADERS'} ) ) {
-      foreach my $subhdr ( @{$hdr->{'SUBHEADERS'}} ) {
-        my $tmphdr = $hdr;
+    # with no subheaders sometimes we get an empty hash so we check for that
+    if( exists $hdr->{SUBHEADERS} &&
+        defined $hdr->{SUBHEADERS} &&
+        @{$hdr->{SUBHEADERS}} > 0 &&
+        keys %{$hdr->{SUBHEADERS}->[0]} > 0 ) {
 
-        foreach my $key ( keys %$subhdr ) {
-          $tmphdr->{$key} = $subhdr->{$key};
-        }
+      # There are sometimes multiple files per subsystem
+      # but they each have a separate subhdr. We need to merge them
+      # back to a per-subsystem scheme
 
-        if( defined( $tmphdr->{'FREQ_SIG_LOWER'} ) ) {
-          $tmphdr->{'FRQSIGLO'} = $tmphdr->{'FREQ_SIG_LOWER'};
+      my %commonhdr = %$hdr;
+      my %subsystems;
+      for my $subhdr ( @{$commonhdr{SUBHEADERS}} ) {
+        my $obsidss = get_obsidss( $obs->obsid, $subhdr );
+        if (exists $subsystems{$obsidss}) {
+          push( @{$subsystems{$obsidss}{FILE_ID}}, $subhdr->{FILE_ID});
+        } else {
+          # initialise the subsystem entry
+          $subsystems{$obsidss} = { %$subhdr };
+          $subsystems{$obsidss}{FILE_ID} = [ $subhdr->{FILE_ID} ];
         }
-        if( defined( $tmphdr->{'FREQ_SIG_UPPER'} ) ) {
-          $tmphdr->{'FRQSIGHI'} = $tmphdr->{'FREQ_SIG_UPPER'};
+      }
+
+      for my $obsidss (sort keys %subsystems) {
+
+        my $subhdr = $subsystems{$obsidss};
+
+        # Merge common with subheader
+        my %tmphdr = (%commonhdr, %{$subhdr});
+
+        if( defined( $tmphdr{'FREQ_SIG_LOWER'} ) ) {
+          $tmphdr{'FRQSIGLO'} = $tmphdr{'FREQ_SIG_LOWER'};
+        }
+        if( defined( $tmphdr{'FREQ_SIG_UPPER'} ) ) {
+          $tmphdr{'FRQSIGHI'} = $tmphdr{'FREQ_SIG_UPPER'};
         }
 
         # Set ORAC_INSTRUMENT so SCUBA-2 works.
         my $ORAC_INSTRUMENT = '';
-        if( defined( $tmphdr->{'SUBSYSNR'} ) &&
+        if( defined( $tmphdr{'SUBSYSNR'} ) &&
             $instrument eq 'SCUBA-2' ) {
-          $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr->{'SUBSYSNR'};
+          $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr{'SUBSYSNR'};
         }
         $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
 
         my $frm = new $frameclass;
-        $frm->hdr( %{$tmphdr} );
+        $frm->hdr( %tmphdr );
         my $group = $not_in_group . $frm->findgroup;
-        push @{$group{$group}}, $tmphdr->{'FILE_ID'};
+        push @{$group{$group}}, @{$tmphdr{'FILE_ID'}};
         $group_mode{$group} = $thismode;
         $group_drparams{$group} = $this_drparams if defined $this_drparams;
         # Only set if either we have no previous value for dprecipe or if the
@@ -514,6 +536,25 @@ exit;
     return @MESSAGES;
   }
 
+}
+
+# Quick routine to retrieve OBSIDSS
+
+sub get_obsidss {
+  my $obsid = shift;
+  my $hdr = shift;
+
+  my $obsidss;
+  if ( exists $hdr->{OBSID_SUBSYSNR} ) {
+    $obsidss = $hdr->{OBSID_SUBSYSNR};
+  } elsif ( exists $hdr->{OBSIDSS} ) {
+    $obsidss = $hdr->{OBSIDSS};
+  } elsif ( exists $hdr->{SUBSYSNR}) {
+    $obsidss = $obsid . "_" . $hdr->{SUBSYSNR};
+  } else {
+    die "Could not work out OBSIDSS for ". $obsid;
+  }
+  return $obsidss;
 }
 
 =head1 AUTHORS
