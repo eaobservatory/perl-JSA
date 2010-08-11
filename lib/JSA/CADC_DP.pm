@@ -201,15 +201,9 @@ ENDRECIPEID
   # Use the maximum current value of recipe_instance_id in
   # dp_recipe_instance to generate a "new" recipe_instance_id
   ###############################################
-
-  $sql = <<ENDNEWID;
-select recipe_instance_id
-   from dp_recipe_instance
-   order by recipe_instance_id asc
-ENDNEWID
-  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
-
-  my $dp_recipe_instance_count = queryValue( $dbh, $sql );
+$VERBOSE = 1;
+  my $dp_recipe_instance_count = queryMaxBinaryValue( $dbh, "dp_recipe_instance",
+                                                      "recipe_instance_id");
   my $dp_recipe_instance_bigint = Math::BigInt->new("0x" . $dp_recipe_instance_count)+1;
   my $dp_recipe_instance_id = sprintf "0x%016lx", $dp_recipe_instance_bigint;
 
@@ -218,16 +212,7 @@ ENDNEWID
   # dp_file_input to generate a "new" input_id
   ###############################################
 
-  $sql = <<ENDNEWFILEID;
-select isnull(max(input_id),0)
-   from dp_file_input
-ENDNEWFILEID
-
-$sql = "select input_id from dp_file_input order by input_id";
-
-  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
-
-  my $dp_file_input_count = queryValue( $dbh, $sql );
+  my $dp_file_input_count = queryMaxBinaryValue( $dbh, "dp_file_input", "input_id" );
   my $dp_file_input_bigint = Math::BigInt->new("0x".$dp_file_input_count);
   my $dp_file_input_id;
 
@@ -299,6 +284,20 @@ sub queryValue {
   $sth->finish;
 
   return $value
+}
+
+# Find the max value of a supplied binary column
+# We have to pad trailing zeroes and assume a fixed
+# size of 16 characters
+# Args are ($dbh, table, $column)
+sub queryMaxBinaryValue {
+  my ($dbh, $table, $column) = @_;
+
+  my $sql = "select isnull(max($column),0) from $table";
+  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
+  my $maxval = queryValue( $dbh, $sql );
+  $maxval .= "0" x (16 - length($maxval));
+  return $maxval;
 }
 
 sub insertWithRollback {
