@@ -85,6 +85,7 @@ use OMP::Constants qw/ :obs /;
 use Getopt::Long;
 use Net::SMTP;
 use Pod::Usage;
+use File::Basename;
 
 my $TELESCOPE = 'JCMT';
 my $BASEURL = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
@@ -197,17 +198,14 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 } else {
   log_message( scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n");
 
-  # Hash to hold list of groups.
-  my %group;
-
-  # Hash to hold mode overrides for certain groups
-  my %group_mode;
-
-  # Hash indexed by group name to indicate any DR parameters
-  my %group_drparams;
-
-  # Hash indexed by group name to indicate dprecipe to use
-  my %group_dprecipe;
+  # Hash to hold list of groups and information about them.
+  # Keys will be the group association id string
+  # Value will be a hash reference containing keys
+  #   files => []  array of files for this group
+  #   drparams => DR parameters
+  #   mode => mode to use for processing
+  #   dprecipe => DP recipe to use for this group
+  my %groups;
 
   # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
   my %frameclassloaded;
@@ -269,6 +267,10 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $frameclassloaded{$frameclass}++;
     }
 
+    # Current default values for this observation in group handling and
+    # recipe submission
+    my %current;
+
     # If the observation is NOT GOOD we don't want to combine it with other
     # members of the group so we just want to submit it standalone.
     # REJECT status could arguably be included in full coadds but for now
@@ -280,12 +282,12 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     # already been done in NIGHT mode
 
     my $not_in_group = "";
-    my $thismode = $mode;
+    $current{mode} = $mode;
     if ( $obs->status != OMP__OBS_GOOD ) {
       # Do not care about group so add a disambiguater based on obsid
       log_message( "Observation with OBSID ". $obs->obsid ." is not good so will not be included in a group\n" );
       $not_in_group = $obs->obsid;
-      $thismode = "obs";
+      $current{mode} = "obs";
 
       # Skip to next observation unless we are in night mode
       if ($mode ne "night") {
@@ -304,7 +306,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     #     - Everything else: 8G
     #    When we have multiple subarrays the 20 minutes will scale accordingly.
     #    and we'll need to switch to a 64G queue for those.
-    my $this_dprecipe = JSA::CADC_DP::CADC_DPREC_8G;
+    $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_8G;
     if ( $instrume eq 'SCUBA-2' ) {
       my $duration = $obs->endobs - $obs->startobs;
       # We currently have a problem with the database ingestion so we
@@ -315,15 +317,14 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       my @files = $obs->filename;
       my $nfiles = @files / 2;
       if ($nfiles > 35) {
-        $this_dprecipe = JSA::CADC_DP::CADC_DPREC_16G;
+        $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_16G;
       }
     } elsif ( $instrume eq 'HARP' && $hdr->{SAM_MODE} =~ /scan|raster/i) {
-      $this_dprecipe = JSA::CADC_DP::CADC_DPREC_16G;
+      $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_16G;
     }
 
-    my $this_drparams;
     if ( exists $DR_RECIPES{$obs->projectid} ) {
-      $this_drparams = $DR_RECIPES{$obs->projectid};
+      $current{drparams} = $DR_RECIPES{$obs->projectid};
     }
 
     # with no subheaders sometimes we get an empty hash so we check for that
@@ -371,41 +372,10 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         }
         $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
 
-        my $frm = new $frameclass;
-        $frm->hdr( %tmphdr );
-        my $group = $not_in_group . $frm->findgroup;
-        push @{$group{$group}}, @{$tmphdr{'FILE_ID'}};
-        $group_mode{$group} = $thismode;
-        $group_drparams{$group} = $this_drparams if defined $this_drparams;
-        # Only set if either we have no previous value for dprecipe or if the
-        # previous value is lower than the current value (so this observation
-        # needs more resources than a previous group member)
-        if (defined $this_dprecipe) {
-          if (!exists $group_dprecipe{$group} ||
-              (exists $group_dprecipe{$group} && $group_dprecipe{$group} < $this_dprecipe)) {
-            $group_dprecipe{$group} = $this_dprecipe;
-          }
-        }
+        assign_to_group( $frameclass, $not_in_group, \%tmphdr, \%current, $tmphdr{FILE_ID}, \%groups );
       }
     } else {
-
-      my $frm = new $frameclass;
-      $frm->hdr( %{$hdr} );
-      my $group = $not_in_group . $frm->findgroup;
-      push @{$group{$group}}, $obs->filename;
-      $group_mode{$group} = $thismode;
-      $group_drparams{$group} = $this_drparams if defined $this_drparams;
-      $group_dprecipe{$group} = $this_dprecipe if defined $this_dprecipe;
-      # Only set if either we have no previous value for dprecipe or if the
-      # previous value is lower than the current value (so this observation
-      # needs more resources than a previous group member)
-      if (defined $this_dprecipe) {
-        if (!exists $group_dprecipe{$group} ||
-            (exists $group_dprecipe{$group} && $group_dprecipe{$group} < $this_dprecipe)) {
-          $group_dprecipe{$group} = $this_dprecipe;
-        }
-      }
-
+      assign_to_group( $frameclass, $not_in_group, $hdr, \%current, [$obs->filename], \%groups );
     }
   }
 
@@ -418,17 +388,17 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     log_message( "connected!\n\n");
   }
 
-  foreach my $group ( sort keys %group ) {
+  foreach my $group ( sort keys %groups ) {
     log_message( "Requesting CADC processing of the following files:\n");
-    log_message( map { "$_\n" } @{$group{$group}});
-    my @members = map { file_to_uri( $_ ) } @{$group{$group}};
+    log_message( map { "$_\n" } @{$groups{$group}{files}});
+    my @members = map { file_to_uri( $_ ) } @{$groups{$group}{files}};
 
     # Only check for night mode. If we're in project mode, assume the
     # files are at CADC.
     if( $mode eq 'night' ) {
       log_message( "Checking to ensure files are at CADC...\n");
       my $there = 1;
-      foreach my $file ( @{$group{$group}} ) {
+      foreach my $file ( @{$groups{$group}{files}} ) {
         $file =~ s/\.sdf$//;
         if( ! exists( $atCADC->{$file} ) ) {
           $there = 0;
@@ -446,18 +416,18 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $recipe_id;
     try {
       my %opts;
-      $opts{'mode'} = ( exists $group_mode{$group} ? $group_mode{$group} : $mode);
+      $opts{'mode'} = ( exists $groups{$group}{mode} ? $groups{$group}{mode} : $mode);
       if( $mode eq 'project' ) {
         $opts{'project'} = $project;
       }
       $opts{priority} = $priority if defined $priority;
       $opts{queue} = $queue if defined $queue;
-      if ( exists $group_drparams{$group} ) {
-        $opts{drparams} = $group_drparams{$group};
+      if ( exists $groups{$group}{drparams} ) {
+        $opts{drparams} = $groups{$group}{drparams};
       }
 
-      if (exists $group_dprecipe{$group}) {
-        $opts{dprecipe} = $group_dprecipe{$group};
+      if (exists $groups{$group}{dprecipe}) {
+        $opts{dprecipe} = $groups{$group}{dprecipe};
       }
 
       if ($debug) {
@@ -555,6 +525,40 @@ sub get_obsidss {
     die "Could not work out OBSIDSS for ". $obsid;
   }
   return $obsidss;
+}
+
+# Assign the observation to a particular group
+
+sub assign_to_group {
+  my $frameclass = shift;
+  my $not_in_group = shift;
+  my $tmphdr = shift;
+  my $curref = shift;
+  my $fileref = shift;
+  my $groups = shift;
+
+  # Deref some hashes and arrays
+  my %current = %$curref;
+
+  # Strip any paths
+  my @files = map { basename($_) } @$fileref;
+
+  my $frm = new $frameclass;
+  $frm->hdr( %$tmphdr );
+  my $group = $not_in_group . $frm->findgroup;
+  push @{$groups->{$group}{files}}, @files;
+  $groups->{$group}{mode} = $current{mode};
+  $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
+  # Only set if either we have no previous value for dprecipe or if the
+  # previous value is lower than the current value (so this observation
+  # needs more resources than a previous group member)
+  if (defined $current{dprecipe}) {
+    if (!exists $groups->{$group}{dprecipe} ||
+        (exists $groups->{$group}{dprecipe} && $groups->{$group}{dprecipe} < $current{dprecipe})) {
+      $groups->{$group}{dprecipe} = $current{dprecipe};
+    }
+  }
+  return $group;
 }
 
 =head1 AUTHORS
