@@ -364,18 +364,12 @@ if( scalar( @{$grp->obs} ) == 0 ) {
           $tmphdr{'FRQSIGHI'} = $tmphdr{'FREQ_SIG_UPPER'};
         }
 
-        # Set ORAC_INSTRUMENT so SCUBA-2 works.
-        my $ORAC_INSTRUMENT = '';
-        if( defined( $tmphdr{'SUBSYSNR'} ) &&
-            $instrument eq 'SCUBA-2' ) {
-          $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr{'SUBSYSNR'};
-        }
-        $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
-
-        assign_to_group( $frameclass, $not_in_group, \%tmphdr, \%current, $tmphdr{FILE_ID}, \%groups );
+        assign_to_group( $instrument, $frameclass, $not_in_group,
+                         \%tmphdr, \%current, $tmphdr{FILE_ID}, \%groups );
       }
     } else {
-      assign_to_group( $frameclass, $not_in_group, $hdr, \%current, [$obs->filename], \%groups );
+      assign_to_group( $instrument, $frameclass, $not_in_group,
+                       $hdr, \%current, [$obs->filename], \%groups );
     }
   }
 
@@ -530,6 +524,7 @@ sub get_obsidss {
 # Assign the observation to a particular group
 
 sub assign_to_group {
+  my $instrument = shift;
   my $frameclass = shift;
   my $not_in_group = shift;
   my $tmphdr = shift;
@@ -542,6 +537,15 @@ sub assign_to_group {
 
   # Strip any paths
   my @files = map { basename($_) } @$fileref;
+
+  # Set ORAC_INSTRUMENT so SCUBA-2 works.
+  my $ORAC_INSTRUMENT = '';
+  if( exists $tmphdr->{SUBSYSNR} &&
+      defined $tmphdr->{SUBSYSNR}  &&
+      $instrument eq 'SCUBA-2' ) {
+    $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr->{SUBSYSNR};
+  }
+  $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
 
   my $frm = new $frameclass;
   $frm->hdr( %$tmphdr );
