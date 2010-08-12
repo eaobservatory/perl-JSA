@@ -238,6 +238,11 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       }
     }
 
+    # OBSRA and OBSDEC are always ICRS so we have to be careful
+    # if we switch to GALACTIC. The safest solution is to add
+    # BASEC1, BASEC2 and TRACKSYS to the database table since those
+    # are the values used by ORAC-DR group assignment (although only
+    # for night mode in reality).
     if( defined( $hdr->{'OBSRA'} ) ) {
       $hdr->{'BASEC1'} = $hdr->{'OBSRA'};
     }
@@ -252,8 +257,10 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $hdr->{'FRQSIGHI'} = $hdr->{'FREQ_SIG_UPPER'};
     }
 
+    # The database will not have a SIMULATE header so assume
+    # it is false.
     if( ! defined( $hdr->{'SIMULATE'} ) ) {
-      $hdr->{'SIMULATE'} = 1;
+      $hdr->{'SIMULATE'} = 0;
     }
 
     my $instrument = get_orac_instrument( $obs->fits );
