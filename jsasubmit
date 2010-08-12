@@ -75,6 +75,7 @@ use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
+use JSA::Headers::CADC qw/ correct_asn_id /;
 
 use OMP::ArchiveDB;
 use OMP::Info::Obs;
@@ -288,12 +289,12 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     # We do not process bad observations in PROJECT mode since we assume they have
     # already been done in NIGHT mode
 
-    my $not_in_group = "";
+    my $not_in_group;
     $current{mode} = $mode;
     if ( $obs->status != OMP__OBS_GOOD ) {
       # Do not care about group so add a disambiguater based on obsid
       log_message( "Observation with OBSID ". $obs->obsid ." is not good so will not be included in a group\n" );
-      $not_in_group = $obs->obsid;
+      $not_in_group = 1;
       $current{mode} = "obs";
 
       # Skip to next observation unless we are in night mode
@@ -371,11 +372,11 @@ if( scalar( @{$grp->obs} ) == 0 ) {
           $tmphdr{'FRQSIGHI'} = $tmphdr{'FREQ_SIG_UPPER'};
         }
 
-        assign_to_group( $instrument, $frameclass, $not_in_group,
+        assign_to_group( $instrument, $obs->obsid, $frameclass, $not_in_group,
                          \%tmphdr, \%current, $tmphdr{FILE_ID}, \%groups );
       }
     } else {
-      assign_to_group( $instrument, $frameclass, $not_in_group,
+      assign_to_group( $instrument, $obs->obsid, $frameclass, $not_in_group,
                        $hdr, \%current, [$obs->filename], \%groups );
     }
   }
@@ -541,31 +542,46 @@ sub get_obsidss {
 
 sub assign_to_group {
   my $instrument = shift;
+  my $obsid = shift;
   my $frameclass = shift;
   my $not_in_group = shift;
-  my $tmphdr = shift;
+  my $hdrref = shift;
   my $curref = shift;
   my $fileref = shift;
   my $groups = shift;
 
   # Deref some hashes and arrays
   my %current = %$curref;
+  my %tmphdr = %$hdrref;
 
   # Strip any paths
   my @files = map { basename($_) } @$fileref;
 
   # Set ORAC_INSTRUMENT so SCUBA-2 works.
   my $ORAC_INSTRUMENT = '';
-  if( exists $tmphdr->{SUBSYSNR} &&
-      defined $tmphdr->{SUBSYSNR}  &&
+  if( exists $tmphdr{SUBSYSNR} &&
+      defined $tmphdr{SUBSYSNR}  &&
       $instrument eq 'SCUBA-2' ) {
-    $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr->{SUBSYSNR};
+    $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr{SUBSYSNR};
   }
   $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
 
-  my $frm = new $frameclass;
-  $frm->hdr( %$tmphdr );
-  my $group = $not_in_group . $frm->findgroup;
+  # if not_in_group is false then we have to determine the
+  # grouping scheme. If it is false then we need to use the OBSIDSS
+  my $group;
+  if ($not_in_group) {
+    $group = get_obsidss( $obsid, \%tmphdr );
+  } else {
+    my $frm = new $frameclass;
+    $frm->hdr( %tmphdr );
+    $frm->findgroup;
+    $group = $frm->asn_id;
+  }
+
+  # Now correct for the association identifier
+  $tmphdr{ASN_ID} = $group;
+  $group = correct_asn_id( $current{mode}, \%tmphdr );
+
   push @{$groups->{$group}{files}}, @files;
   $groups->{$group}{mode} = $current{mode};
   $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
