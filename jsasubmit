@@ -340,7 +340,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       my %commonhdr = %$hdr;
       my %subsystems;
       for my $subhdr ( @{$commonhdr{SUBHEADERS}} ) {
-        my $obsidss = get_obsidss( $obs->obsid, $subhdr );
+        my $obsidss = get_obsidss( $obs->obsid, $subhdr, \%commonhdr );
         if (exists $subsystems{$obsidss}) {
           push( @{$subsystems{$obsidss}{FILE_ID}}, $subhdr->{FILE_ID});
         } else {
@@ -503,19 +503,28 @@ exit;
 }
 
 # Quick routine to retrieve OBSIDSS
+# Multiple headers can be supplied
 
 sub get_obsidss {
   my $obsid = shift;
-  my $hdr = shift;
+  my @hdrs = @_;
 
+  # Try not to merge headers if the answer is in the small one
   my $obsidss;
-  if ( exists $hdr->{OBSID_SUBSYSNR} ) {
-    $obsidss = $hdr->{OBSID_SUBSYSNR};
-  } elsif ( exists $hdr->{OBSIDSS} ) {
-    $obsidss = $hdr->{OBSIDSS};
-  } elsif ( exists $hdr->{SUBSYSNR}) {
-    $obsidss = $obsid . "_" . $hdr->{SUBSYSNR};
-  } else {
+  for my $k ( qw/ OBSID_SUBSYSNR OBSIDSS SUBSYSNR / ) {
+    # try each key in turn
+    for my $hdr (@hdrs) {
+      if (exists $hdr->{$k}) {
+        if ($k eq 'SUBSYSNR') {
+          $obsidss = $obsid . "_" . $hdr->{$k};
+        } else {
+          $obsidss = $hdr->{$k};
+        }
+        last;
+      }
+    }
+  }
+  if (!defined $obsidss) {
     die "Could not work out OBSIDSS for ". $obsid;
   }
   return $obsidss;
