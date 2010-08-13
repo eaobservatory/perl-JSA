@@ -497,7 +497,7 @@ exit;
 
   sub log_message {
     my @msg = @_;
-    if ($debug) {
+    if ($noemail || $debug) {
       print @msg;
     } else {
       push(@MESSAGES, @msg);
