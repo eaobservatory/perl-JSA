@@ -32,6 +32,7 @@ our @EXPORT_OK = qw/ connect_to_cadcdp disconnect_from_cadcdp
                      create_recipe_instance /;
 
 our $VERBOSE = 0;
+our $DEBUG = 0;
 
 # Define connection information.
 my $READDATABASE = "jcmtmd";
@@ -201,7 +202,7 @@ ENDRECIPEID
   # Use the maximum current value of recipe_instance_id in
   # dp_recipe_instance to generate a "new" recipe_instance_id
   ###############################################
-$VERBOSE = 1;
+
   my $dp_recipe_instance_count = queryMaxBinaryValue( $dbh, "dp_recipe_instance",
                                                       "recipe_instance_id");
   my $dp_recipe_instance_bigint = Math::BigInt->new("0x" . $dp_recipe_instance_count)+1;
@@ -217,7 +218,7 @@ $VERBOSE = 1;
   my $dp_file_input_id;
 
   # Start a transaction.
-  $dbh->begin_work;
+  $dbh->begin_work unless $DEBUG;
 
   ###############################################
   # Create the new recipe_instance
@@ -266,7 +267,7 @@ print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
     insertWithRollback( $dbh, $sql );
   }
 
-  $dbh->commit;
+  $dbh->commit unless $DEBUG;
 
   return $dp_recipe_instance_id;
 
@@ -302,6 +303,11 @@ sub queryMaxBinaryValue {
 
 sub insertWithRollback {
   my ($dbh, $sql) = @_;
+
+  if ($DEBUG) {
+    print "Would be executing: $sql\n";
+    return;
+  }
 
   my $sth = $dbh->prepare( $sql );
   if (!$sth) {
