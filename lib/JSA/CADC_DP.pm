@@ -244,7 +244,6 @@ ENDRECIPEID
     $sql .= ", \"$queue\"";
   }
   $sql .= " )";
-  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
   insertWithRollback( $dbh, $sql);
 
   ###############################################
@@ -262,7 +261,6 @@ insert into dp_file_input
   values
   ( $dp_file_input_id, $dp_recipe_instance_id, '$mem', 'infile' )
 ENDMEMBER
-print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
     insertWithRollback( $dbh, $sql );
   }
 
@@ -275,6 +273,7 @@ print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
 sub queryValue {
   my ( $dbh, $sql ) = @_;
 
+  print "VERBOSE: sql=$sql\n" if $VERBOSE;
   my $sth = $dbh->prepare( $sql ) or &cadc_dberror;
   $sth->execute or &cadc_dberror;
 
@@ -329,6 +328,7 @@ sub insertWithRollback {
     print "Would be executing: $sql\n";
     return;
   }
+  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
 
   my $sth = $dbh->prepare( $sql );
   if (!$sth) {
