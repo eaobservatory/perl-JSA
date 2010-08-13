@@ -200,7 +200,7 @@ ENDRECIPEID
 
   my $dp_recipe_instance_bigint = queryMaxBinaryValue( $dbh, "dp_recipe_instance",
                                                        "recipe_instance_id") +1;
-  $dp_recipe_instance_id = bigintstr($dp_recipe_instance_bigint);
+  my $dp_recipe_instance_id = bigintstr($dp_recipe_instance_bigint);
 
   ###############################################
   # Use the maximum cuurent value of input_id in
