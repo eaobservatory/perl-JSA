@@ -216,52 +216,46 @@ ENDRECIPEID
   # Create the new recipe_instance
   ###############################################
 
-  $sql = "insert into dp_recipe_instance\n";
-  $sql .= "  ( recipe_instance_id, recipe_id, state, priority";
-  if ($tag) {
-    $sql .= ", tag";
+  # Form a hash with all the relevant content
+  my %dp_recipe_instance = (
+                            recipe_instance_id => $dp_recipe_instance_id,
+                            recipe_id => $dp_recipe_id,
+                            state => " ",
+                            priority => $priority,
+                           );
+
+  $dp_recipe_instance{tag} = $tag if defined $tag;
+  $dp_recipe_instance{project} = $queue if defined $queue;
+
+  # DR parameters
+  if ( defined $mode || defined $project ) {
+    my @paramlist;
+    push(@paramlist, "-mode='$mode'") if defined $mode;
+
+    my @droptions;
+    push(@droptions, "-recpars recpars-$project.ini") if defined $project;
+    push(@droptions, $drparams) if $drparams;
+    push(@paramlist, "-drparameters='". join(" ", @droptions) ."'")
+      if @droptions;
+
+    $dp_recipe_instance{parameters} = join(" ", @paramlist);
   }
-  if( defined( $mode ) || defined( $project ) ) {
-    $sql .= ", parameters";
-  }
-  if (defined $queue) {
-    $sql .= ", project";
-  }
-  $sql .= " )\n";
-  $sql .= "  values\n";
-  $sql .= "  ( $dp_recipe_instance_id, $dp_recipe_id, \" \", $priority";
-  if (defined $tag) {
-    $sql .= ", \"$tag\"";
-  }
-  if( defined( $mode ) && defined( $project ) ) {
-    $sql .= ", \"-mode='$mode' -drparameters='-recpars recpars-$project.ini $drparams'\"";
-  } elsif( defined( $mode ) ) {
-    $sql .= ", \"-mode='$mode'" . ($drparams ? " -drparameters='$drparams'" : "") ."\"";
-  } elsif( defined( $project ) ) {
-    $sql .= ", \"-drparameters='-recpars recpars-$project.ini $drparams'\"";
-  }
-  if (defined $queue) {
-    $sql .= ", \"$queue\"";
-  }
-  $sql .= " )";
-  insertWithRollback( $dbh, $sql);
+
+  insertWithRollback( $dbh, "dp_recipe_instance", %dp_recipe_instance);
 
   ###############################################
   # Fill rows in dp_file_input
   ###############################################
 
-  my $dp_file_input_id;
   my $mem;
   for $mem (@$MEMBERSREF) {
     chomp( $mem );
-    $dp_file_input_id = sprintf "0x%016lx", (++$dp_file_input_bigint);
-    $sql = <<ENDMEMBER;
-insert into dp_file_input
-  ( input_id, recipe_instance_id, dp_input, input_role )
-  values
-  ( $dp_file_input_id, $dp_recipe_instance_id, '$mem', 'infile' )
-ENDMEMBER
-    insertWithRollback( $dbh, $sql );
+    my $dp_file_input_id = sprintf "0x%016lx", (++$dp_file_input_bigint);
+    my %dp_file_input = ( input_id => $dp_file_input_id,
+                          recipe_instance_id => $dp_recipe_instance_id,
+                          dp_input => $mem,
+                          input_role => "infile" );
+    insertWithRollback( $dbh, "dp_file_input", %dp_file_input );
   }
 
   $dbh->commit unless $DEBUG;
@@ -321,14 +315,26 @@ sub bigintstr {
   return sprintf( "0x%016lx", $_[0] );
 }
 
-sub insertWithRollback {
-  my ($dbh, $sql) = @_;
 
-  if ($DEBUG) {
-    print "Would be executing: $sql\n";
-    return;
+# Insert with rollback using placeholders
+# Given a database handle, a table name and a hash
+# of row information.
+
+sub insertWithRollback {
+  my $dbh = shift;
+  my $table = shift;
+  my %row = @_;
+
+  my @columns = sort keys %row;
+  my $sql = "INSERT INTO $table (". join(", ", @columns).
+    ") VALUES (". join(", ", map { "?" } (0..$#columns)) . ")";
+
+  if ($DEBUG || $VERBOSE) {
+    print "". ($DEBUG ? "Would be " : "").
+      "Executing: '$sql'\n with arguments:\n";
+    print join(",", map { $row{$_} } @columns) ."\n";
+    return if $DEBUG;
   }
-  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
 
   my $sth = $dbh->prepare( $sql );
   if (!$sth) {
@@ -337,7 +343,8 @@ sub insertWithRollback {
     throw JSA::Error::CADCDB( $err );
   }
 
-  if (!$sth->execute) {
+  my @values = map { $row{$_} } @columns;
+  if (!$sth->execute(@values)) {
     my $err = $DBI::errstr;
     $dbh->rollback;
     throw JSA::Error::CADCDB( $err );
