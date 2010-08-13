@@ -118,6 +118,7 @@ array reference pointing to an array of URIs to be processed.
 This function takes one optional parameter: a hash reference with the
 following optional keys:
 
+ - tag: String to associate with this recipe (usually the ASN_ID)
  - mode: Grouping mode ("night", "project", "public")
  - project: A recipe parameters override. Assumes a recpars-$project.ini
             recipe file exists in ORAC-DR.
@@ -143,6 +144,7 @@ sub create_recipe_instance {
   my $project = defined( $options->{'project'} ) ? uc( $options->{'project'} ) : undef;
   my $queue = ( defined $options->{queue} ? uc( $options->{queue} ) : undef );
   my $drparams = ( defined $options->{drparams} ? $options->{drparams} : "" );
+  my $tag = $options->{tag};
 
   # Default to medium priority. Note that this differs to the CADC default of -500.
   my $priority = -1;
@@ -226,6 +228,9 @@ ENDRECIPEID
 
   $sql = "insert into dp_recipe_instance\n";
   $sql .= "  ( recipe_instance_id, recipe_id, state, priority";
+  if ($tag) {
+    $sql .= ", tag";
+  }
   if( defined( $mode ) || defined( $project ) ) {
     $sql .= ", parameters";
   }
@@ -235,6 +240,9 @@ ENDRECIPEID
   $sql .= " )\n";
   $sql .= "  values\n";
   $sql .= "  ( $dp_recipe_instance_id, 0x$dp_recipe_id, \" \", $priority";
+  if (defined $tag) {
+    $sql .= ", \"$tag\"";
+  }
   if( defined( $mode ) && defined( $project ) ) {
     $sql .= ", \"-mode='$mode' -drparameters='-recpars recpars-$project.ini $drparams'\"";
   } elsif( defined( $mode ) ) {

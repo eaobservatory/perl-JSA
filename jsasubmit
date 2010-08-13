@@ -432,6 +432,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         $opts{dprecipe} = $groups{$group}{dprecipe};
       }
 
+      $opts{tag} = $group;
+
       if ($debug) {
         log_message( "Would be submitting job with options:\n");
         for my $k (sort keys %opts) {
