@@ -188,15 +188,8 @@ select recipe_id
    from $WRITEDATABASE..dp_recipe
    where script_name="jsawrapdr" and description like '%$dp_recipe_tag'
 ENDRECIPEID
-  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
 
-  my $dp_recipe_id = 0;
-  my $sth = $dbh->prepare( $sql ) or &dbError;
-  $sth->execute or &dbError;
-  $sth->bind_columns( \$dp_recipe_id );
-  while ( $sth->fetch ) {}
-  $sth->finish;
-
+  my $dp_recipe_id = queryBinaryValue( $dbh, $sql );
   throw JSA::Error::CADCDB( "Cannot retrieve good recipe_id from dp_recipe" )
     unless $dp_recipe_id;
 
@@ -205,19 +198,16 @@ ENDRECIPEID
   # dp_recipe_instance to generate a "new" recipe_instance_id
   ###############################################
 
-  my $dp_recipe_instance_count = queryMaxBinaryValue( $dbh, "dp_recipe_instance",
-                                                      "recipe_instance_id");
-  my $dp_recipe_instance_bigint = Math::BigInt->new("0x" . $dp_recipe_instance_count)+1;
-  my $dp_recipe_instance_id = sprintf "0x%016lx", $dp_recipe_instance_bigint;
+  my $dp_recipe_instance_bigint = queryMaxBinaryValue( $dbh, "dp_recipe_instance",
+                                                       "recipe_instance_id") +1;
+  $dp_recipe_instance_id = bigintstr($dp_recipe_instance_bigint);
 
   ###############################################
   # Use the maximum cuurent value of input_id in
   # dp_file_input to generate a "new" input_id
   ###############################################
 
-  my $dp_file_input_count = queryMaxBinaryValue( $dbh, "dp_file_input", "input_id" );
-  my $dp_file_input_bigint = Math::BigInt->new("0x".$dp_file_input_count);
-  my $dp_file_input_id;
+  my $dp_file_input_bigint  = queryMaxBinaryValue( $dbh, "dp_file_input", "input_id" );
 
   # Start a transaction.
   $dbh->begin_work unless $DEBUG;
@@ -239,7 +229,7 @@ ENDRECIPEID
   }
   $sql .= " )\n";
   $sql .= "  values\n";
-  $sql .= "  ( $dp_recipe_instance_id, 0x$dp_recipe_id, \" \", $priority";
+  $sql .= "  ( $dp_recipe_instance_id, $dp_recipe_id, \" \", $priority";
   if (defined $tag) {
     $sql .= ", \"$tag\"";
   }
@@ -261,6 +251,7 @@ ENDRECIPEID
   # Fill rows in dp_file_input
   ###############################################
 
+  my $dp_file_input_id;
   my $mem;
   for $mem (@$MEMBERSREF) {
     chomp( $mem );
@@ -303,10 +294,32 @@ sub queryMaxBinaryValue {
   my ($dbh, $table, $column) = @_;
 
   my $sql = "select isnull(max($column),0) from $table";
-  print "VERBOSE: sql=\n$sql\n" if $VERBOSE;
   my $maxval = queryValue( $dbh, $sql );
-  $maxval .= "0" x (16 - length($maxval));
-  return $maxval;
+  return binaryAsBigint( $maxval );
+}
+
+# Query a binary value
+sub queryBinaryValue {
+  my ($dbh, $sql) = @_;
+  my $result = queryValue( $dbh, $sql );
+  if (defined $result) {
+    return bigintstr( binaryAsBigint( $result ) );
+  }
+  return;
+}
+
+# Pad a binary value with trailing zeroes and convert to a BigInt
+sub binaryAsBigint {
+  my $bin = shift;
+  $bin .= "0" x ( 16 - length($bin) );
+  return Math::BigInt->new("0x". $bin );
+}
+
+# Convert a big int to a string suitable for insertion into
+# a sybase BINARY field
+
+sub bigintstr {
+  return sprintf( "0x%016lx", $_[0] );
 }
 
 sub insertWithRollback {
