@@ -31,8 +31,8 @@ use Exporter 'import';
 our @EXPORT_OK = qw/ connect_to_cadcdp disconnect_from_cadcdp
                      create_recipe_instance /;
 
-our $VERBOSE = 0;
-our $DEBUG = 0;
+our $VERBOSE = 1;
+our $DEBUG = 1;  # Do not write to the database
 
 # Define connection information.
 my $READDATABASE = "jcmtmd";
@@ -130,7 +130,9 @@ following optional keys:
  - dprecipe: Constant indicating which CADC processing recipe to use to reduce the data.
           Default will be CADC_DPREC_8G.
 
-This function returns the recipe instance ID on success, or undef for failure.
+This function returns the recipe instance ID on success, or undef for failure. Returns
+"-0x???" if the recipe could not be inserted because an entry already exists that is in
+the wrong state.
 
 =cut
 
@@ -193,14 +195,47 @@ ENDRECIPEID
   throw JSA::Error::CADCDB( "Cannot retrieve good recipe_id from dp_recipe" )
     unless $dp_recipe_id;
 
-  ###############################################
-  # Use the maximum current value of recipe_instance_id in
-  # dp_recipe_instance to generate a "new" recipe_instance_id
-  ###############################################
+  # We first need to see if the supplied tag already exists in the recipe
+  # instance table.
+  $sql = "SELECT * FROM dp_recipe_instance WHERE tag = '$tag' ";
+  my %dp_recipe_instance_info = querySingleRow( $dbh, $sql, [ "recipe_instance_id",
+                                                              "recipe_id" ]);
 
-  my $dp_recipe_instance_bigint = queryMaxBinaryValue( $dbh, "dp_recipe_instance",
-                                                       "recipe_instance_id") +1;
-  my $dp_recipe_instance_id = bigintstr($dp_recipe_instance_bigint);
+  my $updating = 0;
+  my $dp_recipe_instance_id;
+  # if we found it we can reuse the instance
+  if ( keys %dp_recipe_instance_info ) {
+
+    # Convert binary to string form
+    for my $k (qw/ recipe_instance_id recipe_id /) {
+      $dp_recipe_instance_info{$k} = bigintstr( $dp_recipe_instance_info{$k} );
+    }
+
+    $dp_recipe_instance_id = $dp_recipe_instance_info{recipe_instance_id};
+
+    # We have found a pre-existing instance with this tag but we can only
+    # proceed if the instance is in the "E" or "Y" state.
+
+    if ( $dp_recipe_instance_info{state} !~ /^[EY]$/) {
+      if ($VERBOSE) {
+        print "Skipping update for recipe_id $dp_recipe_instance_id as it is in state '$dp_recipe_instance_info{state}'\n";
+      }
+      return "-" . $dp_recipe_instance_id;
+    }
+
+    $updating = 1;
+
+  } else {
+
+    ###############################################
+    # Use the maximum current value of recipe_instance_id in
+    # dp_recipe_instance to generate a "new" recipe_instance_id
+    ###############################################
+
+    my $dp_recipe_instance_bigint = queryMaxBinaryValue( $dbh, "dp_recipe_instance",
+                                                         "recipe_instance_id") +1;
+    $dp_recipe_instance_id = bigintstr($dp_recipe_instance_bigint);
+  }
 
   ###############################################
   # Use the maximum cuurent value of input_id in
@@ -241,14 +276,82 @@ ENDRECIPEID
     $dp_recipe_instance{parameters} = join(" ", @paramlist);
   }
 
-  insertWithRollback( $dbh, "dp_recipe_instance", %dp_recipe_instance);
+  if ($updating) {
+    # if we are updating then we need to find out what needs to be
+    # changed and just update that. At the very least we will
+    # be changing state back to " ".
+    my %dp_recipe_update;
+    for my $k ( keys %dp_recipe_instance ) {
+      if ( $dp_recipe_instance_info{$k} ne $dp_recipe_instance{$k}) {
+        $dp_recipe_update{$k} = $dp_recipe_instance{$k};
+
+        # tag and recipe_instance_id MUST match
+        if ($k eq 'tag' || $k eq 'recipe_instance_id') {
+          print "Comparing $k => $dp_recipe_instance_info{$k} (DB) vs $dp_recipe_instance{$k} (NEW)\n"
+            if $DEBUG;
+          JSA::Error::CADCDB->throw( "Can not be updating with differing tags or recipe_instance_id" );
+        }
+      }
+    }
+
+    updateWithRollback( $dbh, "dp_recipe_instance",
+                        { recipe_instance_id => $dp_recipe_instance_id },
+                        %dp_recipe_update );
+
+  } else {
+    insertWithRollback( $dbh, "dp_recipe_instance", %dp_recipe_instance);
+  }
 
   ###############################################
   # Fill rows in dp_file_input
   ###############################################
 
-  my $mem;
-  for $mem (@$MEMBERSREF) {
+  # We either have no files in the table, files in the table
+  # or files to remove from the table. So if we are updating
+  # we first find what files are in the table already and then
+  # remove those from the list of files to be added. We also
+  # remove any entries from the database that are no longer
+  # relevant
+  my @to_add;
+  if ($updating) {
+    my @results = runQuery( $dbh,
+                            "SELECT input_id, dp_input FROM dp_file_input WHERE recipe_instance_id = $dp_recipe_instance_id",
+                            [ qw/ input_id /]
+                          );
+
+    # Flatten into a simple hash indexed by dp_input
+    my %files_in_db;
+    for my $r (@results) {
+      $files_in_db{$r->{dp_input}} = bigintstr($r->{input_id});
+    }
+
+    # Convert the requested files into a hash for ease of
+    # use (since order doesn't matter anyhow)
+    my %files_to_add = map { $_ => undef } @$MEMBERSREF;
+
+    # Remove any files that are in both hashes
+    for my $f (@$MEMBERSREF) {
+      if (exists $files_in_db{$f}) {
+        delete $files_in_db{$f};
+        delete $files_to_add{$f};
+      }
+    }
+
+    # Anything left in files_in_db need to be deleted
+    if (keys %files_in_db) {
+      $sql = "DELETE FROM dp_file_input WHERE input_id = ?";
+      executeWithRollback( $dbh, $sql, values %files_in_db );
+    }
+
+    # Anything left in files_to_add needs to be added
+    @to_add = keys %files_to_add;
+
+  } else {
+    @to_add = @$MEMBERSREF;
+  }
+
+  # Just add anything still to add
+  for my $mem (@to_add) {
     chomp( $mem );
     my $dp_file_input_id = sprintf "0x%016lx", (++$dp_file_input_bigint);
     my %dp_file_input = ( input_id => $dp_file_input_id,
@@ -264,6 +367,8 @@ ENDRECIPEID
 
 }
 
+# Retrieve a single result from a query
+
 sub queryValue {
   my ( $dbh, $sql ) = @_;
 
@@ -277,6 +382,56 @@ sub queryValue {
   $sth->finish;
 
   return $value
+}
+
+# Executre a query and return the results as an array
+# of hashes
+#   @results = runQuery( $dbh, $sql, $bin );
+# Optional 3rd argument lists binary columns that need to
+# be converted to Math::Bigints
+
+sub runQuery {
+  my ($dbh, $sql, $bin) = @_;
+
+  print "VERBOSE sql=$sql\n" if $VERBOSE;
+  my $sth = $dbh->prepare( $sql ) or &cadc_dberror;
+  $sth->execute or &cadc_dberror;
+
+  my @rows;
+  while ( my $data = $sth->fetchrow_hashref) {
+    # Process any binary results
+    if (defined $bin) {
+      for my $b (@$bin) {
+        if (exists $data->{$b}) {
+          $data->{$b} = binaryAsBigint( $data->{$b} );
+        } else {
+          print "WARNING: Expected column $b from query results but it was missing\n";
+        }
+      }
+    }
+    # Store it
+    push(@rows, $data);
+  }
+  $sth->finish;
+
+  return @rows
+}
+
+# Query the database and return the last matching row as
+# a hash. We trigger an error if we get more than one row.
+# Returns empty list if there are no results.
+# Optional 3rd argument lists binary columns that need to
+# be converted to Math::BigInts.
+
+sub querySingleRow {
+  my @results = runQuery( @_ );
+
+  if (@results == 0) {
+    return ();
+  } elsif (@results > 1) {
+    JSA::Error::CADCDB->throw( "Got ".@results ." results from SQL '$_[1]' when expected only one" );
+  }
+  return %{$results[0]};
 }
 
 # Find the max value of a supplied binary column
@@ -315,6 +470,40 @@ sub bigintstr {
   return sprintf( "0x%016lx", $_[0] );
 }
 
+# Takes some SQL and an array of items that will be used
+# for the placeholder. "execute" assumes one placeholder only
+# and execute will be called once for each item.
+
+sub executeWithRollback {
+  my $dbh = shift;
+  my $sql = shift;
+  my @items = @_;
+
+  if ($DEBUG || $VERBOSE) {
+    print "".($DEBUG ? "Would be " : "") .
+      "Executing SQL = $sql for each item:\n";
+    print join("\n",@items)."\n";
+    return if $DEBUG;
+  }
+
+  my $sth = $dbh->prepare( $sql );
+  if (!$sth) {
+    my $err = $DBI::errstr;
+    $dbh->rollback;
+    JSA::Error::CADCDB( $err );
+  }
+
+  for my $i (@items) {
+    if (!$sth->execute( $i )) {
+      my $err = $DBI::errstr;
+      $dbh->rollback;
+      JSA::Error::CADCDB( $err );
+    }
+  }
+  $sth->finish;
+
+}
+
 
 # Insert with rollback using placeholders
 # Given a database handle, a table name and a hash
@@ -349,6 +538,51 @@ sub insertWithRollback {
     $dbh->rollback;
     throw JSA::Error::CADCDB( $err );
   }
+  $sth->finish;
+}
+
+# Update entries in a table with rollback
+
+sub updateWithRollback {
+  my $dbh = shift;
+  my $table = shift;
+  my $whereref = shift;
+  my %updates = @_;
+
+  JSA::Error::CADCDB->throw( "Must supply a where clause for an update!")
+      unless (defined $whereref && scalar keys %$whereref);
+
+  my @updcolumns = sort keys %updates;
+  my @wherecols = sort keys %$whereref;
+  my $sql = "UPDATE $table SET ".
+    join(", ", map { " $_ = ? " } @updcolumns) .
+      " WHERE " .
+        join( " AND ", map { " $_ = ? " } @wherecols);
+
+  if ($DEBUG || $VERBOSE) {
+    print "". ($DEBUG ? "Would be " : "").
+      "Executing: '$sql'\n with arguments:\n";
+    print join(",", map { $updates{$_} } @updcolumns) ."\n";
+    print " and WHERE clause: ". join(" AND ", map { $whereref->{$_} } @wherecols)."\n";
+    return if $DEBUG;
+  }
+
+  my $sth = $dbh->prepare( $sql );
+  if (!$sth) {
+    my $err = $DBI::errstr;
+    $dbh->rollback;
+    throw JSA::Error::CADCDB( $err );
+  }
+
+  my @values = map { $updates{$_} } @updcolumns;
+  push(@values, map { $whereref->{$_} } @wherecols);
+  if (!$sth->execute(@values)) {
+    my $err = $DBI::errstr;
+    $dbh->rollback;
+    throw JSA::Error::CADCDB( $err );
+  }
+  $sth->finish;
+
 }
 
 =back
