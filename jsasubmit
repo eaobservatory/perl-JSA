@@ -442,11 +442,6 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         $recipe_id = "0xFabCADC";
       } else {
         $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
-        if (defined $recipe_id && $recipe_id =~ /^\-/ ) {
-          $recipe_id =~ s/^\-//;
-          log_message( "*** Attempt to submit recipe update of $recipe_id with group $group failed.\n");
-          next;
-        }
       }
     }
     catch JSA::Error::CADCDB with {
@@ -461,6 +456,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     if (!defined $recipe_id) {
       log_message( "Error submitting. No recipe id returned\n");
       last;
+    } elsif ($recipe_id =~ /^\-/ ) {
+      $recipe_id =~ s/^\-//;
+      log_message( "*** Attempt to submit recipe update of $recipe_id with group $group failed.\n");
     } else {
       log_message( "Request submitted with recipe instance $recipe_id.\n");
       log_message( "Recipe URL: $BASEURL" . hex($recipe_id) . "\n");
