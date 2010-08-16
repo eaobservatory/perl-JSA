@@ -31,8 +31,8 @@ use Exporter 'import';
 our @EXPORT_OK = qw/ connect_to_cadcdp disconnect_from_cadcdp
                      create_recipe_instance /;
 
-our $VERBOSE = 1;
-our $DEBUG = 1;  # Do not write to the database
+our $VERBOSE = 0;
+our $DEBUG = 0;  # Do not write to the database
 
 # Define connection information.
 my $READDATABASE = "jcmtmd";
