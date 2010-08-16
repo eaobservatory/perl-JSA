@@ -25,7 +25,7 @@ use Module::Build;
 # Set it up.
 my $build = Module::Build->new
   (
-   dist_name => 'JSA',
+   module_name => 'JSA',
    license  => 'gpl',
    dist_abstract => 'JCMT Science Archive helper functions',
    dist_author => [
