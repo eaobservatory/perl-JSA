@@ -299,7 +299,7 @@ ENDRECIPEID
                         %dp_recipe_update );
 
   } else {
-    insertWithRollback( $dbh, "dp_recipe_instance", %dp_recipe_instance);
+    insertWithRollback( $dbh, "dp_recipe_instance", \%dp_recipe_instance);
   }
 
   ###############################################
@@ -350,7 +350,8 @@ ENDRECIPEID
     @to_add = @$MEMBERSREF;
   }
 
-  # Just add anything still to add
+  # Just add anything still to add. Do it with a single statement handle
+  my @inserts;
   for my $mem (@to_add) {
     chomp( $mem );
     my $dp_file_input_id = sprintf "0x%016lx", (++$dp_file_input_bigint);
@@ -358,8 +359,9 @@ ENDRECIPEID
                           recipe_instance_id => $dp_recipe_instance_id,
                           dp_input => $mem,
                           input_role => "infile" );
-    insertWithRollback( $dbh, "dp_file_input", %dp_file_input );
+    push(@inserts, \%dp_file_input);
   }
+  insertWithRollback( $dbh, "dp_file_input", @inserts );
 
   $dbh->commit unless $DEBUG;
 
@@ -507,21 +509,29 @@ sub executeWithRollback {
 
 # Insert with rollback using placeholders
 # Given a database handle, a table name and a hash
-# of row information.
+# of row information. Multiple hash references can be
+# supplied for efficient reuse of statement handle.
 
 sub insertWithRollback {
   my $dbh = shift;
   my $table = shift;
-  my %row = @_;
+  my @rows = @_;
 
-  my @columns = sort keys %row;
+  # nothing to insert?
+  return unless @rows;
+
+  # Assume that each entry has the same keys
+
+  my @columns = sort keys %{$rows[0]};
   my $sql = "INSERT INTO $table (". join(", ", @columns).
     ") VALUES (". join(", ", map { "?" } (0..$#columns)) . ")";
 
   if ($DEBUG || $VERBOSE) {
     print "". ($DEBUG ? "Would be " : "").
-      "Executing: '$sql'\n with arguments:\n";
-    print join(",", map { $row{$_} } @columns) ."\n";
+      "Executing: '$sql'\n for ".@rows." rows with arguments:\n";
+    for my $row (@rows) {
+      print join(",", map { $row->{$_} } @columns) ."\n";
+    }
     return if $DEBUG;
   }
 
@@ -532,11 +542,13 @@ sub insertWithRollback {
     throw JSA::Error::CADCDB( $err );
   }
 
-  my @values = map { $row{$_} } @columns;
-  if (!$sth->execute(@values)) {
-    my $err = $DBI::errstr;
-    $dbh->rollback;
-    throw JSA::Error::CADCDB( $err );
+  for my $row (@rows) {
+    my @values = map { $row->{$_} } @columns;
+    if (!$sth->execute(@values)) {
+      my $err = $DBI::errstr;
+      $dbh->rollback;
+      throw JSA::Error::CADCDB( $err );
+    }
   }
   $sth->finish;
 }
