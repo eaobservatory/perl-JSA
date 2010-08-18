@@ -40,7 +40,6 @@ should delete the rows (to be implemented).
 
 use strict; use warnings;
 
-use Carp qw[ croak ];
 use File::Spec;
 use DateTime;
 use DateTime::Duration;
@@ -51,18 +50,10 @@ use List::MoreUtils qw[ any ];
 
 use JAC::Setup qw[ omp ];
 
+use JSA::Error qw[ :try ];
 use OMP::Config;
 
 $OMP::Config::DEBUG = 0;
-
-my %_config =
-  (
-    'verbose' => 0,
-
-    'db-config' =>
-      '/home/jcmtarch/enterdata-cfg/enterdata.cfg',
-      #'/home/agarwal/src/jac-git/archiving/jcmt/.enterdata-cfg/enterdata.cfg',
-  );
 
 my $_state_table = 'transfer';
 my $_state_descr_table = 'transfer_state';
@@ -87,17 +78,18 @@ The state types are ...
 
 =item B<new> constructor
 
-Make a C<JSA::DB::TableTransfer> object.  It takes a hash of two optional parameters ...
+Make a C<JSA::DB::TableTransfer> object.  It takes a hash of parameters ...
 
-  verbose   - set verbosity level; default is 0;
-  db-config - pass filename with database log in information in "ini" format;
-              default is /home/jcmtarch/enterdata-cfg/enterdata.cfg.
+  dbhandle     - JSA::DB object, which has succesfully connected to database;
+  transactions - (optional) truth value, used when changing tables;
+  verbose      - (optional) set verbosity level; default is 0.
 
   $xfer =
     JSA::DB::TableTransfer->new( 'verbose'   => 1,
-                                  'db-config' =>
-                                    '/home/jcmtarch/enterdata-cfg/enterdata.cfg'
+                                  'dbhandle' => $dbh,
                                 );
+
+Throws L<JSA::Error::BadArgs> error when database handle is invalid object.
 
 =cut
 
@@ -105,15 +97,21 @@ sub new {
 
   my ( $class, %arg ) = @_;
 
-  my $obj = { };
-  for my $k ( keys %_config ) {
+  my $dbh = $arg{'dbhandle'};
+  throw JSA::Error::BadArgs "Database handle object is invalid."
+    unless defined $dbh
+    && ref $dbh;
 
-    $obj->{ $k } =
-      exists $arg{ $k } ? $arg{ $k } : $_config{ $k } ;
+  my $obj = { };
+
+  for (qw[ dbhandle transactions verbsoe ] ) {
+
+    next unless exists $arg{ $_ };
+
+    $obj->{ $_ } = $arg{ $_ };
   }
 
   $obj = bless $obj, $class;
-  $obj->use_transaction( 1 );
 
   return $obj;
 }
@@ -357,12 +355,8 @@ sub get_files_not_end_state {
   my ( $self, $pattern ) = @_;
 
   my @state =
-    @_state{qw[ found
-                error
-                ignore
-                ingested
-                replicated
-                copied
+    @_state{qw[ deleted
+                transferred
               ]
             };
 
@@ -370,7 +364,7 @@ sub get_files_not_end_state {
     sprintf
       qq[SELECT s.file_id, s.status, d.descr
           FROM $_state_table s , $_state_descr_table d
-          WHERE s.status IN ( %s )
+          WHERE s.status NOT IN ( %s )
           AND s.status = d.state
         ],
         join ', ', ( '?' ) x scalar @state
@@ -381,12 +375,12 @@ sub get_files_not_end_state {
 
   $sql .= ' ORDER BY file_id';
 
-  my $dbh = $self->dbhandle();
+  my $dbh = $self->_dbhandle();
   my $out = $dbh->selectall_hashref( $sql, 'file_id', undef,
                                       @state,
                                       ( $pattern ? $pattern : () )
                                     )
-      or croak $dbh->errstr;
+      or throw JSA::Error::DBError $dbh->errstr;
 
   return
     unless $out && keys %{ $out };
@@ -464,68 +458,27 @@ sub verbose {
   return;
 }
 
-=item B<dbhandle>
+=item B<_dbhandle>
 
-Returns the database handle if no value is given. If no handle is given, one is
-generated internally from I<db-config> parameter (see I<new> method).
+Returns the database handle.
 
-  $dbh = $xfer->dbhandle();
-
-Override internal database handle to jcmt database ...
-
-  $xfer->dbhandle( $dbh );
+  $dbh = $xfer->_dbhandle();
 
 =cut
 
-sub dbhandle {
+sub _dbhandle {
 
   my $self = shift @_;
 
-  my $extern = 'extern-dbh';
-
-  unless ( scalar @_ ) {
-
-    return
-      exists $self->{ $extern } && ref $self->{ $extern }
-      ? $self->{ $extern }
-      : $self->_connect_to_db( $self->{'db-config'} )
-      ;
-  }
-
-  $self->_make_noise( 0, "Setting external database handle\n" );
-
-  $self->{ $extern } = shift @_;
-
-  return;
+  return $self->{'dbhandle'};
 }
 
-=item B<use_transaction>
-
-Purpose is to control database transactions externally in combination with
-external database handle (see I<dbhandle> method).  Default is to use
-transactions.
-
-Returns a truth value to indicate if database transaction should be used, if no
-value is given.
-
-  $dbh = $xfer->use_transaction();
-
-Else, given truth value is set for later use.
-
-  $xfer->use_transaction( 1 );
-
-=cut
-
-sub use_transaction {
+sub _use_trans {
 
   my $self = shift @_;
 
-  return $self->{'trans'} unless scalar @_;
-
-  $self->{'trans'} = !! shift @_;
-  return;
+  return $self->{'transactions'};
 }
-
 
 sub _get_files {
 
@@ -537,7 +490,7 @@ sub _get_files {
 
   $self->_make_noise( 1, "Getting files from JAC database with state '${state}'\n" );
 
-  my $dbh = $self->dbhandle();
+  my $dbh = $self->_dbhandle();
 
   return
     $self->_run_select_sql( $dbh,
@@ -569,7 +522,7 @@ sub _translate_instrument {
   return 's' if $instr =~ m/^scuba-?2\b/i;
   return 'a' if $instr =~ m/^acsis\b/i;
 
-  croak qq[Unknown instrument, '$instr', given.];
+  throw JSA::Error::BadArgs qq[Unknown instrument, '$instr', given.];
 }
 
 sub _check_filename_part {
@@ -593,7 +546,7 @@ sub _check_filename_part {
           : 1
         );
 
-  croak 'No valid date given to check for files.';
+  throw JSA::Error::BadArgs 'No valid date given to check for files.';
 }
 
 {
@@ -632,7 +585,7 @@ sub _run_select_sql {
   $sql .= ' ORDER BY file_id';
 
   my $out = $dbh->selectall_arrayref( $sql, undef, $file, $state )
-      or croak $dbh->errstr;
+      or throw JSA::Error::DBError $dbh->errstr;
 
   return
     unless $out && scalar @{ $out };
@@ -661,9 +614,9 @@ sub _change_add_state {
   eval { _check_state( $state ) }; croak $@ if $@;
 
   # Use the same $dbh during a transaction.
-  my $dbh = $self->dbhandle();
+  my $dbh = $self->_dbhandle();
 
-  $dbh->begin_work if $self->use_transaction();
+  $dbh->begin_work if $self->_use_trans();
 
   my $run =
     'add' eq $mode
@@ -687,15 +640,14 @@ sub _change_add_state {
     $self->_make_noise( 1, qq[  ${alt}\n] );
 
     # Explicitly pass $dbh.
-    my $affected = $run->( 'dbhandle' => $dbh,
-                            'file'     => $alt,
+    my $affected = $run->( 'file'     => $alt,
                             'state'   => $state
                           );
 
     push @affected, $affected if $affected;
   }
 
-  $dbh->commit if $self->use_transaction();
+  $dbh->commit if $self->_use_trans();
 
   my $sum = 0;
   $sum += $_ for @affected;
@@ -711,7 +663,7 @@ sub _insert {
 
   return
     $self->_run_change_sql( $sql,
-                            map { $arg{ $_ } } qw[ dbhandle file state ]
+                            map { $arg{ $_ } } qw[ file state ]
                           );
 }
 
@@ -722,7 +674,7 @@ sub _update {
   my $sql =
     qq[UPDATE $_state_table SET status = ? WHERE file_id = ?];
 
-  my ( $dbh, @bind ) = map { $arg{ $_ } } qw[ dbhandle state file ];
+  my ( @bind ) = map { $arg{ $_ } } qw[ state file ];
 
   # Avoid resetting 't' multiple times when the transferred file list is same as
   # the list generated by jcmtInfo, where state of some of the files would have
@@ -736,90 +688,21 @@ sub _update {
     push @bind, $arg{'state'};
   }
 
-  return $self->_run_change_sql( $sql, $dbh, @bind );
+  return $self->_run_change_sql( $sql, @bind );
 }
 
 sub _run_change_sql {
 
-  my ( $self, $sql, $dbh, @bind ) = @_;
+  my ( $self, $sql, @bind ) = @_;
+
+  my $dbh = $self->_dbhandle();
 
   return $dbh->do( $sql, undef, @bind )
             or do {
                     $dbh->rollback;
-                    croak $dbh->errstr;
+                    throw JSA::Error::DBError $dbh->errstr;
                   };
 }
-
-{
-  my $omp_cf;
-  my %_handles;
-
-  sub _connect_to_db {
-
-    my ( $self, $config ) = @_;
-
-    $omp_cf ||= OMP::Config->new;
-
-    $omp_cf->configDatabase( $config );
-
-    my ( $server, $db, $user, $pass ) =
-      map
-        { $omp_cf->getData( "database.$_" ) }
-        qw[ server  database  user  password ];
-
-    my $key = join ':', ( $server, $db, $user );
-
-    $self->_make_noise( 2, "Connecting to ${server}..${db} as ${user}\n" );
-
-    if ( exists $_handles{ $key } && $_handles{ $key } ) {
-
-      $self->_make_noise( 2, "  found cached connection\n" );
-
-      return $_handles{ $key };
-    }
-
-    require DBI;
-
-    my $dbh =
-      DBI->connect( "dbi:Sybase:server=$server" , $user, $pass,
-                    { 'RaiseError' => 1,
-                      'PrintError' => 0,
-                      'AutoCommit' => 1,
-                    }
-                  )
-        or die $DBI::errstr;
-
-    for ( $dbh )
-    {
-      $_->{'syb_show_sql'} = 1 ;
-      $_->{'syb_show_eed'} = 1 ;
-
-      $_->do( "use $db" ) or croak $_->errstr;
-    }
-
-    $_handles{ $key } = $dbh;
-
-    $self->use_transaction( 1 );
-
-    return $dbh ;
-  }
-
-  sub _release_dbh {
-
-    for my $v ( values %_handles ) {
-
-      if ( $v ) {
-
-        $v->disconnect() and undef $v;
-      }
-    }
-    return
-  }
-
-}
-
-END { _release_dbh(); }
-
 
 sub _check_hashref {
 
@@ -834,8 +717,9 @@ sub _check_state {
 
   return if exists $_state{ $type };
 
-  croak sprintf "Unknown state type, %s, given, exiting ...\n",
-            ( defined $type ? $type : 'undef' );
+  throw JSA::Error::BadArgs
+    sprintf "Unknown state type, %s, given, exiting ...\n",
+      ( defined $type ? $type : 'undef' );
 }
 
 sub _make_noise {
