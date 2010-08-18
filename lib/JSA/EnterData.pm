@@ -61,7 +61,7 @@ use JSA::EnterData::SCUBA2;
 use JSA::Error qw[ :try ];
 use JSA::Files qw[ looks_like_rawfile ];
 use JSA::Starlink qw[ run_star_command ];
-use JSA::Transfer;
+use JSA::DB::TableTransfer;
 use JCMT::DataVerify;
 
 use OMP::ArchiveDB;
@@ -1431,34 +1431,6 @@ sub _make_insert_select_sql {
           ;
 }
 
-#sub _insert_ingest_status {
-#
-#  my ( $self, %args ) = @_;
-#
-#  my ( $dbh, $files, $status ) = @args{qw[ dbhandle files status ]};
-#
-#  return unless $files;
-#
-#  $status = 'i' unless defined $status;
-#
-#  my $table = 'transfer';
-#  my $sql =
-#    qq[INSERT INTO $table ( file_id, status ) VALUES ( ? , ? )];
-#
-#  for my $file ( ref $files ? @{ $files } : $files ) {
-#
-#    my $affected =
-#      $dbh->do ( $sql,
-#                 undef,
-#                 $file, $status
-#                );
-#
-#    return $affected if !$affected;
-#  }
-#
-#  return;
-#}
-
 =item B<_fill_in_sql>
 
 Returns a given format string substitued with given row values (as an
@@ -2741,7 +2713,7 @@ sub _print_text {
   return;
 }
 
-# JSA::Transfer object, to be created as needed.
+# JSA::DB::TableTransfer object, to be created as needed.
 {
   my $xfer;
 
@@ -2751,18 +2723,12 @@ sub _print_text {
 
     return $xfer if $xfer;
 
-    $xfer = JSA::Transfer->new();
+    $xfer =
+      JSA::DB::TableTransfer->new(  'dbhandle'     => $dbh,
+                                    'transactions' => 0,
+                                  );
 
     $xfer->verbose( $self->verbosity );
-
-    # Use own $dbh instead of making J::Transfer to create one for us.
-    if ( $dbh ) {
-
-      $xfer->dbhandle( $dbh );
-
-      # Database transactions are handled internally.
-      $xfer->use_transaction( 0 );
-    }
 
     return $xfer;
   }
