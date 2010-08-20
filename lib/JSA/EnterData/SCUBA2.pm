@@ -214,6 +214,8 @@ I<transform_subheader> method).
 
     $self->push_range_headers_to_main( \%new, $subh, $skip );
 
+    @{ $subh } = $self->merge_by_obsidss( $subh );
+
     my $grouped =
       $self->group_by_subarray( $subh, $header_val->( $subarray_re ) );
 
@@ -666,6 +668,50 @@ sub group_by_subarray {
   }
 
   return $group;
+}
+
+=item B<merge_by_obsidss>
+
+Returns a list of hash references grouped by C<obsid_subsysnr>, given
+an array reference of subheaders.
+
+Throws L<JSA::Error> exception if a hash reference is missing
+C<obsid_subsys>.
+
+ @grouped = $scuba2->merge_by_obsidss( $header->{'SUBHEADERS'} );
+
+=cut
+
+sub merge_by_obsidss {
+
+  my ( $self, $subh ) = @_;
+
+  return $subh
+    unless $subh
+    && scalar @{ $subh };
+
+  my ( %obsidss, @order );
+  my $key_re = qr{^ OBSID (?:_SUBSYS(?:NR)? | SS ) $}xi;
+
+  for my $href ( @{ $subh } ) {
+
+    my $key =
+      ( grep { $_ =~ $key_re ? $_ : () } keys %{ $href } )[0]
+      or next;
+
+    my $id = $href->{ $key };
+    my $old = $obsidss{ $id };
+
+    push @order, $id
+      unless exists $obsidss{ $id };
+
+    %{ $obsidss{ $id } } =
+      ( ( defined $old ? %{ $old } : () ),
+        %{ $href }
+      );
+  }
+
+  return @obsidss{ @order };
 }
 
 =item B<_fill_headers_obsid_subsys>
