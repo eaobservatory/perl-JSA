@@ -60,8 +60,8 @@ my %_config =
     'verbose' => 0,
 
     'db-config' =>
-      '/home/jcmtarch/enterdata-cfg/enterdata.cfg',
-      #'/home/agarwal/src/jac-git/archiving/jcmt/.enterdata-cfg/enterdata.cfg',
+      #'/home/jcmtarch/enterdata-cfg/enterdata.cfg',
+      '/home/agarwal/src/jac-git/archiving/jcmt/.enterdata-cfg/enterdata.cfg',
   );
 
 my $_state_table = 'transfer';
@@ -75,6 +75,7 @@ in future.
 The state types are ...
 
   copied
+  deleted
   error
   found
   ignored
@@ -125,6 +126,8 @@ BEGIN {
 
       #  Error causing file.
       'error' => 'e',
+
+      'deleted' => 'd',
 
       'ignore'  => 'x',
       'ignored' => 'x',
@@ -281,7 +284,7 @@ Set state to C<transferred> of given array reference of files (base names).
 
 =cut
 
-    for my $key ( qw[ found error ignored ingested replicated copied transferred ] ) {
+    for my $key ( qw[ found deleted error ignored ingested replicated copied transferred ] ) {
 
       my $set = qq[set_${key}];
       my $add = qq[add_${key}];
@@ -353,11 +356,25 @@ sub get_files_not_end_state {
 
   my ( $self, $pattern ) = @_;
 
+  my @state =
+    @_state{qw[ found
+                error
+                ignore
+                ingested
+                replicated
+                copied
+              ]
+            };
+
   my $sql =
-    qq[SELECT s.file_id, s.status, d.descr
-        FROM $_state_table s , $_state_descr_table d
-        WHERE s.status <> ? AND s.status = d.state
-      ];
+    sprintf
+      qq[SELECT s.file_id, s.status, d.descr
+          FROM $_state_table s , $_state_descr_table d
+          WHERE s.status IN ( %s )
+          AND s.status = d.state
+        ],
+        join ', ', ( '?' ) x scalar @state
+        ;
 
   $sql .= ' AND file_id like ? '
     if $pattern;
@@ -366,7 +383,7 @@ sub get_files_not_end_state {
 
   my $dbh = $self->dbhandle();
   my $out = $dbh->selectall_hashref( $sql, 'file_id', undef,
-                                      $_state{'transferred'},
+                                      @state,
                                       ( $pattern ? $pattern : () )
                                     )
       or croak $dbh->errstr;
@@ -375,6 +392,51 @@ sub get_files_not_end_state {
     unless $out && keys %{ $out };
 
   return $out;
+}
+
+=item B<delete_transferred_files>
+
+I<Marks> given list of files as I<deleted> which have been already marked as
+being transferred.
+
+  $xfer->delete_transferred_files( [ @file ] );
+
+=cut
+
+sub delete_transferred_files {
+
+  my ( $self, $files ) = @_;
+
+  my $sql =
+    sprintf qq[UPDATE %s SET status = '%s' WHERE status = ? AND file_id IN (%s)],
+    $_state_table,
+    'd',
+    join ', ', ( '?' ) x scalar @{ $files };
+
+  # Use the same $dbh during a transaction.
+  my $dbh = $self->dbhandle();
+
+  $self->_make_noise( 0, qq[Before marking files as deleted\n] );
+
+  $dbh->begin_work if $self->use_transaction();
+
+  my @affected;
+  for my $file ( sort @{ $files } ) {
+
+    my $alt = _fix_file_name( $file );
+
+    $self->_make_noise( 1, qq[  ${alt}\n] );
+
+    my $affected = $self->_run_change_sql( $sql, $dbh, 't', $file );
+
+    push @affected, $affected if $affected;
+  }
+
+  $dbh->commit if $self->use_transaction();
+
+  my $sum = 0;
+  $sum += $_ for @affected;
+  return $sum;
 }
 
 =item B<verbose>
@@ -471,7 +533,7 @@ sub _get_files {
 
   my ( $state, $date, $instr ) = _extract_filter( %filter );
 
-  my $fragment = sprintf '%s%%', join '%', $instr, $date;
+  my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
 
   $self->_make_noise( 1, "Getting files from JAC database with state '${state}'\n" );
 
@@ -492,7 +554,7 @@ sub _extract_filter {
     @filter{qw[ state date instrument ]};
 
   _check_state( $state );
-  _check_filename_part( $date );
+  _check_filename_part( $date ) if $date;
 
   $instr = _translate_instrument( $instr );
 
