@@ -60,8 +60,8 @@ my %_config =
     'verbose' => 0,
 
     'db-config' =>
-      #'/home/jcmtarch/enterdata-cfg/enterdata.cfg',
-      '/home/agarwal/src/jac-git/archiving/jcmt/.enterdata-cfg/enterdata.cfg',
+      '/home/jcmtarch/enterdata-cfg/enterdata.cfg',
+      #'/home/agarwal/src/jac-git/archiving/jcmt/.enterdata-cfg/enterdata.cfg',
   );
 
 my $_state_table = 'transfer';
