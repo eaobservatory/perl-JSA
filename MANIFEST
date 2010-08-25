@@ -9,6 +9,12 @@ lib/JSA/CADC_Copy.pm
 lib/JSA/CADC_DP.pm
 lib/JSA/Command.pm
 lib/JSA/Convert.pm
+lib/JSA/Datetime.pm
+lib/JSA/Datetime/Sybase.pm
+lib/JSA/DB.pm
+lib/JSA/DB/Sybase.pm
+lib/JSA/DB/TableCOMMON.pm
+lib/JSA/DB/TableTransfer.pm
 lib/JSA/EnterData.pm
 lib/JSA/EnterData/Instrument.pm
 lib/JSA/EnterData/ACSIS.pm
@@ -17,9 +23,11 @@ lib/JSA/Error.pm
 lib/JSA/Files.pm
 lib/JSA/Headers.pm
 lib/JSA/Headers/Starlink.pm
+lib/JSA/LogSetup.pm
 lib/JSA/QA/Result.pm
 lib/JSA/QA.pm
 lib/JSA/Starlink.pm
+lib/JSA/Verbosity.pm
 manual_submit
 t/dpretrieve.t
 t/jsa-files.t
