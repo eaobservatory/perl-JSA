@@ -1,16 +1,16 @@
-package JSA::Transfer;
+package JSA::DB::TableTransfer;
 
 =pod
 
 =head1 NAME
 
-JSA::Transfer - Check file replication, transfer files to CADC
+JSA::DB::TableTransfer - Check file replication, transfer files to CADC
 
 =head1 SYNOPSIS
 
 Make an object ...
 
-  $xfer = JSA::Transfer->new( 'verbose' => 1 );
+  $xfer = JSA::DB::TableTransfer->new( 'verbose' => 1 );
 
 Pass jcmt database handle already being used if desired ...
 
@@ -87,17 +87,17 @@ The state types are ...
 
 =item B<new> constructor
 
-Make a C<JSA::Transfer> object.  It takes a hash of two optional parameters ...
+Make a C<JSA::DB::TableTransfer> object.  It takes a hash of two optional parameters ...
 
   verbose   - set verbosity level; default is 0;
   db-config - pass filename with database log in information in "ini" format;
               default is /home/jcmtarch/enterdata-cfg/enterdata.cfg.
 
   $xfer =
-    JSA::Transfer->new( 'verbose'   => 1,
-                        'db-config' =>
-                          '/home/jcmtarch/enterdata-cfg/enterdata.cfg'
-                      );
+    JSA::DB::TableTransfer->new( 'verbose'   => 1,
+                                  'db-config' =>
+                                    '/home/jcmtarch/enterdata-cfg/enterdata.cfg'
+                                );
 
 =cut
 
