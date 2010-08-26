@@ -66,13 +66,15 @@ in future.
 The state types are ...
 
   copied
-  deleted
+  delete
   error
   found
   ignored
   ingested
   replicated
   transferred
+  simulation
+  final
 
 =over 2
 
@@ -125,26 +127,26 @@ BEGIN {
       #  Error causing file.
       'error' => 'e',
 
-      'deleted' => 'd',
+      # File is a deletion candidate.
+      'delete' => 'd',
 
-      'ignore'  => 'x',
       'ignored' => 'x',
 
+      'simulation' => 's',
+
       #  File has been locally ingested.
-      'ingest'   => 'i',
       'ingested' => 'i',
 
       #  File appeared in CADC database.
-      'replicate'  => 'r',
       'replicated' => 'r',
 
       #  File has been put in CADC transfer directory.
-      'copy'   => 'c',
       'copied' => 'c',
 
       #  File present in CADC directory.
-      'transfer'    => 't',
       'transferred' => 't',
+
+      'final' => 'z',
     );
 
 =item B<get_copied_files>
@@ -184,6 +186,25 @@ Add state of C<error> of given array reference of files (base names).
 Set state to C<error> of given array reference of files (base names).
 
   $xfer->set_error( [ @files ] );
+
+=item B<get_final_files>
+
+Return a array reference of files with C<final> state, given a partial file
+name.
+
+  $files = $xfer->get_final_files( 20100612 );
+
+=item B<add_final>
+
+Add state of C<final> of given array reference of files (base names).
+
+  $xfer->add_final( [ @files ] );
+
+=item B<set_final>
+
+Set state to C<final> of given array reference of files (base names).
+
+  $xfer->set_final( [ @files ] );
 
 =item B<get_found_files>
 
@@ -261,6 +282,25 @@ Set state to C<replicated> of given array reference of files (base names).
 
   $xfer->set_replicated( [ @files ] );
 
+=item B<get_simulation_files>
+
+Return a array reference of files with C<simulation> state, given a partial file
+name.
+
+  $files = $xfer->get_simulation_files( 20100612 );
+
+=item B<add_simulation>
+
+Add state of C<simulation> of given array reference of files (base names).
+
+  $xfer->add_simulation( [ @files ] );
+
+=item B<set_simulation>
+
+Set state to C<simulation> of given array reference of files (base names).
+
+  $xfer->set_simulation( [ @files ] );
+
 =item B<get_transferred_files>
 
 Return a array reference of files with C<transferred> state, given a partial file
@@ -282,7 +322,7 @@ Set state to C<transferred> of given array reference of files (base names).
 
 =cut
 
-    for my $key ( qw[ found deleted error ignored ingested replicated copied transferred ] ) {
+    for my $key ( qw[ sort keys %_state ] ) {
 
       my $set = qq[set_${key}];
       my $add = qq[add_${key}];
@@ -388,23 +428,23 @@ sub get_files_not_end_state {
   return $out;
 }
 
-=item B<delete_transferred_files>
+=item B<mark_transferred_for_deletion>
 
 I<Marks> given list of files as I<deleted> which have been already marked as
 being transferred.
 
-  $xfer->delete_transferred_files( [ @file ] );
+  $xfer->mark_transferred_for_deletion( [ @file ] );
 
 =cut
 
-sub delete_transferred_files {
+sub mark_transferred_for_deletion {
 
   my ( $self, $files ) = @_;
 
   my $sql =
     sprintf qq[UPDATE %s SET status = '%s' WHERE status = ? AND file_id IN (%s)],
     $_state_table,
-    'd',
+    $_state{'delete'},
     join ', ', ( '?' ) x scalar @{ $files };
 
   # Use the same $dbh during a transaction.
@@ -412,21 +452,18 @@ sub delete_transferred_files {
 
   $self->_make_noise( 0, qq[Before marking files as deleted\n] );
 
-  $dbh->begin_work if $self->use_transaction();
+  $dbh->begin_work if $self->_use_trans();
+
+  my @file = sort @{ $files };
+  my @alt  = map { _fix_file_name( $_ ) } @file;
+
+  $self->_make_noise( 1, join( "  \n", @alt ) . "\n" );
 
   my @affected;
-  for my $file ( sort @{ $files } ) {
+  my $affected = $self->_run_change_sql( $sql, $dbh, $_state{'transferred'}, @file );
+  push @affected, $affected if $affected;
 
-    my $alt = _fix_file_name( $file );
-
-    $self->_make_noise( 1, qq[  ${alt}\n] );
-
-    my $affected = $self->_run_change_sql( $sql, $dbh, 't', $file );
-
-    push @affected, $affected if $affected;
-  }
-
-  $dbh->commit if $self->use_transaction();
+  $dbh->commit if $self->_use_trans();
 
   my $sum = 0;
   $sum += $_ for @affected;
