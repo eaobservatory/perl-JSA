@@ -82,22 +82,24 @@ sub update_fits_headers {
   # Get the FITS headers.
   my $header = read_header( $file );
 
-  if( $mode eq 'project' ) {
-    # Fix the ASN_TYPE header if we are a project
-    @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
-              "NDF=$file",
-              "KEYWORD=ASN_TYPE",
-              "VALUE=project",
-              "COMMENT=\$C",
-              "EDIT=AMEND",
-              "POSITION=\!" );
-    run_star_command( @args );
-  }
-
   # Retrieve the ASN_ID.
   my $asn_id = correct_asn_id( $mode, $header );
 
   if( defined( $asn_id ) ) {
+
+    if( $mode eq 'project' ) {
+      # Fix the ASN_TYPE header if we are a project and this is
+      # an association (group coadd).
+      @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
+                "NDF=$file",
+                "KEYWORD=ASN_TYPE",
+                "VALUE=project",
+                "COMMENT=\$C",
+                "EDIT=AMEND",
+                "POSITION=\!" );
+      run_star_command( @args );
+    }
+
     # Write the ASN_ID header back into the FITS header.
     @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
               "NDF=$file",
