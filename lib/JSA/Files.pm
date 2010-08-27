@@ -630,7 +630,7 @@ sub drfilename_to_cadc {
   } else {
     # Always force to 'obs' but warn if it was something different
     if (defined $type && $type ne 'obs') {
-      warnings::warnif( "This file looks like an 'obs' product but is tagged with something else. Forcing to 'obs'.");
+      warnings::warnif( "File '$drname' looks like an 'obs' product but is tagged with '$type'. Forcing to 'obs'.");
     }
     $type = 'obs';
   }
