@@ -8,6 +8,7 @@ use File::Spec;
 use Scalar::Util qw[ blessed looks_like_number ];
 use Time::Piece;
 use Time::Seconds qw[ ONE_DAY ];
+use List::MoreUtils qw[ any ];
 
 use JSA::Command qw/ run_command /;
 use JSA::Error qw[ :try ];
@@ -659,10 +660,34 @@ sub at_cadc {
 
   my ( $ut, @prefix ) = @_;
 
-  return if $ut !~ /^\d{8}$/;
+  return if defined $ut && $ut !~ /^\d{8}$/;
 
-  @prefix = qw/ a s4a s4b s4c s4d s8a s8b s8c s8d /
-    unless scalar @prefix;
+  my @inst = qw/ a s4a s4b s4c s4d s8a s8b s8c s8d /;
+
+  # Use instrument prefix and the date.
+  if ( $ut ) {
+
+    @prefix = @inst unless scalar @prefix;
+
+    return _check_cadc( map { "${_}${ut}" } @prefix );
+  }
+
+  # Assume to be file names.
+  my @file;
+  for my $f ( @prefix ) {
+
+    push @file, $f
+      if any { $f =~ /^$_\d{8}/ } @inst
+  }
+
+  return _check_cadc( @file );
+}
+
+sub _check_cadc {
+
+  my ( @prefix ) = @_;
+
+  return unless scalar @prefix;
 
   # Decide whether we are running jcmtInfo or using curl
   my $info_cmd = "/home/cadcops/bin/jcmtInfo";
@@ -671,9 +696,9 @@ sub at_cadc {
   # Go through each instrument prefix and push the list of files onto
   # our array.
   my @uploaded;
-  foreach my $instprefix ( @prefix ) {
+  foreach my $prefix ( @prefix ) {
     # Use a sybase wildcard to get all matching files
-    my $match = "${instprefix}$ut%";
+    my $match = "${prefix}%";
     my ($stdout, $stderr, $stat);
 
     # Run the CADC command if it is around
