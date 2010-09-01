@@ -325,7 +325,7 @@ Set state to C<transferred> of given array reference of files (base names).
 
 =cut
 
-    for my $key ( qw[ sort keys %_state ] ) {
+    for my $key ( sort keys %_state ) {
 
       my $set = qq[set_${key}];
       my $add = qq[add_${key}];
