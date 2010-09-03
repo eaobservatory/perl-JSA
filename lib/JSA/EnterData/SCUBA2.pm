@@ -214,7 +214,7 @@ I<transform_subheader> method).
 
     $self->push_range_headers_to_main( \%new, $subh, $skip );
 
-    @{ $subh } = $self->merge_by_obsidss( $subh );
+    #@{ $subh } = $self->merge_by_obsidss( $subh );
 
     my $grouped =
       $self->group_by_subarray( $subh, $header_val->( $subarray_re ) );
@@ -846,33 +846,40 @@ sub fill_max_subscan {
 
   my ( $self, $header, $obs ) = @_;
 
-  my $subh = 'SUBHEADERS';
-  my $subar = 'SUBARRAY';
-  my $max = 'max_subscan';
+  my %file;
+  my $max_k  = 'max_subscan';
+  my $subh_k = 'SUBHEADERS';
 
-  if ( exists $header->{ $subh } ) {
+  my $wavelen_re = qr/^(s[48])[a-d]/;
+  for my $f ( $obs->simple_filename ) {
 
-    my %count;
-    for ( @{ $header->{ $subh } } ) {
-
-      $count{ $_->{ $subar } }++
-        if exists $_->{ $subar };
-    }
-
-    for ( @{ $header->{ $subh } } ) {
-
-      $_->{ $max } = $count{ $_->{ $subar } }
-        if exists $_->{ $subar };
-    }
-
-    return if keys %count;
+    my ( $type ) = ( $f =~ $wavelen_re )[0] or next;
+    push @{ $file{ $type } } , $f;
   }
 
-  # In main header, there will be only one entry of subarry, so
-  # nothing to count.
-  $header->{ $max } = 1
-    if ! $header->{ $max }
-    && exists $header->{ $subar };
+  my $id_k   = _find_obsidss_key( $header );
+  # OBSIDSS key is in main header which means only one type of
+  # subarray were present.
+  if ( $id_k || ! exists $header->{ $subh_k } ) {
+
+    $header->{ $max_k } = scalar map { @{ $_ } } values %file;
+    return;
+  }
+
+  my $subar_k = 'SUBARRAY';
+  for my $sh ( @{ $header->{ $subh_k } } ) {
+
+    next unless exists $sh->{ $subar_k };
+
+    my $subar = $sh->{ $subar_k };
+    for my $type ( keys %file ) {
+
+      # Just match on wavelength, not actual subarray.
+      next unless $subar =~ m/^$type/;
+
+      $sh->{ $max_k } = scalar @{ $file{ $type } };
+    }
+  }
 
   return;
 }
@@ -889,6 +896,19 @@ sub _dump {
 
   return
     Data::Dumper::Dumper( \@thing );
+}
+
+sub _find_obsidss_key {
+
+  my ( $href ) = @_;
+
+  for my $k ( qw[ OBSIDSS OBSID_SUBSYSNR ] ) {
+
+    return $k    if exists $href->{ $k };
+    return lc $k if exists $href->{ lc $k };
+  }
+
+  return;
 }
 
 
