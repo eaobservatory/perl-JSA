@@ -130,6 +130,9 @@ BEGIN {
       # File is a deletion candidate.
       'delete' => 'd',
 
+      # File has been deleted.
+      'deleted' => 'D',
+
       'ignored' => 'x',
 
       'simulation' => 's',
@@ -428,23 +431,23 @@ sub get_files_not_end_state {
   return $out;
 }
 
-=item B<mark_transferred_for_deletion>
+=item B<mark_transferred_as_deleted>
 
 I<Marks> given list of files as I<deleted> which have been already marked as
 being transferred.
 
-  $xfer->mark_transferred_for_deletion( [ @file ] );
+  $xfer->mark_transferred_as_deleted( [ @file ] );
 
 =cut
 
-sub mark_transferred_for_deletion {
+sub mark_transferred_as_deleted {
 
   my ( $self, $files ) = @_;
 
   my $sql =
     sprintf qq[UPDATE %s SET status = '%s' WHERE status = ? AND file_id IN (%s)],
     $_state_table,
-    $_state{'delete'},
+    $_state{'deleted'},
     join ', ', ( '?' ) x scalar @{ $files };
 
   # Use the same $dbh during a transaction.
