@@ -726,6 +726,8 @@ It is called by I<prepare_and_insert> method.
 
         for my $sub_ob ( @sub_obs ) {
 
+          $inst->fill_max_subscan( $sub_ob->hdrhash, $sub_ob );
+
           my ( $hash , $array ) = $inst->transform_header( $sub_ob->hdrhash );
           $sub_ob->hdrhash( $hash );
         }
@@ -933,7 +935,17 @@ sub _get_obs_group {
           next;
         }
 
-        push @obs, OMP::Info::Obs->readfile( $file , %obs );
+        try {
+
+          push @obs, OMP::Info::Obs->readfile( $file , %obs );
+        }
+        catch OMP::Error::ObsRead with {
+
+          my ( $err ) = @_;
+
+          throw $err
+            unless $err->text() =~ m/^Error reading FITS header from file/;
+        };
       }
 
       my @headers;
@@ -1047,8 +1059,6 @@ sub add_subsys_obs {
     # Need to calculate the frequency information
     $inst->calc_freq( $self, $subsys_obs, $subsys_hdrs );
 
-    $inst->fill_max_subscan( $subsys_hdrs, $subsys_obs );
-
     my $grouped;
     if ( $inst->can( 'transform_header' ) ) {
 
@@ -1060,7 +1070,29 @@ sub add_subsys_obs {
 
       $inst->_fill_headers_obsid_subsys( $subh, $subsys_obs->obsid );
 
-      my $error =
+      my $error;
+      unless ( $added_files ) {
+
+        $added_files++;
+        $self->_change_FILES( 'obs'         => $subsys_obs,
+                              'headers'    => $subsys_hdrs,
+                              'instrument' => $inst,
+                              map( { $_ => $pass_args{ $_ } }
+                                    qw[ dbhandle columns dict ],
+                                  ),
+                            );
+      }
+
+      if ( $inst->can( 'merge_by_obsidss' ) ) {
+
+        my $tmp;
+        $tmp = $subsys_hdrs->{'SUBHEADERS'}
+          if exists $subsys_hdrs->{'SUBHEADERS'};
+
+        @{ $subh } = $inst->merge_by_obsidss( $tmp );
+      }
+
+      $error =
         $self->_modify_db_on_obsend( %pass_args,
                                       'table'   => $inst->table,
                                       'headers' => $subh,
@@ -1072,56 +1104,6 @@ sub add_subsys_obs {
         $self->_print_text( "$error\n\n" );
         return;
       }
-
-      unless ( $added_files ) {
-
-        $added_files++;
-
-        my $old_cond = $self->conditional_insert;
-        $self->conditional_insert( 1 )
-          if $self->update_mode;
-
-        # Create headers that don't exist
-        $self->fill_headers_FILES( $inst, $subsys_hdrs, $subsys_obs );
-
-        my $insert_ref =
-          $self->get_insert_values( 'table' => 'FILES',
-                                    'headers' => $subsys_hdrs,
-                                    map( { $_ => $pass_args{ $_} }
-                                          qw[ columns dict ]
-                                        ),
-                                  );
-
-        try {
-
-          _verify_file_name( $insert_ref->{'file_id'} );
-
-          my $hash = $self->prepare_insert_hash( 'FILES', $insert_ref );
-
-          $error =
-            $self->insert_hash( 'table'    => 'FILES',
-                                'dbhandle' => $dbh,
-                                'insert' => $hash,
-                              );
-
-          $error = $dbh->errstr
-            if $error;
-        }
-        catch JSA::Error with {
-
-          $error = shift @_;
-        };
-
-        $self->conditional_insert( $old_cond );
-
-        if ($error) {
-
-          $dbh->rollback;
-          $self->_print_error_simple_dup( $error );
-          return;
-        }
-      }
-
     }
   }
 
@@ -1556,7 +1538,7 @@ sub prepare_update_hash {
 
   my %differ;
 
-  for my $key (keys %{$indb}) {
+  for my $key ( sort keys %{$indb} ) {
 
     # since that will update automatically
     next if $key eq 'last_modified';
@@ -2304,6 +2286,63 @@ sub read_ndf {
   }
 
   return wantarray ? ( $wcs, %state ) : $wcs;
+}
+
+sub _change_FILES {
+
+  my ( $self, %arg ) = @_;
+
+  my $table = 'FILES';
+
+  my ( $headers, $obs, $dbh, $inst ) =
+    @arg{qw[ headers obs dbhandle instrument ]};
+
+  my $old_cond = $self->conditional_insert;
+  $self->conditional_insert( 1 )
+    if $self->update_mode;
+
+  # Create headers that don't exist
+  $self->fill_headers_FILES( $inst, $headers, $obs );
+
+  my $insert_ref =
+    $self->get_insert_values( 'table'    => $table,
+                               'headers' => $headers,
+                              map( { $_ => $arg{ $_} }
+                                    qw[ columns dict ]
+                                  ),
+                            );
+
+  my $error;
+  try {
+
+    _verify_file_name( $insert_ref->{'file_id'} );
+
+    my $hash = $self->prepare_insert_hash( $table, $insert_ref );
+
+    $error =
+      $self->insert_hash( 'table'    => $table,
+                          'dbhandle' => $dbh,
+                          'insert' => $hash,
+                        );
+
+    $error = $dbh->errstr
+      if $error;
+  }
+  catch JSA::Error with {
+
+    $error = shift @_;
+  };
+
+  $self->conditional_insert( $old_cond );
+
+  if ($error) {
+
+    $dbh->rollback;
+    $self->_print_error_simple_dup( $error );
+    return;
+  }
+
+  return;
 }
 
 =item B<_show_insert_sql>
