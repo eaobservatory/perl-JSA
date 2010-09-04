@@ -621,7 +621,7 @@ set.
         $observations->{$obs->runnr} = \@subhdrs;
       }
 
-      my $added = $self->insert_obs( 'dbhandle' => $dbh,
+      my $added = $self->insert_obs( 'db' => $db,
                                       'instrument' => $inst,
                                       'columns' => $columns,
                                       'dict'    => \%dict,
@@ -695,11 +695,12 @@ It is called by I<prepare_and_insert> method.
 
     my ( $self, %args ) = @_ ;
 
+    my ( $inst, $db, $obs ) = map { $args{ $_ } } qw[ instrument db obs ];
+    my $dbh = $db->handle();
+
     # Pass everything but observations hash reference to other subs.
     my %pass_args =
-      map { $_ => $args{ $_ } } qw[ instrument dbhandle columns dict ];
-
-    my ( $inst, $dbh, $obs ) = map { $args{ $_ } } qw[ instrument dbhandle obs ];
+      map { $_ => $args{ $_ } } qw[ instrument columns dict ];
 
     my ( @success, @sub_obs, @base );
     RUN:
@@ -722,11 +723,14 @@ It is called by I<prepare_and_insert> method.
 
       $touched{ $_ } = undef for @base;
 
-      if ( $inst->can( 'transform_header' ) ) {
+      for my $sub_ob ( @sub_obs ) {
 
-        for my $sub_ob ( @sub_obs ) {
+        if ( $inst->can( 'fill_max_subscan' ) ) {
 
           $inst->fill_max_subscan( $sub_ob->hdrhash, $sub_ob );
+        }
+
+        if ( $inst->can( 'transform_header' ) ) {
 
           my ( $hash , $array ) = $inst->transform_header( $sub_ob->hdrhash );
           $sub_ob->hdrhash( $hash );
@@ -774,30 +778,33 @@ It is called by I<prepare_and_insert> method.
       next RUN
         unless $self->calc_radec( $inst, $common_obs, $common_hdrs );
 
-      $dbh->begin_work if $self->load_header_db;
+      #$dbh->begin_work if $self->load_header_db;
+      $db->begin_trans() if $self->load_header_db;
 
       $self->fill_headers_COMMON( $common_hdrs, $common_obs );
 
       my $error =
         $self->_modify_db_on_obsend( %pass_args,
+                                    'dbhandle' => $dbh,
                                     'table'   => 'COMMON',
                                     'headers' => $common_hdrs,
                                   );
 
-      if ($error) {
+      if ( $dbh->err() ) {
 
-        $dbh->rollback;
+        $db->rollback_trans();
         $self->_print_error_simple_dup( $error );
 
         next RUN;
       }
 
       $self->add_subsys_obs( %pass_args,
+                              'db' => $db,
                               'obs' => $obs->{$runnr},
                             )
         or next RUN ;
 
-      $dbh->commit if $self->load_header_db;
+      $db->commit_trans() if $self->load_header_db;
 
       push @success, map { $_->filename } @sub_obs;
 
@@ -1031,7 +1038,7 @@ sub add_subsys_obs {
 
   my ( $self, %args ) = @_;
 
-  for my $k ( qw[ instrument dbhandle columns dict obs ] ) {
+  for my $k ( qw[ instrument db columns dict obs ] ) {
 
     next
       if exists $args{ $k } && $args{ $k } && ref $args{ $k };
@@ -1039,11 +1046,13 @@ sub add_subsys_obs {
     throw JSA::Error::BadArgs( qq[No suitable value given for ${k}.] );
   }
 
+  my ( $inst, $db, $obs ) = map { $args{ $_ } } qw[ instrument db obs ];
+
+  my $dbh = $db->handle();
+
   # Need to pass everything but observations to other subs.
   my %pass_args =
-    map { $_ => $args{ $_ } } qw[ instrument dbhandle columns dict ];
-
-  my ( $inst, $dbh, $obs ) = map { $args{ $_ } } qw[ instrument dbhandle obs ];
+    map { $_ => $args{ $_ } } qw[ instrument columns dict ];
 
   my $subsysnr = 0;
   my $totsub = scalar @{ $obs };
@@ -1074,11 +1083,12 @@ sub add_subsys_obs {
       unless ( $added_files ) {
 
         $added_files++;
-        $self->_change_FILES( 'obs'         => $subsys_obs,
+        $self->_change_FILES( 'obs'        => $subsys_obs,
                               'headers'    => $subsys_hdrs,
                               'instrument' => $inst,
+                              'db'         => $db,
                               map( { $_ => $pass_args{ $_ } }
-                                    qw[ dbhandle columns dict ],
+                                    qw[ columns dict ],
                                   ),
                             );
       }
@@ -1094,17 +1104,19 @@ sub add_subsys_obs {
 
       $error =
         $self->_modify_db_on_obsend( %pass_args,
+                                      'dbhandle' => $dbh,
                                       'table'   => $inst->table,
                                       'headers' => $subh,
                                     );
 
-      if ($error) {
+      if ( $dbh->err() ) {
 
-        $dbh->rollback if $self->load_header_db;
+        $db->rollback_trans() if $self->load_header_db;
         $self->_print_text( "$error\n\n" );
         return;
       }
     }
+
   }
 
   return 1;
@@ -2294,8 +2306,10 @@ sub _change_FILES {
 
   my $table = 'FILES';
 
-  my ( $headers, $obs, $dbh, $inst ) =
-    @arg{qw[ headers obs dbhandle instrument ]};
+  my ( $headers, $obs, $db, $inst ) =
+    @arg{qw[ headers obs db instrument ]};
+
+  my $dbh = $db->handle();
 
   my $old_cond = $self->conditional_insert;
   $self->conditional_insert( 1 )
@@ -2326,7 +2340,7 @@ sub _change_FILES {
                         );
 
     $error = $dbh->errstr
-      if $error;
+      if $dbh->err();
   }
   catch JSA::Error with {
 
@@ -2335,9 +2349,9 @@ sub _change_FILES {
 
   $self->conditional_insert( $old_cond );
 
-  if ($error) {
+  if ( $dbh->err() ) {
 
-    $dbh->rollback;
+    $db->rollback_trans() if $self->load_header_db();
     $self->_print_error_simple_dup( $error );
     return;
   }
@@ -2651,6 +2665,27 @@ sub _is_insert_dup_error {
   return
     $text
     && $text =~ /insert duplicate key row/i ;
+}
+
+=item B<_is_dup_ignored>
+
+Returns a truth value to indicate if the error message was due ignoring the
+duplicate key, given a plain string or an L<Error> object.  It compares the
+expected Sybase error text.
+
+    $dup_ignore = $enter->_is_dup_ignored( $dbh->errstr );
+
+=cut
+
+sub _is_dup_ignored {
+
+  my ( $self, $err ) = @_;
+
+  my $text = ref $err ? $err->text : $err;
+
+  return
+    $text
+    && $text =~ /Duplicate key.+ignored/i ;
 }
 
 =item <_print_error_simple_dup>
