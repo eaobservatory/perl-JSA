@@ -10,25 +10,29 @@ license: gpl
 resources:
   license: http://opensource.org/licenses/gpl-license.php
   repository: /jac_sw/gitroot/perl-JSA.git
-build_requires:
-  Test::Command: 0
-  Test::More: 0
 requires:
+  Astro::Coords: 0
   Astro::FITS::HdrTrans: 1
   Astro::FITS::Header: 3
   Config::IniFiles: 0
+  DBD::Sybase: 0
   DateTime: 0
   File::Remove: 0
   File::Temp: 0.2
+  Image::ExifTool: 0
+  JAC::Setup: 0.01
   NDF: 0
+  Pod::Usage: 0
   Proc::SafeExec: 0
   Starlink::Versions: 0
   Statistics::Descriptive: 0
   Time::Piece: 0
   URI: 0
-  perl: v5.8.0
-configure_requires:
-  Module::Build: 0.3306
+  perl: 5.8.0
+build_requires:
+  JAC::Setup: 0.02
+  Test::Command: 0
+  Test::More: 0
 provides:
   JSA::CADC_Copy:
     file: lib/JSA/CADC_Copy.pm
@@ -38,10 +42,24 @@ provides:
     file: lib/JSA/Command.pm
   JSA::Convert:
     file: lib/JSA/Convert.pm
+  JSA::DB:
+    file: lib/JSA/DB.pm
+  JSA::DB::Sybase:
+    file: lib/JSA/DB/Sybase.pm
+  JSA::DB::TableCOMMON:
+    file: lib/JSA/DB/TableCOMMON.pm
+  JSA::DB::TableTransfer:
+    file: lib/JSA/DB/TableTransfer.pm
+  JSA::Datetime:
+    file: lib/JSA/Datetime.pm
+  JSA::Datetime::Sybase:
+    file: lib/JSA/Datetime/Sybase.pm
   JSA::EnterData:
     file: lib/JSA/EnterData.pm
   JSA::EnterData::ACSIS:
     file: lib/JSA/EnterData/ACSIS.pm
+  JSA::EnterData::Instrument:
+    file: lib/JSA/EnterData/Instrument.pm
   JSA::EnterData::SCUBA2:
     file: lib/JSA/EnterData/SCUBA2.pm
   JSA::Error:
@@ -57,7 +75,11 @@ provides:
     file: lib/JSA/Error.pm
   JSA::Error::BadFile:
     file: lib/JSA/Error.pm
+  JSA::Error::CADCDB:
+    file: lib/JSA/Error.pm
   JSA::Error::Conversion:
+    file: lib/JSA/Error.pm
+  JSA::Error::DBError:
     file: lib/JSA/Error.pm
   JSA::Error::DataRead:
     file: lib/JSA/Error.pm
@@ -67,12 +89,16 @@ provides:
     file: lib/JSA/Error.pm
   JSA::Error::Starlink:
     file: lib/JSA/Error.pm
+  JSA::Error::StarlinkCommand:
+    file: lib/JSA/Error.pm
   JSA::Files:
     file: lib/JSA/Files.pm
   JSA::Headers:
     file: lib/JSA/Headers.pm
   JSA::Headers::Starlink:
     file: lib/JSA/Headers/Starlink.pm
+  JSA::LogSetup:
+    file: lib/JSA/LogSetup.pm
   JSA::QA:
     file: lib/JSA/QA.pm
     version: 1.00
@@ -88,7 +114,9 @@ provides:
     file: lib/JSA/QA.pm
   JSA::Starlink:
     file: lib/JSA/Starlink.pm
-generated_by: Module::Build version 0.3306
+  JSA::Verbosity:
+    file: lib/JSA/Verbosity.pm
+generated_by: Module::Build version 0.3
 meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.4.html
-  version: 1.4
+  url: http://module-build.sourceforge.net/META-spec-v1.2.html
+  version: 1.2
