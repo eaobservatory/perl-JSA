@@ -10,11 +10,9 @@ JSA::DB::TableTransfer - Check file replication, transfer files to CADC
 
 Make an object ...
 
-  $xfer = JSA::DB::TableTransfer->new( 'verbose' => 1 );
-
-Pass jcmt database handle already being used if desired ...
-
-  $xfer->dbhandle( $dbh );
+  $xfer = JSA::DB::TableTransfer->new( 'dbhandle' => $dbh,
+                                        'verbose' => 1
+                                      );
 
 Set replicated state for a file ...
 
@@ -451,7 +449,7 @@ sub mark_transferred_as_deleted {
     join ', ', ( '?' ) x scalar @{ $files };
 
   # Use the same $dbh during a transaction.
-  my $dbh = $self->dbhandle();
+  my $dbh = $self->_dbhandle();
 
   $self->_make_noise( 0, qq[Before marking files as deleted\n] );
 
