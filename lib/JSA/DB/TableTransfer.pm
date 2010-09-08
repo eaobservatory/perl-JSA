@@ -461,7 +461,7 @@ sub mark_transferred_as_deleted {
   $self->_make_noise( 1, join( "  \n", @alt ) . "\n" );
 
   my @affected;
-  my $affected = $self->_run_change_sql( $sql, $dbh, $_state{'transferred'}, @file );
+  my $affected = $self->_run_change_sql( $sql, $_state{'transferred'}, @file );
   push @affected, $affected if $affected;
 
   $dbh->commit if $self->_use_trans();
