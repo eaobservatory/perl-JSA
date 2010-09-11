@@ -11,7 +11,6 @@ JSA::DB::TableTransfer - Check file replication, transfer files to CADC
 Make an object ...
 
   $xfer = JSA::DB::TableTransfer->new( 'dbhandle' => $dbh,
-                                        'verbose' => 1
                                       );
 
 Set replicated state for a file ...
@@ -47,6 +46,7 @@ use List::Util qw[ min sum ];
 use List::MoreUtils qw[ any ];
 
 use JAC::Setup qw[ omp ];
+use JSA::Verbosity;
 
 use JSA::Error qw[ :try ];
 use OMP::Config;
@@ -55,6 +55,8 @@ $OMP::Config::DEBUG = 0;
 
 my $_state_table = 'transfer';
 my $_state_descr_table = 'transfer_state';
+
+my $noise = JSA::Verbosity->new();
 
 =head1 METHODS
 
@@ -82,11 +84,9 @@ Make a C<JSA::DB::TableTransfer> object.  It takes a hash of parameters ...
 
   dbhandle     - JSA::DB object, which has succesfully connected to database;
   transactions - (optional) truth value, used when changing tables;
-  verbose      - (optional) set verbosity level; default is 0.
 
   $xfer =
-    JSA::DB::TableTransfer->new( 'verbose'   => 1,
-                                  'dbhandle' => $dbh,
+    JSA::DB::TableTransfer->new( 'dbhandle' => $dbh,
                                 );
 
 Throws L<JSA::Error::BadArgs> error when database handle is invalid object.
@@ -104,7 +104,7 @@ sub new {
 
   my $obj = { };
 
-  for (qw[ dbhandle transactions verbsoe ] ) {
+  for (qw[ dbhandle transactions ] ) {
 
     next unless exists $arg{ $_ };
 
@@ -451,14 +451,14 @@ sub mark_transferred_as_deleted {
   # Use the same $dbh during a transaction.
   my $dbh = $self->_dbhandle();
 
-  $self->_make_noise( 0, qq[Before marking files as deleted\n] );
+  $noise->make_noise( 0, qq[Before marking files as deleted\n] );
 
   $dbh->begin_work if $self->_use_trans();
 
   my @file = sort @{ $files };
   my @alt  = map { _fix_file_name( $_ ) } @file;
 
-  $self->_make_noise( 1, join( "  \n", @alt ) . "\n" );
+  $noise->make_noise( 1, join( "  \n", @alt ) . "\n" );
 
   my @affected;
   my $affected = $self->_run_change_sql( $sql, $_state{'transferred'}, @file );
@@ -469,31 +469,6 @@ sub mark_transferred_as_deleted {
   my $sum = 0;
   $sum += $_ for @affected;
   return $sum;
-}
-
-=item B<verbose>
-
-If nothing is given, then returns the current verbosity level.
-
-  $xfer->verbose() and warn "Verbose mode set";
-
-Sets verbosity level, given an integer.
-
-  $xfer->verbose( 2 );
-
-=cut
-
-sub verbose {
-
-  my $self = shift @_;
-
-  $self->{'verbose'} = 0
-    unless defined $self->{'verbose'};
-
-  return $self->{'verbose'} unless scalar @_;
-
-  $self->{'verbose'} = 0 + shift @_;
-  return;
 }
 
 =item B<_dbhandle>
@@ -526,7 +501,7 @@ sub _get_files {
 
   my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
 
-  $self->_make_noise( 1, "Getting files from JAC database with state '${state}'\n" );
+  $noise->make_noise( 1, "Getting files from JAC database with state '${state}'\n" );
 
   my $dbh = $self->_dbhandle();
 
@@ -662,7 +637,7 @@ sub _change_add_state {
     : sub { return $self->_update( @_ ) ; }
     ;
 
-  $self->_make_noise( 0,
+  $noise->make_noise( 0,
                       ( 'add' eq $mode
                         ? qq[Before adding]
                         : qq[Before setting]
@@ -675,7 +650,7 @@ sub _change_add_state {
 
     my $alt = _fix_file_name( $file );
 
-    $self->_make_noise( 1, qq[  ${alt}\n] );
+    $noise->make_noise( 1, qq[  ${alt}\n] );
 
     # Explicitly pass $dbh.
     my $affected = $run->( 'file'     => $alt,
@@ -758,18 +733,6 @@ sub _check_state {
   throw JSA::Error::BadArgs
     sprintf "Unknown state type, %s, given, exiting ...\n",
       ( defined $type ? $type : 'undef' );
-}
-
-sub _make_noise {
-
-  my ( $self, $min, @msg ) = @_;
-
-  return unless scalar @msg;
-
-  ( $min || 0 ) < $self->verbose()
-    and print STDERR @msg;
-
-  return;
 }
 
 
