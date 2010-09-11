@@ -65,14 +65,11 @@ Make a C<JSA::DB> object.  It takes a hash of parameters ...
   db-config - pass file name with database log in information in "ini" format;
               default is /home/jcmtarch/enterdata-cfg/enterdata.cfg;
 
-  verbose   - (optional) set verbosity level; default is 0;
-
   name      - (optional) pass a string to differentiate db connections
               with same log in configuration; default is 'JSA::DB'.
 
   $jdb =
-    JSA::DB->new( 'verbose'   => 1,
-                  'name'      => 'JSA::DB'
+    JSA::DB->new( 'name'      => 'JSA::DB'
                   'db-config' =>
                     '/home/jcmtarch/enterdata-cfg/enterdata.cfg',
                 );
@@ -92,8 +89,6 @@ sub new {
     $obj->{ $k } =
       exists $arg{ $k } ? $arg{ $k } : $_config{ $k } ;
   }
-
-  $noise->verbose( delete $obj->{'verbose'} );
 
   $obj = bless $obj, $class;
   $obj->use_transaction( 1 );
