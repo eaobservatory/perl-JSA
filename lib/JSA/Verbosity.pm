@@ -60,23 +60,21 @@ instance is returned.
       if ! $force
       && defined $_obj && ref $_obj;
 
-    $level = 0
-      unless defined $level;
+    $level =
+      defined $level
+      ? 0 + $level
+      : 0
+      ;
 
-    $_obj = 0 + $level;
-    return $_obj = bless \$_obj, $class;
+    return $_obj = bless \$level, $class;
   }
 }
 
 =item B<verbose>
 
-If nothing is given, then returns the current verbosity level.
+Returns the current verbosity level.
 
   $noise->verbose() and warn "Verbose mode set";
-
-Sets verbosity level to the given integer.
-
-  $noise->verbose( 2 );
 
 =cut
 
@@ -84,10 +82,7 @@ sub verbose {
 
   my $self = shift @_;
 
-  return ${ $self } unless scalar @_;
-
-  ${ $self } = 0 + shift @_;
-  return;
+  return ${ $self };
 }
 
 =item B<make_noise>
