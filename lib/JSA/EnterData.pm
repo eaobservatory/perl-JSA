@@ -2798,9 +2798,10 @@ sub _print_text {
     return $xfer if $xfer;
 
     return
-      JSA::DB::TableTransfer->new(  'dbhandle'     => $dbh,
-                                    'transactions' => 0,
-                                  );
+      $xfer =
+        JSA::DB::TableTransfer->new(  'dbhandle'     => $dbh,
+                                      'transactions' => 0,
+                                    );
   }
 }
 
