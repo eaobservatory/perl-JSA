@@ -56,8 +56,6 @@ $OMP::Config::DEBUG = 0;
 my $_state_table = 'transfer';
 my $_state_descr_table = 'transfer_state';
 
-my $noise = JSA::Verbosity->new();
-
 =head1 METHODS
 
 All the C<get_*_files> methods will be changed to not require partial file name
@@ -451,6 +449,7 @@ sub mark_transferred_as_deleted {
   # Use the same $dbh during a transaction.
   my $dbh = $self->_dbhandle();
 
+  my $noise = JSA::Verbosity->new();
   $noise->make_noise( 0, qq[Before marking files as deleted\n] );
 
   $dbh->begin_work if $self->_use_trans();
@@ -501,6 +500,7 @@ sub _get_files {
 
   my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
 
+  my $noise = JSA::Verbosity->new();
   $noise->make_noise( 1, "Getting files from JAC database with state '${state}'\n" );
 
   my $dbh = $self->_dbhandle();
@@ -637,6 +637,7 @@ sub _change_add_state {
     : sub { return $self->_update( @_ ) ; }
     ;
 
+  my $noise = JSA::Verbosity->new();
   $noise->make_noise( 0,
                       ( 'add' eq $mode
                         ? qq[Before adding]

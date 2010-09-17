@@ -39,8 +39,6 @@ use OMP::Constants qw [ :status ];
 
 $OMP::Config::DEBUG = 0;
 
-my $noise = JSA::Verbosity->new();
-
 my %_config =
   (
     'verbose' => 0,
@@ -126,6 +124,7 @@ sub dbhandle {
     return connect_to_db( $self->{'db-config'}, $self->_name );
   }
 
+  my $noise = JSA::Verbosity->new();
   $noise->make_noise( 0, "Setting external database handle." );
 
   $self->{ $extern } = shift @_;
@@ -459,6 +458,7 @@ sub _run_change_loop {
 
   $dbh->begin_work if $self->use_transaction();
 
+  my $noise = JSA::Verbosity->new();
   $noise->make_noise( 2, qq[SQL: $sql] );
 
   my @affected;
