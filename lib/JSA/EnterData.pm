@@ -2797,14 +2797,10 @@ sub _print_text {
 
     return $xfer if $xfer;
 
-    $xfer =
+    return
       JSA::DB::TableTransfer->new(  'dbhandle'     => $dbh,
                                     'transactions' => 0,
                                   );
-
-    $xfer->verbose( $self->verbosity );
-
-    return $xfer;
   }
 }
 
