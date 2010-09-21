@@ -331,7 +331,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_16G;
     }
 
-    if ( exists $DR_RECIPES{$obs->projectid} ) {
+    # Only use an override recipe for science observations
+    if ( exists $DR_RECIPES{$obs->projectid} && $obstype eq 'SCIENCE' ) {
       $current{drparams} = $DR_RECIPES{$obs->projectid};
     }
 
