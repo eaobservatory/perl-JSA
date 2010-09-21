@@ -336,6 +336,17 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $current{drparams} = $DR_RECIPES{$obs->projectid};
     }
 
+    # Use project based recipe parameter file if this is science and not
+    # a standard
+    if ( $obstype eq 'SCIENCE' && ! $hdr->{STANDARD}) {
+      # We use this for all modes since the parameter file is relevant
+      # for both night and project processing.
+      my $pid = $hdr->{PROJECT};
+      if (defined $pid) {
+        $current{recpars} = "recpars-$pid.ini";
+      }
+    }
+
     # with no subheaders sometimes we get an empty hash so we check for that
     if( exists $hdr->{SUBHEADERS} &&
         defined $hdr->{SUBHEADERS} &&
@@ -420,9 +431,6 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     try {
       my %opts;
       $opts{'mode'} = ( exists $groups{$group}{mode} ? $groups{$group}{mode} : $mode);
-      if( $mode eq 'project' ) {
-        $opts{'project'} = $project;
-      }
       $opts{priority} = $priority if defined $priority;
       $opts{queue} = $queue if defined $queue;
       if ( exists $groups{$group}{drparams} ) {
@@ -431,6 +439,11 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       if (exists $groups{$group}{dprecipe}) {
         $opts{dprecipe} = $groups{$group}{dprecipe};
+      }
+
+      # recpars could be part of drparams but for now we let the CADC_DP code handle it
+      if (exists $groups{$group}{recpars}) {
+        $opts{recpars} = $groups{$group}{recpars};
       }
 
       $opts{tag} = $group;
@@ -591,6 +604,7 @@ sub assign_to_group {
   push @{$groups->{$group}{files}}, @files;
   $groups->{$group}{mode} = $current{mode};
   $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
+  $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
   # Only set if either we have no previous value for dprecipe or if the
   # previous value is lower than the current value (so this observation
   # needs more resources than a previous group member)

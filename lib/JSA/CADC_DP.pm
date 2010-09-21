@@ -120,8 +120,8 @@ following optional keys:
 
  - tag: String to associate with this recipe (usually the ASN_ID)
  - mode: Grouping mode ("night", "project", "public")
- - project: A recipe parameters override. Assumes a recpars-$project.ini
-            recipe file exists in ORAC-DR.
+ - recpars: A recipe parameters override. Assumes that a recipe parameter
+            file name is given as used by ORAC-DR.
  - priority: Relative priority of job as an integer. Default
              priority will be -1. Range is between -500 and 0.
  - queue: Name of CADC processing queue (can be undef)
@@ -143,7 +143,7 @@ sub create_recipe_instance {
   my $options = shift;
 
   my $mode = $options->{'mode'};
-  my $project = defined( $options->{'project'} ) ? uc( $options->{'project'} ) : undef;
+  my $recpars = defined( $options->{recpars} ) ? uc( $options->{recpars} ) : undef;
   my $queue = ( defined $options->{queue} ? uc( $options->{queue} ) : undef );
   my $drparams = ( defined $options->{drparams} ? $options->{drparams} : "" );
   my $tag = $options->{tag};
@@ -263,12 +263,12 @@ ENDRECIPEID
   $dp_recipe_instance{project} = $queue if defined $queue;
 
   # DR parameters
-  if ( defined $mode || defined $project ) {
+  if ( defined $mode || defined $recpars || defined $drparams) {
     my @paramlist;
     push(@paramlist, "-mode='$mode'") if defined $mode;
 
     my @droptions;
-    push(@droptions, "-recpars recpars-$project.ini") if defined $project;
+    push(@droptions, "-recpars $recpars") if defined $recpars;
     push(@droptions, $drparams) if $drparams;
     push(@paramlist, "-drparameters='". join(" ", @droptions) ."'")
       if @droptions;
