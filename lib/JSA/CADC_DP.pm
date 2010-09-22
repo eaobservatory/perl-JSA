@@ -143,7 +143,7 @@ sub create_recipe_instance {
   my $options = shift;
 
   my $mode = $options->{'mode'};
-  my $recpars = defined( $options->{recpars} ) ? uc( $options->{recpars} ) : undef;
+  my $recpars = ( defined( $options->{recpars} ) ? $options->{recpars} : undef );
   my $queue = ( defined $options->{queue} ? uc( $options->{queue} ) : undef );
   my $drparams = ( defined $options->{drparams} ? $options->{drparams} : "" );
   my $tag = $options->{tag};
