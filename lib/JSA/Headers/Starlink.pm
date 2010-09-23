@@ -64,20 +64,13 @@ sub update_fits_headers {
   my $options = shift;
   my $mode = lc( $options->{'mode'} );
 
-  # Make sure we actually need to do this. FITSMOD adds a new
-  # card even if it already exists.
-
   check_star_env( "KAPPA", "fitsmod" );
 
-  my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "fitsmod"),
-               "NDF=$file",
-               "KEYWORD=INSTREAM",
-               "VALUE=JCMT",
-               "COMMENT=\"Source of input stream\"",
-               "EDIT=AMEND",
-               "POSITION=\!" );
-
-  run_star_command( @args );
+  # We will always be writing one header but with the possibility
+  # of more. For efficiency we only want to call FITSMOD once
+  # so we create a command file
+  my $tmpfile = File::Temp->new();
+  print $tmpfile "A INSTREAM JCMT Source of input stream\n";
 
   # Get the FITS headers.
   my $header = read_header( $file );
@@ -90,27 +83,21 @@ sub update_fits_headers {
     if( $mode eq 'project' ) {
       # Fix the ASN_TYPE header if we are a project and this is
       # an association (group coadd).
-      @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
-                "NDF=$file",
-                "KEYWORD=ASN_TYPE",
-                "VALUE=project",
-                "COMMENT=\$C",
-                "EDIT=AMEND",
-                "POSITION=\!" );
-      run_star_command( @args );
+      print $tmpfile "A ASN_TYPE project \$C\n";
     }
 
     # Write the ASN_ID header back into the FITS header.
-    @args = ( File::Spec->catfile( $ENV{'KAPPA_DIR'}, "fitsmod" ),
-              "NDF=$file",
-              "KEYWORD=ASN_ID",
-              "VALUE=$asn_id",
-              "COMMENT=\$C",
-              "EDIT=AMEND",
-              "POSITION=\!" );
-
-    run_star_command( @args );
+    print $tmpfile "A ASN_ID $asn_id \$C\n";
   }
+
+  close($tmpfile);
+  my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "fitsmod"),
+               "NDF=$file",
+               "MODE=File",
+               "TABLE=$tmpfile"
+             );
+
+  run_star_command( @args );
 }
 
 =item B<add_fits_comments>
@@ -157,7 +144,7 @@ Brad Cavanagh E<lt>b.cavanagh@jach.hawaii.eduE<gt>,
 
 =head1 COPYRIGHT
 
-Copyright (C) 2009 Science and Technology Facilities Council.
+Copyright (C) 2009-2010 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
