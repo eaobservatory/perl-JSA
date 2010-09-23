@@ -48,7 +48,8 @@ use warnings;
 use FindBin;
 
 use File::Temp;
-use List::MoreUtils qw[ any ];
+use List::MoreUtils qw[ any all ];
+use List::Util qw[ min max ];
 use Scalar::Util qw[ blessed looks_like_number ];
 
 use Astro::Coords::Angle::Hour;
@@ -1509,13 +1510,17 @@ sub prepare_update_hash {
   # one entry can be returned - we trap that because FILES for the minute
   # should not need updating
 
-
   my $sql = 'select * ';
 
+  my ( %start, %end );
   if ( $table eq 'COMMON' ) {
 
     my %col_date;
     @col_date{ JSA::DB::TableCOMMON::date_columns() } = ();
+
+    my %range = JSA::DB::TableCOMMON::range_columns();
+    @start{ keys %range } = ();
+    @end{ values %range } = ();
 
     $sql = 'select '
             . join ', ',
@@ -1549,62 +1554,94 @@ sub prepare_update_hash {
   my $indb = $ref->[0];
 
   my %differ;
+  my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
+  my $am_pm_end = qr/\d\d[APM]$/;
 
   for my $key ( sort keys %{$indb} ) {
 
-    # since that will update automatically
-    next if $key eq 'last_modified';
+    next
+      # since that will update automatically
+      if $key eq 'last_modified'
+      || ! exists $field_values->{$key};
 
-    if (exists $field_values->{$key}) {
+    my $new = $field_values->{$key};
+    my $old = $indb->{$key};
 
-      my $new = $field_values->{$key};
-      my $old = $indb->{$key};
+    next if all { ! defined $_ } ( $old, $new );
 
-      if (defined $new && defined $old) {
+    # Not defined currently - inserting new value.
+    if ( defined $new && ! defined $old ) {
 
-        # Dates
-        if ($old =~ /\d\d[AP]M$/ && $new =~ /^\d\d\d\d-\d\d-\d\d/) {
+      $differ{$key} = $new;
+      next;
+    }
 
-          $new = $old
-            unless _compare_dates( $new, $old );
-        }
+    # Defined in DB but undef in new version - not expecting this but assume
+    # this means a null.
+    if ( ! defined $new && defined $old) {
 
-        if (looks_like_number($new)) {
+      $differ{$key} = undef;
+      next;
+    }
 
-          if ($new =~ /\./) {
+    my %test =
+      ( 'start' => exists $start{ $key },
+        'end'   => exists $end{ $key },
+        'old'   => $old,
+        'new'   => $new,
+      );
+    my $in_range = any { $test{ $_ } } (qw[ start end ]);
 
-            # floating point
-            my $diff = abs($old - $new);
-            if ($diff > 0.000001) {
+    # Dates.
+    if ( $new =~ $ymd_start && ( $old =~ $ymd_start || $old =~ $am_pm_end ) ) {
 
-              $differ{$key} = $new;
-              # $self->_print_text( "$key :Floating point $new != $old ($diff)\n" );
-            }
-          } elsif ($new != $old) {
+      if ( $in_range ) {
 
-            $differ{$key} = $new;
-          }
-        } else {
-
-          # string compare
-          if ($new ne $old) {
-
-            $differ{$key} = $new;
-          }
-        }
-      } elsif (defined $new) {
-
-        # not defined currently - inserting new value
-        $differ{$key} = $new;
-      } elsif (defined $old) {
-
-        # defined in DB but undef in new version - not expecting this but assume this
-        # means a null
-        $differ{$key} = undef;
-      } else {
-
-        # both undef so nothing to do
+        $new = _find_extreme_value( %test,
+                                    'new>old' => _compare_dates( $new, $old )
+                                  );
       }
+
+      if ( $new ne $old ) {
+
+        $differ{ $key } = $new;
+      }
+
+      next;
+    }
+
+    if (looks_like_number($new)) {
+
+      if ( $in_range ) {
+
+        $new = _find_extreme_value( %test, 'new>old' => $new > $old );
+
+        $differ{ $key } = $new if $new != $old;
+      }
+      else {
+
+        if ($new =~ /\./) {
+
+          # floating point
+          my $diff = abs($old - $new);
+          if ($diff > 0.000001) {
+
+            $differ{$key} = $new;
+          }
+        }
+        elsif ( $new != $old ) {
+
+          $differ{$key} = $new;
+        }
+      }
+
+      next;
+    }
+
+    # String.
+    if ( $new ne $old ) {
+
+      $differ{ $key } = $new;
     }
   }
 
@@ -2817,6 +2854,29 @@ sub _compare_dates {
   $old = make_datetime( $old );
 
   return $new > $old;
+}
+
+
+sub _find_extreme_value {
+
+  my ( %arg ) = @_;
+
+  my $gt = $arg{ 'new>old' };
+  my ( $old, $new, $start, $end ) = @arg{qw[ old new start end ]};
+
+  # Smaller|earlier value.
+  if ( $start ) {
+
+    return ! $gt ? $new : $old ;
+  }
+
+  # Larger|later value.
+  if ( $end ) {
+
+    return $gt ? $new : $old;
+  }
+
+  throw JSA::Error "Neither 'start' nor 'end' type was specified";
 }
 
 
