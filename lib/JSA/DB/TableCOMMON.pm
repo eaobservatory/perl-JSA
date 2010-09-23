@@ -47,6 +47,45 @@ sub date_columns {
       ];
 }
 
+sub range_start_columns {
+
+  return
+    qw[
+        amstart atstart azstart
+        bklegtst bpstart
+        date_obs
+        frlegtst
+        hststart humstart
+        msstart
+        seedatst seeingst seqstart
+        tau225st taudatst
+        wnddirst wndspdst wvmdatst wvmtaust
+    ];
+}
+
+sub range_end_columns {
+
+  return
+    qw[
+        amend atend azend
+        bklegten bpend
+        date_end
+        frlegten
+        hstend humend
+        msend
+        seedaten seeingen seqend
+        tau225en taudaten
+        wnddiren wndspden wvmdaten wvmtauen
+      ];
+}
+
+sub range_columns {
+
+  my %range;
+  @range{ range_start_columns() } = range_end_columns();
+  return %range;
+}
+
 
 1;
 
