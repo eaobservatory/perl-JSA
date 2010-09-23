@@ -48,7 +48,7 @@ use warnings;
 use FindBin;
 
 use File::Temp;
-use List::Util qw[ first ];
+use List::MoreUtils qw[ any ];
 use Scalar::Util qw[ blessed looks_like_number ];
 
 use Astro::Coords::Angle::Hour;
@@ -278,10 +278,10 @@ sub instruments {
   for my $inst ( @_ ) {
 
     throw JSA::Error "Instrument '$inst' is unknown."
-      unless first { blessed $_ eq blessed $inst }
-              ( JSA::EnterData::ACSIS->new,
-                JSA::EnterData::SCUBA2->new
-              ) ;
+      unless any { blessed $_ eq blessed $inst }
+                  ( JSA::EnterData::ACSIS->new,
+                    JSA::EnterData::SCUBA2->new
+                  ) ;
   }
 
   $self->{'instruments'} = [ @_ ];
@@ -837,16 +837,16 @@ sub _filter_header {
       my $present = $href->{ $key };
       return
         defined $present
-        && first
+        && any
             { looks_like_number( $_ )
                 ? $present == $_
                 : $present eq $_
-              }
-              ( ref $ignore{ $key }
-                ? @{ $ignore{ $key } }
-                : $ignore{ $key }
-              )
-              ;
+            }
+            ( ref $ignore{ $key }
+              ? @{ $ignore{ $key } }
+              : $ignore{ $key }
+            )
+            ;
 
       };
 
