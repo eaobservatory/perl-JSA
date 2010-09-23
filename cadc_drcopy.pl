@@ -12,7 +12,7 @@ CADC-compatible FITS files.
 =head1 DESCRIPTION
 
 This program is used to convert files created by ORAC-DR into FITS
-files that can be injested by the CADC.
+files that can be ingested by the CADC.
 
 =head1 ARGUMENTS
 

@@ -134,7 +134,7 @@ sub convert_to_ndf {
 =item B<convert_dr_files>
 
 Convert a list of ORAC-DR-created files into FITS files in preparation
-for injest by CADC.
+for ingest by CADC.
 
   convert_dr_files( $hashref, \%options );
 

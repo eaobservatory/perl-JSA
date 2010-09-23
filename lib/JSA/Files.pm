@@ -76,7 +76,7 @@ my $JCMTINFO = "/home/cadcops/bin/jcmtInfo";
 =item B<can_send_to_cadc>
 
 Determine whether or not an NDF can be converted to a FITS file for
-injest by CADC.
+ingest by CADC.
 
   $convert = can_send_to_cadc( $header );
 
