@@ -151,6 +151,8 @@ allowed keys:
  - outdir: the output directory
  - tempdir: a temporary directory for file conversion.
  - mode: Processing mode ("obs", "night", "project", "public").
+ - dpid: Recipe instance ID for data processing
+ - dpdate: ISO8601 date to assign to each converted file
 
 =cut
 
@@ -159,6 +161,8 @@ sub convert_dr_files {
 
   my $opts = shift;
   my $mode = $opts->{'mode'};
+  my $dpid = $opts->{dpid};
+  my $dpdate = $opts->{dpdate};
 
   my @pngs;
 
@@ -202,7 +206,9 @@ sub convert_dr_files {
         # headers regardless of how the pipeline was configured.
         set_wcs_attribs( $tfile );
 
-        update_fits_headers( $tfile, { "mode" => $mode } );
+        update_fits_headers( $tfile, { "mode" => $mode,
+                                       "dpid" => $dpid,
+                                       "dpdate" => $dpdate, } );
 
         my @comments = cadc_ack();
         add_fits_comments( $tfile, \@comments ) if @comments;

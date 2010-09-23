@@ -170,6 +170,7 @@ use Pod::Usage;
 use File::Spec;
 use File::Temp;
 use Carp;
+use DateTime;
 use Data::Dumper;
 use Astro::FITS::Header;
 use Astro::FITS::Header::NDF;
@@ -637,7 +638,8 @@ my @drfiles = compare_file_lists( \%post_retrieve, \%post_process );
 my %drhdrs = read_headers( @drfiles );
 
 # And convert those files that have valid PRODUCT headers.
-convert_dr_files( \%drhdrs, { "mode" => $mode } );
+convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
+                              dpdate => DateTime->now->datetime } );
 
 # cleanup for CADC if required
 if ($cleanup eq 'cadc') {

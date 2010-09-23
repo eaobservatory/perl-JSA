@@ -49,10 +49,12 @@ This function updates one FITS header:
 This function takes one mandatory argument: the NDF file to be
 updated.
 
-This function takes one optional argument: a hash reference with the
+This function takes the following optional arguments: a hash reference with the
 following allowed keys:
 
  - mode: Processing mode ("night", "project", "public")
+ - dpdate: Date of processing in ISO8601 format
+ - dpid  : Recipe instance ID associated with this processing
 
 This function does not return anything.
 
@@ -88,6 +90,13 @@ sub update_fits_headers {
 
     # Write the ASN_ID header back into the FITS header.
     print $tmpfile "A ASN_ID $asn_id \$C\n";
+  }
+
+  if (exists $options->{dpdate} && defined $options->{dpdate}) {
+    print $tmpfile "A DPDATE ".$options->{dpdate}." Data processing date\n";
+  }
+  if (exists $options->{dpid} && defined $options->{dpid}) {
+    print $tmpfile "A DPRCINST ".$options->{dpid}." Data processing recipe instance ID\n";
   }
 
   close($tmpfile);
