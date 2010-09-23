@@ -131,11 +131,11 @@ if (@ARGV) {
   @files = sort keys %files;
 }
 
-print "Opening ".@files." files\n" if $debug;
+print "Opening ".@files." file".(@files == 1 ? "" : "s")."\n" if $debug;
 my %drhdrs = read_headers( @files );
 if ($debug) {
   my @files = keys %drhdrs;
-  print "Read ".@files." headers\n";
+  print "Read ".@files." header".(@files == 1 ? "" : "s")."\n";
 }
 if ($list) {
   # List what would happen (assuming headers are okay)
