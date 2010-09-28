@@ -154,7 +154,7 @@ BEGIN {
 
 Given a header hash reference, returns an array of hash references of
 headers grouped by subarray.  The returned headers have subheaders
-with subarray appended, "obsid_subsynr" field filled in (see
+with subarray appended, "obsid_subsysnr" field filled in (see
 I<transform_subheader> method).
 
   @grouped = $scuba2->transform_header( \%header );
@@ -721,7 +721,7 @@ I<transform_subheader> method.
 
 =cut
 
-#  transform_header() takes care of the obsid_subsynr value.
+#  transform_header() takes care of the obsid_subsysnr value.
 sub _fill_headers_obsid_subsys { }
 
 =item B<append_array_column>
@@ -846,27 +846,30 @@ sub fill_max_subscan {
 
   my ( $self, $header, $obs ) = @_;
 
-  my %file;
-  my $max_k  = 'max_subscan';
-  my $subh_k = 'SUBHEADERS';
-
+  my $max_k      = 'max_subscan';
+  my $subh_k     = 'SUBHEADERS';
+  my $subar_k    = 'SUBARRAY';
   my $wavelen_re = qr/^(s[48])[a-d]/;
-  for my $f ( $obs->simple_filename ) {
+
+  my $id_k = _find_obsidss_key( $header );
+  my $a_subheader = exists $header->{ $subh_k };
+
+  # Collect files from obs & from database.
+  my %file;
+  for my $f ( _collect_files_from_obs_db( $header, $obs ) ) {
 
     my ( $type ) = ( $f =~ $wavelen_re )[0] or next;
     push @{ $file{ $type } } , $f;
   }
 
-  my $id_k   = _find_obsidss_key( $header );
   # OBSIDSS key is in main header which means only one type of
   # subarray were present.
-  if ( $id_k || ! exists $header->{ $subh_k } ) {
+  if ( $id_k || ! $a_subheader ) {
 
     $header->{ $max_k } = scalar map { @{ $_ } } values %file;
     return;
   }
 
-  my $subar_k = 'SUBARRAY';
   for my $sh ( @{ $header->{ $subh_k } } ) {
 
     next unless exists $sh->{ $subar_k };
@@ -909,6 +912,53 @@ sub _find_obsidss_key {
   }
 
   return;
+}
+
+sub _collect_files_from_obs_db {
+
+  my ( $header, $obs ) = @_;
+
+  my @idss;
+  my $idss_k = _find_obsidss_key( $header );
+  if ( $idss_k ) {
+
+    push @idss, $header->{ $idss_k };
+  }
+  elsif ( exists $header->{'SUBHEADERS'} ) {
+
+    for my $sub ( @{ $header->{'SUBHEADERS'} } ) {
+
+      $idss_k = _find_obsidss_key( $sub ) or next;
+      push @idss, $sub->{ $idss_k };
+    }
+  }
+  my @file_db  = _db_files_for_obsidss( @idss );
+
+  my %file;
+  @file{ ( @file_db,  $obs->simple_filename ) } = ();
+
+  return sort keys %file;
+}
+
+sub _db_files_for_obsidss {
+
+  my ( @obsidss ) = @_;
+
+  return unless scalar @obsidss;
+
+  my $where =
+    sprintf 'obsid_subsysnr IN (%s)', join ', ' , ('?') x scalar @obsidss;
+
+  require JSA::DB;
+  my $db    = JSA::DB->new( 'name' => __PACKAGE__ );
+  my $files = $db->select_t( 'table'    => 'FILES',
+                              'columns' => [ 'file_id' ],
+                              'where'   => [ $where ],
+                              'values'  => [ @obsidss ],
+                            )
+                            or return;
+
+  return map { $_->{'file_id'} } @{ $files };
 }
 
 
