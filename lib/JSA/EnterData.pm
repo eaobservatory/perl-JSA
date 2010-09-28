@@ -1094,13 +1094,15 @@ sub add_subsys_obs {
                             );
       }
 
-      if ( $inst->can( 'merge_by_obsidss' ) ) {
+      if ( $inst->can( 'merge_by_obsidss' )
+           && exists $subsys_hdrs->{'SUBHEADERS'}
+          ) {
 
-        my $tmp;
-        $tmp = $subsys_hdrs->{'SUBHEADERS'}
-          if exists $subsys_hdrs->{'SUBHEADERS'};
+        my $sys_sub = $subsys_hdrs->{'SUBHEADERS'};
+        my @temp = $inst->merge_by_obsidss( $sys_sub );
 
-        @{ $subh } = $inst->merge_by_obsidss( $tmp );
+        @{ $sys_sub } = @temp
+          if scalar @temp;
       }
 
       $error =
