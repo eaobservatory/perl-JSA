@@ -672,8 +672,8 @@ sub group_by_subarray {
 
 =item B<merge_by_obsidss>
 
-Returns a list of hash references grouped by C<obsid_subsysnr>, given
-an array reference of subheaders.
+Returns an array reference of hash references grouped by
+C<obsid_subsysnr>, given an array reference of subheaders.
 
 Throws L<JSA::Error> exception if a hash reference is missing
 C<obsid_subsys>.
@@ -711,7 +711,7 @@ sub merge_by_obsidss {
       );
   }
 
-  return @obsidss{ @order };
+  return [ @obsidss{ @order } ];
 }
 
 =item B<_fill_headers_obsid_subsys>
