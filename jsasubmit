@@ -156,6 +156,7 @@ if( defined( $project ) ) {
 #  to the group. We only need to override blank field observations for SCUBA-2
 
 my %DR_RECIPES = (
+                  M09BGT01 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
                   M09BI152 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
                   M09BI155 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
                   M09BI143 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
