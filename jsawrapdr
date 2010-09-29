@@ -314,11 +314,12 @@ if (exists $ENV{TMPDIR}) {
     }
 
     # Check to see if there's a CADC_THREADS environment variable
-    # telling us how many threads to use. If it's not set, force the
-    # number of threads to 1.  Force the number of threads to 1.
-    $ENV{'SMURF_THREADS'} = ( defined( $ENV{'CADC_THREADS'} ) ?
-                              $ENV{'CADC_THREADS'}            :
-                              1 );
+    # telling us how many threads to use. If it's not set, we will
+    # assume we can use whatever we want and won't set the env
+    # variable.
+    if (exists $ENV{CADC_THREADS} && defined $ENV{CADC_THREADS}) {
+      $ENV{SMURF_THREADS} = $ENV{CADC_THREADS};
+    }
   }
 }
 
