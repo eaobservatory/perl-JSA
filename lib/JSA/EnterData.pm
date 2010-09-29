@@ -54,7 +54,7 @@ use Scalar::Util qw[ blessed looks_like_number ];
 use Astro::Coords::Angle::Hour;
 
 use JSA::Headers qw/ read_jcmtstate read_wcs /;
-use JSA::Datetime;
+use JSA::Datetime qw[ make_datetime ];
 use JSA::DB::TableCOMMON;
 use JSA::EnterData::ACSIS;
 use JSA::EnterData::SCUBA2;
@@ -2813,8 +2813,8 @@ sub _compare_dates {
   # without a 'T'.
   $new =~ s/ /T/;
 
-  $new = JSA::Datetime::make( $new );
-  $old = JSA::Datetime::make( $old );
+  $new = make_datetime( $new );
+  $old = make_datetime( $old );
 
   return $new > $old;
 }
