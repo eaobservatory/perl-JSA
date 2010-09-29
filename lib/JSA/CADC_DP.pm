@@ -48,6 +48,7 @@ The following constants are available to define a data processing recipe.
 
  CADC_DPREC_8G  - 8GB 64bit system
  CADC_DPREC_16G - 16GB 64bit system
+ CADC_DPREC_64G - 64GB 64bit systems
 
 You can assume they are numerical constants where a higher value indicates
 more resources are required.
@@ -60,6 +61,7 @@ more resources are required.
 # constant to a dprecipe tag known to the processing system
 use constant CADC_DPREC_8G => 8;
 use constant CADC_DPREC_16G => 16;
+use constant CADC_DPREC_64G => 64;
 
 =head1 FUNCTIONS
 
@@ -178,6 +180,7 @@ sub create_recipe_instance {
   my %DPRECMAP = (# Do not use => as the key is the value of the constant
                   CADC_DPREC_8G, "8G",
                   CADC_DPREC_16G, "16G",
+                  CADC_DPREC_64G, "64G",
                );
 
   # Work out the corresponding string

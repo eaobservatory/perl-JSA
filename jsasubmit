@@ -318,14 +318,19 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_8G;
     if ( $instrume eq 'SCUBA-2' ) {
       my $duration = $obs->endobs - $obs->startobs;
-      # We currently have a problem with the database ingestion so we
-      # do not really know the duration of the observation. We therefore
-      # count the number of files as a surrogate (noting that this count
-      # includes all subarrays so we need to divide by two for the
-      # wavelength); This is not accurate.
+      # We count the number of files as a surrogate for required
+      # computing resources since we know each file is roughly
+      # same length. Assume 2 subsytems.
       my @files = $obs->filename;
       my $nfiles = @files / 2;
-      if ($nfiles > 35) {
+      # As of 20100929
+      # 16 files => 6.2 GB
+      # 22 files => 8.8GB
+      # 27 files => 10.7GB
+      # 62 files => 26.2 GB
+      if ($nfiles > 30) {
+        $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_64G;
+      } elsif ($nfiles > 16) {
         $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_16G;
       }
     } elsif ( $instrume eq 'HARP' && $hdr->{SAM_MODE} =~ /scan|raster/i) {
