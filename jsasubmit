@@ -332,18 +332,18 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_16G;
     }
 
-    # Only use an override recipe for science observations
-    if ( exists $DR_RECIPES{$obs->projectid} && $obstype eq 'SCIENCE' ) {
-      $current{drparams} = $DR_RECIPES{$obs->projectid};
-    }
-
-    # Use project based recipe parameter file if this is science and not
-    # a standard
+    # Set up recipe parameters and recipe overrides.
+    # We only do this for non-calibrator science observations
     if ( $obstype eq 'SCIENCE' && ! $hdr->{STANDARD}) {
-      # We use this for all modes since the parameter file is relevant
-      # for both night and project processing.
-      my $pid = $hdr->{PROJECT};
+      my $pid = $obs->projectid;
       if (defined $pid) {
+        # Override the recipe?
+        if ( exists $DR_RECIPES{$pid} ) {
+          $current{drparams} = $DR_RECIPES{$pid};
+        }
+
+        # We use this for all modes since the parameter file is relevant
+        # for both night and project processing.
         $current{recpars} = "recpars-$pid.ini";
       }
     }
