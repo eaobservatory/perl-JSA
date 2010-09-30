@@ -180,6 +180,15 @@ my %DR_RECIPES = (
                   M09BH106B => "REDUCE_SCAN_FAINT_POINT_SOURCES",
 );
 
+# HACK 2: The OMP can not yet handle cases where one subsystem has
+# a good data set and the other has a bad data set. Here we list
+# OBSIDSS values for bad subsystems where the other half is good.
+# They will not be included in group processing.
+my @BAD_OBSIDSS = (qw/
+                     scuba2_28_20100223T051545_450
+                     scuba2_29_20100223T052321_450
+                     /);
+my %BAD_OBSIDSS = map { $_ => undef } @BAD_OBSIDSS;
 
 my $grp;
 my $atCADC;
@@ -377,6 +386,16 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       }
 
       for my $obsidss (sort keys %subsystems) {
+        # local copies
+        my $obsidss_not_in_group = $not_in_group;
+        my %obsidss_current = %current;
+
+        if (exists $BAD_OBSIDSS{$obsidss}) {
+          log_message( "Subsystem $obsidss should not be included in group processing\n" );
+          next if $mode ne "night";
+          $obsidss_not_in_group = 1;
+          $obsidss_current{mode} = "obs";
+        }
 
         my $subhdr = $subsystems{$obsidss};
 
@@ -390,8 +409,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
           $tmphdr{'FRQSIGHI'} = $tmphdr{'FREQ_SIG_UPPER'};
         }
 
-        assign_to_group( $instrument, $obs->obsid, $frameclass, $not_in_group,
-                         \%tmphdr, \%current, $tmphdr{FILE_ID}, \%groups );
+        assign_to_group( $instrument, $obs->obsid, $frameclass, $obsidss_not_in_group,
+                         \%tmphdr, \%obsidss_current, $tmphdr{FILE_ID}, \%groups );
       }
     } else {
       assign_to_group( $instrument, $obs->obsid, $frameclass, $not_in_group,
