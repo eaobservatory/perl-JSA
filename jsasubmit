@@ -544,16 +544,21 @@ sub get_obsidss {
 
   # Try not to merge headers if the answer is in the small one
   my $obsidss;
-  for my $k ( qw/ OBSID_SUBSYSNR OBSIDSS SUBSYSNR / ) {
+ KEYS: for my $k ( qw/ OBSID_SUBSYSNR OBSIDSS SUBSYSNR / ) {
     # try each key in turn
     for my $hdr (@hdrs) {
       if (exists $hdr->{$k}) {
         if ($k eq 'SUBSYSNR') {
           $obsidss = $obsid . "_" . $hdr->{$k};
+
+          # HACK: SCUBA-2 has a buggy OBSIDSS in that
+          # the zero-padding is different
+          $obsidss =~ s/^scuba2_0*/scuba2_/;
+
         } else {
           $obsidss = $hdr->{$k};
         }
-        last;
+        last KEYS;
       }
     }
   }
