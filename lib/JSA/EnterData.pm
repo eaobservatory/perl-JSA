@@ -123,20 +123,29 @@ BEGIN {
 
       # Force procssing of simulation if true.
       'process_simulation' => 0,
+
+      # Update only an observation run time.
+      'obstime-only' => 0,
     );
 
   #  Generate some accessor functions.
   for my $k ( keys %default, qw[ conditional_insert ] ) {
 
     next
-      # Dictionary must be given in constructor.
-      if $k eq 'dict'
-      # Special handling when date to set is given.
-      or $k eq 'date'
-      # Validate instruments before setting.
-      or $k eq 'instruments'
-      # Need to check for an array ref.
-      or $k eq 'files'
+      if any { $k eq $_ }
+          (
+            # Must be given in constructor.
+            'dict',
+            'obstime-only',
+            # Special handling when date to set is given.
+            'date',
+            # Validate instruments before setting.
+            'instruments',
+            # Need to check for an array ref.
+            'files',
+            # Need to check for an array ref.
+            'files',
+          )
       # Need to turn off the other if one is true.
       or $k =~ m/^ force-d(?: isk | b ) $/x
       ;
@@ -663,6 +672,23 @@ sub skip_state_setting {
 }
 
 
+=item B<update_only_obstime>
+
+Returns a truth value to inidicate if to update only the times for an
+observattion run.
+
+  print "Only date obs & end will be updated"
+    if $enter->update_only_obstime();
+
+=cut
+
+sub update_only_obstime {
+
+  my ( $self) = @_;
+
+  return $self->{'obstime-only'};
+}
+
 =item B<insert_obs>
 
 Inserts a row  in "FILES", "COMMON", and instrument related tables for
@@ -799,11 +825,14 @@ It is called by I<prepare_and_insert> method.
         next RUN;
       }
 
-      $self->add_subsys_obs( %pass_args,
-                              'db' => $db,
-                              'obs' => $obs->{$runnr},
-                            )
-        or next RUN ;
+      unless ( $self->update_only_obstime() ) {
+
+        $self->add_subsys_obs( %pass_args,
+                                'db' => $db,
+                                'obs' => $obs->{$runnr},
+                              )
+          or next RUN ;
+      }
 
       $db->commit_trans() if $self->load_header_db;
 
@@ -1559,6 +1588,12 @@ sub prepare_update_hash {
   my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
   my $am_pm_end = qr/\d\d[APM]$/;
 
+  my $obs_date_re = qr{\bDATE.(?:OBS|END)\b}i;
+
+  my $only_obstime =
+    $table eq 'COMMON'
+    && $self->update_only_obstime();
+
   for my $key ( sort keys %{$indb} ) {
 
     next
@@ -1566,10 +1601,17 @@ sub prepare_update_hash {
       if $key eq 'last_modified'
       || ! exists $field_values->{$key};
 
+    next
+      if $only_obstime
+      && $key !~ $obs_date_re;
+
     my $new = $field_values->{$key};
     my $old = $indb->{$key};
 
-    next if all { ! defined $_ } ( $old, $new );
+    next
+      if ( all { ! defined $_ } ( $old, $new ) )
+      # Skip setting undef a obs time value.
+      || ( $only_obstime && ! defined $new );
 
     # Not defined currently - inserting new value.
     if ( defined $new && ! defined $old ) {
