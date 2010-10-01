@@ -44,9 +44,9 @@ use Pod::Usage;
 use Getopt::Long qw[ :config gnu_compat no_ignore_case no_debug ];
 use List::Util qw[ min sum ];
 use List::MoreUtils qw[ any ];
+use Log::Log4perl;
 
 use JAC::Setup qw[ omp ];
-use JSA::Verbosity;
 
 use JSA::Error qw[ :try ];
 use OMP::Config;
@@ -449,15 +449,15 @@ sub mark_transferred_as_deleted {
   # Use the same $dbh during a transaction.
   my $dbh = $self->_dbhandle();
 
-  my $noise = JSA::Verbosity->new();
-  $noise->make_noise( 0, qq[Before marking files as deleted\n] );
+  my $log = Log::Log4perl->get_logger();
+  $log->info( 'Before marking files as deleted' );
 
   $dbh->begin_work if $self->_use_trans();
 
   my @file = sort @{ $files };
   my @alt  = map { _fix_file_name( $_ ) } @file;
 
-  $noise->make_noise( 1, join( "  \n", @alt ) . "\n" );
+  $log->debug( join( "  \n", @alt ) );
 
   my @affected;
   my $affected = $self->_run_change_sql( $sql, $_state{'transferred'}, @file );
@@ -500,8 +500,8 @@ sub _get_files {
 
   my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
 
-  my $noise = JSA::Verbosity->new();
-  $noise->make_noise( 1, "Getting files from JAC database with state '${state}'\n" );
+  my $log = Log::Log4perl->get_logger();
+  $log->info( "Getting files from JAC database with state '${state}'" );
 
   my $dbh = $self->_dbhandle();
 
@@ -637,21 +637,21 @@ sub _change_add_state {
     : sub { return $self->_update( @_ ) ; }
     ;
 
-  my $noise = JSA::Verbosity->new();
-  $noise->make_noise( 0,
-                      ( 'add' eq $mode
-                        ? qq[Before adding]
-                        : qq[Before setting]
-                      ),
-                      qq[ '${state}' state for files\n]
-                    );
+  my $log = Log::Log4perl->get_logger();
+  $log->info(
+              ( 'add' eq $mode
+                ? qq[Before adding]
+                : qq[Before setting]
+              ),
+              qq[ '${state}' state for files\n]
+            );
 
   my @affected;
   for my $file ( sort @{ $files } ) {
 
     my $alt = _fix_file_name( $file );
 
-    $noise->make_noise( 1, qq[  ${alt}\n] );
+    $log->debug( qq[  ${alt}\n] );
 
     # Explicitly pass $dbh.
     my $affected = $run->( 'file'     => $alt,
