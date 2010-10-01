@@ -64,13 +64,15 @@ our @EXPORT_OK =
     ];
 
 my $_log_dir = '/jac_logs/jsa';
+$_log_dir = '/tmp' unless -d $_log_dir;
+
 my $_log_file_key = 'log4perl.appender.log.filename';
 
 my %_config =
   ( 'log4perl.rootLogger' => 'DEBUG, log',
 
     'log4perl.appender.log'        => 'Log::Log4perl::Appender::File',
-    $_log_file_key                 => make_logfile( 'default' ),
+    $_log_file_key                 => make_logfile( 'log' ),
     'log4perl.appender.log.mode'   => 'append',
     'log4perl.appender.log.layout' => 'PatternLayout',
 
