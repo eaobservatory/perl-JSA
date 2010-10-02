@@ -10,7 +10,7 @@ JSA::DB - Arranges for database handle given a configuration
 
 Make an object ...
 
-  $jdb = JSA::DB->new( 'verbose' => 1 );
+  $jdb = JSA::DB->new();
 
 Pass jcmt database handle already being used if desired ...
 
@@ -27,12 +27,13 @@ use strict; use warnings;
 
 use List::Util qw[ sum max ];
 use List::MoreUtils qw[ any ];
+use Log::Log4perl;
 
 use JAC::Setup qw[ omp ];
 
 use JSA::Error qw[ :try ];
-use JSA::Verbosity;
 use JSA::DB::Sybase qw[ connect_to_db ];
+use JSA::LogSetup qw[ hashref_to_dumper ];
 
 use OMP::Config;
 use OMP::Constants qw [ :status ];
@@ -41,8 +42,6 @@ $OMP::Config::DEBUG = 0;
 
 my %_config =
   (
-    'verbose' => 0,
-
     'db-config' =>
       '/home/jcmtarch/enterdata-cfg/enterdata.cfg',
       #'/home/agarwal/src/jac-git/archiving/jcmt/.enterdata-cfg/enterdata.cfg',
@@ -51,6 +50,8 @@ my %_config =
 
     'dbhandle' => undef,
   );
+
+my $log;
 
 =head1 METHODS
 
@@ -124,8 +125,8 @@ sub dbhandle {
     return connect_to_db( $self->{'db-config'}, $self->_name );
   }
 
-  my $noise = JSA::Verbosity->new();
-  $noise->make_noise( 0, "Setting external database handle." );
+  $log = Log::Log4perl->get_logger();
+  $log->debug( 'Setting external database handle.' );
 
   $self->{ $extern } = shift @_;
 
@@ -156,6 +157,10 @@ sub use_transaction {
   return $self->{'trans'} unless scalar @_;
 
   $self->{'trans'} = !! shift @_;
+
+  $log = Log::Log4perl->get_logger();
+  $log->trace( 'use transactions ' . $self->{'trans'} ? 1 : 0 );
+
   return;
 }
 
@@ -275,6 +280,9 @@ sub run_select_sql {
   my $dbh = $self->dbhandle;
 
   my @bind = @{ $arg{'values'} };
+
+  $log = Log::Log4perl->get_logger();
+  $log->trace( hashref_to_dumper( 'sql' => $arg{'sql'}, 'bind' => $arg{'values'} ) );
 
   my $out = $dbh->selectall_arrayref( $arg{'sql'}, { 'Slice' => {} }, @bind )
       or throw JSA::Error::DBError( $dbh->errstr );
@@ -453,22 +461,14 @@ sub _run_change_loop {
   @val = ( [ @val ] )
     unless ref $val[0];
 
-
   my $dbh = $self->dbhandle();
 
   $dbh->begin_work if $self->use_transaction();
-
-  my $noise = JSA::Verbosity->new();
-  $noise->make_noise( 2, qq[SQL: $sql] );
 
   my @affected;
   for my $vals ( @val ) {
 
     my @bind =  @{ $vals };
-
-    $noise->make_noise( 1, '  '
-                            . join ' , ', map { defined $_ ? $_ : 'undef' } @bind
-                        );
 
     my $affected = $self->_run_change_sql->( $sql, @bind );
 
@@ -505,11 +505,15 @@ sub _run_change_sql {
 
   my ( $self, $sql, @bind ) = @_;
 
+  $log = Log::Log4perl->get_logger();
+  $log->trace( hashref_to_dumper( 'sql' => $sql , 'bind' => \@bind ) );
+
   my $dbh = $self->dbhandle;
 
   return $dbh->do( $sql, undef, @bind )
             or do {
                     $dbh->rollback;
+                    log->error( 'rollback; ' , $dbh->errstr );
                     throw JSA::Error::DBError( $dbh->errstr );
                   };
 }
@@ -571,6 +575,10 @@ sub _check_input  {
   }
 
   return unless scalar @err;
+
+  $log = Log::Log4perl->get_logger();
+  $log->trace( hashref_to_dumper( 'input error' => \@err ) );
+
   throw JSA::Error::BadArgs( join "\n", @err );
 }
 

@@ -30,17 +30,17 @@ use strict; use warnings;
 
 use Carp qw[ croak ];
 use Exporter qw[ import ];
+use Log::Log4perl;
 
 use JAC::Setup qw[ omp ];
 
-use JSA::Verbosity;
 use OMP::Config;
 
 our @EXPORT_OK = qw[ connect_to_db ];
 
 $OMP::Config::DEBUG = 0;
 
-my $noise = JSA::Verbosity->new();
+my $log;
 
 {
   my $omp_cf;
@@ -83,12 +83,12 @@ given database.
 
     my $key = join ':', ( $name ? $name : '', $server, $db, $user );
 
-    $noise->make_noise( 2, "Connecting to ${server}..${db} as ${user}\n" );
+    $log = Log::Log4perl->get_logger();
+    $log->info( "Connecting to ${server}..${db} as ${user}\n" );
 
     if ( exists $_handles{ $key } && $_handles{ $key } ) {
 
-      $noise->make_noise( 3, "  found cached connection\n" );
-
+      $log->trace( "  found cached connection" );
       return $_handles{ $key };
     }
 
@@ -101,7 +101,7 @@ given database.
                       'AutoCommit' => 1,
                     }
                   )
-        or die $DBI::errstr;
+        or $log->logdie( $DBI::errstr );
 
     for ( $dbh )
     {
