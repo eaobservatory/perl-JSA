@@ -776,6 +776,9 @@ It is called by I<prepare_and_insert> method.
 
       if ( ! $self->process_simulation && $common_hdrs->{SIMULATE} ) {
 
+        my $xfer  = $self->_get_xfer_unconnected_dbh();
+        $xfer->put_simulation( [ @base ] );
+
         $self->_print_text( "simulation data. Skipping\n" );
         next RUN;
       }
@@ -802,8 +805,14 @@ It is called by I<prepare_and_insert> method.
         }
       }
 
-      next RUN
-        unless $self->calc_radec( $inst, $common_obs, $common_hdrs );
+      unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
+
+        my $xfer = $self->_get_xfer_unconnected_dbh();
+        $xfer->put_error( [ @base ] );
+
+        next RUN;
+      }
+
 
       #$dbh->begin_work if $self->load_header_db;
       $db->begin_trans() if $self->load_header_db;
@@ -1130,7 +1139,7 @@ sub add_subsys_obs {
         my $sys_sub = $subsys_hdrs->{'SUBHEADERS'};
         my @temp = $inst->merge_by_obsidss( $sys_sub );
 
-        @{ $sys_sub } = @temp
+        @{ $sys_sub } = @{ $temp[0] }
           if scalar @temp;
       }
 
@@ -1291,7 +1300,7 @@ sub insert_hash {
     if ( $table eq 'FILES' && defined $status && $status > 0 ) {
 
       $self->skip_state_setting()
-        or $xfer->add_ingested( [ $row->{'file_id'} ] );
+        or $xfer->put_ingested( [ $row->{'file_id'} ] );
     }
 
     return $status if !$status;
@@ -1381,7 +1390,7 @@ sub conditional_insert_hash {
     if ( $table eq 'FILES' && $affected > 0 ) {
 
       $self->skip_state_setting()
-        or $xfer->add_ingested( [ $row->{'file_id'} ] );
+        or $xfer->put_ingested( [ $row->{'file_id'} ] );
     }
 
     return if ! defined $affected;
@@ -1601,17 +1610,23 @@ sub prepare_update_hash {
       if $key eq 'last_modified'
       || ! exists $field_values->{$key};
 
-    next
-      if $only_obstime
-      && $key !~ $obs_date_re;
-
     my $new = $field_values->{$key};
     my $old = $indb->{$key};
 
+    next if ! ( defined $new && defined $old );
+
+    my %test =
+      ( 'start' => exists $start{ $key },
+        'end'   => exists $end{ $key },
+        'old'   => $old,
+        'new'   => $new,
+      );
+    my $in_range = any { $test{ $_ } } (qw[ start end ]);
+
     next
-      if ( all { ! defined $_ } ( $old, $new ) )
-      # Skip setting undef a obs time value.
-      || ( $only_obstime && ! defined $new );
+      if $only_obstime
+      && $key !~ $obs_date_re
+      ;
 
     # Not defined currently - inserting new value.
     if ( defined $new && ! defined $old ) {
@@ -1627,14 +1642,6 @@ sub prepare_update_hash {
       $differ{$key} = undef;
       next;
     }
-
-    my %test =
-      ( 'start' => exists $start{ $key },
-        'end'   => exists $end{ $key },
-        'old'   => $old,
-        'new'   => $new,
-      );
-    my $in_range = any { $test{ $_ } } (qw[ start end ]);
 
     # Dates.
     if ( $new =~ $ymd_start && ( $old =~ $ymd_start || $old =~ $am_pm_end ) ) {
@@ -1707,11 +1714,6 @@ Returns the primary key for a given table in C<jcmt> database.
 sub _get_primary_key {
 
   my ( $table ) = @_;
-
-if ( $table eq 'transfer' )
-{
-  die;
-}
 
   my %keys =
     ( 'ACSIS'  => 'obsid_subsysnr',
@@ -2870,21 +2872,46 @@ sub _print_text {
 
 # JSA::DB::TableTransfer object, to be created as needed.
 {
-  my $xfer;
+  my %xfer;
 
   sub _get_xfer {
 
-    my ( $self, $dbh ) = @_;
+    my ( $self, $dbh, $name ) = @_;
 
-    return $xfer if $xfer;
+    $name ||= 'default-xfer';
+
+    return $xfer{ $name }
+      if exists  $xfer{ $name }
+      && defined $xfer{ $name };
 
     return
-      $xfer =
+      $xfer{ $name } =
         JSA::DB::TableTransfer->new(  'dbhandle'     => $dbh,
                                       'transactions' => 0,
                                     );
   }
 }
+=item B<_get_xfer_unconnected_dbh>
+
+It is similar to above I<_get_xfer> method about what it accepts and
+returns.  Difference is that this method uses a new database handle
+unconnected to the one used elsewhere.
+
+=cut
+
+sub _get_xfer_unconnected_dbh {
+
+  my ( $self, $name ) = @_;
+
+  $name ||= 'xfer-new-dbh';
+
+  require JSA::DB;
+  my $db = JSA::DB->new( $name => $name );
+  $db->use_transaction( 0 );
+
+  return $self->_get_xfer( $db->dbhandle(), $name );
+}
+
 
 sub _compare_dates {
 
