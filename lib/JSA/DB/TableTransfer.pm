@@ -470,6 +470,17 @@ sub mark_transferred_as_deleted {
   return $sum;
 }
 
+=item B<name>
+
+Returns the name of the table in which to collect, change states for
+raw files.
+
+  $name = JSA::DB::TableTransfer->name();
+
+=cut
+
+sub name { return $_state_table }
+
 =item B<_dbhandle>
 
 Returns the database handle.
