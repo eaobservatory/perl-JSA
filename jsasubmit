@@ -307,6 +307,13 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       $not_in_group = 1;
       $current{mode} = "obs";
 
+      # if the data are truly JUNK we do not want to ask CADC to process the data at
+      # all since the chances are excellent that the pipeline will fail
+      if ( $obs->status == OMP__OBS_JUNK ) {
+        log_message("Observation is junk and so will not be processed at all\n");
+        next;
+      }
+
       # Skip to next observation unless we are in night mode
       if ($mode ne "night") {
         log_message("Not including this observation in $mode processing\n");
