@@ -207,21 +207,11 @@ sub make_logfile {
   croak 'No prefix given to make a file name.'
     unless $prefix;
 
+  require DateTime;
   return
     File::Spec->catfile( $dir || $_log_dir,
-                          join '.', $prefix, _get_datetime()
+                          join '.', $prefix, DateTime->now( 'time_zone' => 0)->ymd( '' );
                         );
-
-}
-
-sub _get_datetime {
-
-  my ( $year, $mon, $day, $hr, $min, $sec ) = (localtime )[5,4,3,2,1,0];
-
-  $year += 1900;
-  $mon++;
-
-  return join '', $year, $mon, $day;
 }
 
 
