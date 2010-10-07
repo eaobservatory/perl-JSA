@@ -210,7 +210,9 @@ sub make_logfile {
   require DateTime;
   return
     File::Spec->catfile( $dir || $_log_dir,
-                          join '.', $prefix, DateTime->now( 'time_zone' => 0)->ymd( '' );
+                          join '.',
+                            $prefix,
+                            DateTime->now( 'time_zone' => '-1000' )->ymd( '' )
                         );
 }
 
