@@ -26,8 +26,9 @@ configuration with "database" section.  See L<OMP::Config> for details.
 use strict; use warnings;
 
 use List::Util qw[ sum max ];
-use List::MoreUtils qw[ any ];
+use List::MoreUtils qw[ any all firstidx ];
 use Log::Log4perl;
+use Scalar::Util qw[ looks_like_number ];
 
 use JAC::Setup qw[ omp ];
 
@@ -170,7 +171,7 @@ Executes SELECT query given a hash of table names, array reference of
 column names, where clauses with placeholders, and array reference of
 bind values.
 
-Returns number of affected rows if any.
+Returns an array reference of hash references of selected columns.
 
   $affected =
     $jdb->select_t( 'table'   => 'the_table',
@@ -182,7 +183,7 @@ Returns number of affected rows if any.
 Optional hash pairs are "order" & "group" respectively for C<ORDER BY>
 and C<GROUP BY> clauses ...
 
-  $affected =
+  $result =
     $jdb->select_t( 'table'   => 'the_table',
                      ...
                      'order' => [ 'b' , 'a' ]
@@ -251,10 +252,10 @@ sub exist {
   my ( $self, %arg ) = @_;
 
   my $result =
-    $self->select_t( %arg, 'columns' => 'count(1) AS count' )
+    $self->select_t( %arg, 'columns' => [ 'count(1) AS size' ] )
     or return 0;
 
-  return $result->[0]{'count'};
+  return $result->[0]{'size'};
 }
 
 =item B<run_select_sql>
@@ -325,7 +326,7 @@ sub insert {
   my $size = scalar @cols;
 
   my $sql =
-    sprintf 'INSERT INTO % (%s) VALUES (%s)',
+    sprintf 'INSERT INTO %s (%s) VALUES (%s)',
       $arg{'table'},
       join( ', ', @cols ),
       join( ', ', ('?') x $size )
@@ -428,6 +429,175 @@ sub delete {
                                 );
 }
 
+=item B<update_or_insert>
+
+Any output of C<update> or C<insert> call back references is returned.
+Accepts the following arguments as hash value of ...
+
+  table   - table name in question;
+
+  unique-keys - sub set of column names to search for for UPDATE;
+
+  columns - array reference of column names to be UPDATEd and/or
+            INSERTed;
+
+  values  - array reference of array references of values to be
+            UPDATEd and/or INSERTed (see update() & insert() method).
+
+  $affected =
+    $db->update_or_insert(  'table' => $name,
+                            # For UPDATE.
+                            'unique-keys'   => [ 'a', 'b' ],
+                            # For UPDATE & INSERT.
+                            'columns' => [ 'a', 'b', 'c' ],
+                            'values'  => [ [1, 2, 3], [4, 6, 7] ],
+                          );
+
+
+See also I<update()> and I<insert()> methods.
+
+=cut
+
+sub update_or_insert {
+
+  my ( $self, %arg ) = @_;
+
+  my ( $keys, $cols, $vals ) = @arg{qw[ unique-keys columns values ]};
+
+  my %pass = (  'table'   => $arg{'table'},
+                'columns' => $cols,
+              );
+
+  my @key        = _to_list( $keys );
+  $pass{'where'} = _where_string( [ map { qq[ $_ = ? ] } @key ] );
+
+  # Handle transaction self.  Save old transaction setting to reinstate later.
+  my $old_tran = $self->use_transaction();
+  $self->use_transaction( 0 );
+
+  my $dbh = $self->dbhandle();
+  my $log = Log::Log4perl->get_logger();
+
+  my ( $key_val, $idx, $set, $rows );
+  # Test if a plain array reference is given or an array reference of array
+  # references.
+  unless ( ref $vals->[0] ) {
+
+    ( $key_val, $idx ) = _extract_key_val( $cols, $vals, @key );
+
+    $set  = [ map { qq( $cols->[ $_ ] = $vals->[ $_ ] ) } @{ $idx } ];
+
+    _start_trans( $dbh );
+
+    $rows = $self->_run_update_or_insert( %pass,
+                                      'set'        => $set,
+                                      'where-bind' => $key_val,
+                                      'values'     => $vals,
+                                    );
+    _end_trans( $dbh );
+  }
+  else {
+
+    my $end = scalar @{ $vals } - 1;
+    for my $i ( 0 .. $end ) {
+
+      my $v = $vals->[ $i ];
+      ( $key_val, $idx ) = _extract_key_val( $cols, $v, @key );
+
+      $set =
+        [ map
+          { sprintf '%s = %s',
+              $cols->[ $_ ],
+              _massage_for_col( $v->[ $_ ] )
+          }
+          @{ $idx }
+        ];
+
+      _start_trans( $dbh );
+
+      $rows = $self->_run_update_or_insert( %pass,
+                                        'set'        => $set,
+                                        'where-bind' => $key_val,
+                                        'values'     => $v,
+                                      );
+      _end_trans( $dbh );
+    }
+  }
+
+  $self->use_transaction( $old_tran );
+  return;
+}
+
+=head2 INTERNAL METHODS
+
+=back
+
+=over 2
+
+=item B<_run_update_or_insert>
+
+Returns the number of rows affected due to UPDATE or INSERT given a
+hash of ...
+
+  table   - name;
+
+  set     - array reference for SET clause for UPDATE query;
+
+  where   - array reference for WHERE clauses with place holders;
+
+  where-bind - array reference of values for place holders in WHERE
+               clause;
+
+  columns - array reference of column names for INSERT query;
+
+  values  - array reference of (array references, each for a new row,
+            of) values to be inserted.
+
+Note that C<values> are not used in UPDATE query only in INSERT.
+Array reference for SET clause must be have values in place as place
+holders are not (yet) supported by L<DBD::Sybase>.
+
+  $rows =
+    $self->_run_update_or_insert( 'table'   => $name,
+                                  'set'     => [ 'a = 1', 'b = 2' ],
+                                  'where    => [ 'c = ?' ],
+                                  'where-bind' => [ 3 ],
+                                  'columns' => [qw[a b c]],
+                                  'values'  => [ 1, 2, 3 ]
+                                );
+
+See also I<update()> and I<insert()> methods.
+
+=cut
+
+sub _run_update_or_insert {
+
+  my ( $self, %arg ) = @_;
+
+  my $dbh = $self->dbhandle();
+  my $log = Log::Log4perl->get_logger();
+
+  my $rows =
+    $self->update( 'values'  => $arg{'where-bind'},
+                    map { $_ => $arg{ $_ } } qw[ table set where ]
+                  );
+
+  my $e = $dbh->err();
+  $log->debug( 'After update, rows: ', $rows, '  err: ', defined $e ? $e : '' );
+
+  if ( ! $rows ) {
+
+    $rows =
+      $self->insert( map { $_ => $arg{ $_ } } qw[ table columns values ]
+                    );
+
+    $e = $dbh->err();
+    $log->debug( 'After insert, rows: ', $rows, '  err: ', defined $e ? $e : '' );
+  }
+
+  return $rows;
+}
+
 =item B<_run_change_loop>
 
 Executes table change operations, given a hash of SQL query string and
@@ -470,7 +640,7 @@ sub _run_change_loop {
 
     my @bind =  @{ $vals };
 
-    my $affected = $self->_run_change_sql->( $sql, @bind );
+    my $affected = $self->_run_change_sql( $sql, @bind );
 
     push @affected, $affected if $affected;
   }
@@ -479,12 +649,6 @@ sub _run_change_loop {
 
   return sum @affected;
 }
-
-=head2 INTERNAL METHODS
-
-=back
-
-=over 2
 
 =item B<_run_change_sql>
 
@@ -512,10 +676,99 @@ sub _run_change_sql {
 
   return $dbh->do( $sql, undef, @bind )
             or do {
-                    $dbh->rollback;
+                    $dbh->rollback() if $self->use_transaction();
                     log->error( 'rollback; ' , $dbh->errstr );
                     throw JSA::Error::DBError( $dbh->errstr );
                   };
+}
+
+=item B<_start_trans>
+
+Given a database handle, starts a transaction; returns nothing.
+
+  _start_trans( $dbh );
+
+=cut
+
+sub _start_trans {
+
+  my ( $dbh )= @_;
+
+  my $log = Log::Log4perl->get_logger();
+  $log->trace( 'Starting transaction' );
+
+  # Start transaction.
+  #$dbh->{'AutoCommit'} = 0;
+  $dbh->begin_work();
+  return;
+}
+
+=item B<_end_trans>
+
+Given a database handle, commits a transaction if there were no
+errors.  On error, rolls back a transaction.  Returns nothing.
+
+  _end_trans( $dbh );
+
+=cut
+
+sub _end_trans {
+
+  my ( $dbh ) = @_;
+
+  my $log = Log::Log4perl->get_logger();
+
+  unless ( $dbh->err() ) {
+
+    $log->trace( 'Commiting transaction' );
+
+    $dbh->commit();
+    return 1;
+  }
+
+  $log->logerror( 'Rolling back transaction: ', $dbh->errstr() );
+
+  $dbh->rollback();
+  return;
+}
+
+=item B<_extract_key_val>
+
+Returns a list of two array references -- one of (database table) key
+values, other of indices which do not relate to keys -- given an array
+reference of table column names, an array reference of related values,
+and a list of key names.
+
+  ( $keyvals, $indices ) = _extract_key_val( $cols, $vals, @key );
+
+=cut
+
+sub _extract_key_val {
+
+  my ( $cols, $vals, @key ) = @_;
+
+  return unless scalar @key;
+
+  my $end = scalar @{ $cols } - 1;
+
+  my ( @idx, @keyidx, @keyval );
+
+  for my $i ( 0 .. $end ) {
+
+    if ( any { $cols->[ $i ] eq $_ } @key ) {
+
+      push @keyidx, $i;
+      push @keyval, $vals->[ $i ];
+    }
+    else {
+
+      push @idx, $i;
+    }
+  }
+
+  return unless scalar @keyidx;
+
+  return ( [ @keyval ], [ @idx ] );
 }
 
 =item B<_check_input>
@@ -582,6 +835,15 @@ sub _check_input  {
   throw JSA::Error::BadArgs( join "\n", @err );
 }
 
+=item B<_name>
+
+Returns the name (string) used to associate with a database
+connection.
+
+  $net_name = $jdb->_name();
+
+=cut
+
 sub _name {
 
   my ( $self ) = @_;
@@ -589,13 +851,30 @@ sub _name {
   return $self->{'name'};
 }
 
-# Convert scalar to list to string.
+=item B<_where_string>
+
+Returns a string for WHERE clause given a plain scalar or an array
+reference of strings.  Multiple strings are joined by "AND".
+
+  $sql_where = _where_string( $list );
+
+=cut
+
 sub _where_string {
 
   my ( $where ) = @_;
 
   return _to_string( $where, ' AND ' );
 }
+
+=item B<_to_string>
+
+Returns a string joined by a separator given a plain scalar or an
+array reference.  Default separator is comma.
+
+  $string = _to_string( $list, ':' );
+
+=cut
 
 sub _to_string {
 
@@ -606,6 +885,14 @@ sub _to_string {
   return join $sep, _to_list( $in );
 }
 
+=item B<_to_list>
+
+Returns a list given a plain scalar or an array reference.
+
+  @expanded = _to_list( $list );
+
+=cut
+
 sub _to_list {
 
   my ( $in ) = @_;
@@ -615,6 +902,22 @@ sub _to_list {
   return ( @{ $in } ) if $in && ref $in;
 
   return ( $in );
+}
+
+sub _massage_for_col {
+
+  my @in = @_;
+
+  for ( @in ) {
+
+    $_ =  ! defined $_
+          ? 'NULL'
+          : looks_like_number( $_ )
+            ? $_
+            : qq['$_']
+            ;
+  }
+  return @in;
 }
 
 
