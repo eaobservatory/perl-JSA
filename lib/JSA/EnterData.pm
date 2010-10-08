@@ -2585,7 +2585,7 @@ sub _modify_db_on_obsend {
   my $val_count;
   {
     my $key = (keys %{ $vals } )[0];
-    $val_count = ref $vals->{ $key } ? scalar $vals->{ $key } : 1;
+    $val_count = ref $vals->{ $key } ? scalar @{ $vals->{ $key } } : 1;
   }
   my $affected;
 
