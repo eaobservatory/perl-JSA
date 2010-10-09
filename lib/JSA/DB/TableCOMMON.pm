@@ -86,6 +86,21 @@ sub range_columns {
   return %range;
 }
 
+=item B<unique_keys>
+
+Returns list of columns to uniquely identify a row.
+
+  @keys = JSA::DB::TableCOMMON->unique_keys();
+
+=cut
+
+sub unique_keys {
+
+ return
+    qw[ obsid
+      ];
+}
+
 
 1;
 

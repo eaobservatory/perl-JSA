@@ -481,6 +481,21 @@ raw files.
 
 sub name { return $_state_table }
 
+=item B<unique_keys>
+
+Returns list of columns to uniquely identify a row.
+
+  @keys = JSA::DB::TableTransfer->unique_keys();
+
+=cut
+
+sub unique_keys {
+
+  return
+    qw[ file_id
+      ];
+}
+
 =item B<_dbhandle>
 
 Returns the database handle.
