@@ -71,7 +71,7 @@ use warnings;
 
 use JSA::CADC_Copy;
 use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
-                     create_recipe_instance /;
+                     create_recipe_instance dprecinst_url /;
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
@@ -89,7 +89,6 @@ use Pod::Usage;
 use File::Basename;
 
 my $TELESCOPE = 'JCMT';
-my $BASEURL = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
 my $MAILHOST = 'mailhost.jach.hawaii.edu';
 my $MAILTO = 'jcmtarch@jach.hawaii.edu';
 my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
@@ -507,7 +506,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       log_message( "*** Attempt to submit recipe update of $recipe_id with group $group failed.\n");
     } else {
       log_message( "Request submitted with recipe instance $recipe_id.\n");
-      log_message( "Recipe URL: $BASEURL" . hex($recipe_id) . "\n");
+      log_message( "Recipe URL: " . dprecinst_url($recipe_id) . "\n");
       log_message( "\n");
     }
   }

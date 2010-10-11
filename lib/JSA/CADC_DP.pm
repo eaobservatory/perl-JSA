@@ -29,7 +29,9 @@ use OMP::Config;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ connect_to_cadcdp disconnect_from_cadcdp
-                     create_recipe_instance /;
+                     create_recipe_instance
+                     dprecinst_url
+                   /;
 
 our $VERBOSE = 0;
 our $DEBUG = 0;  # Do not write to the database
@@ -105,6 +107,27 @@ sub disconnect_from_cadcdp {
 sub cadc_dberror {
   my ( $msg ) = @_;
   throw JSA::Error::CADCDB( "DB Problem: $DBI::errstr" );
+}
+
+=item B<dprecinst_url>
+
+Converts a recipe_instance_id to a URL.
+
+  $url = dprecinst_url( $recipe_inst_id );
+
+=cut
+
+{
+  my $BASEURL = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
+  sub dprecinst_url {
+    my $recipe_id = shift;
+    return unless defined $recipe_id;
+    my $baseten = $recipe_id;
+    if ($recipe_id =~ /^0x/) {
+      $baseten = hex($recipe_id);
+    }
+    return $BASEURL . $baseten;
+  }
 }
 
 =item B<create_recipe_instance>
@@ -606,10 +629,11 @@ sub updateWithRollback {
 
 Brad Cavanagh E<lt>b.cavanagh@jach.hawaii.eduE<gt>
 Russell Redman E<lt>Russell.Redman@nrc-cnrc.gc.caE<gt>
+Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>
 
 =head1 COPYRIGHT
 
-Copyright (C) 2009 Science and Technology Facilities Council. All Rights Reserved.
+Copyright (C) 2009-2010 Science and Technology Facilities Council. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
