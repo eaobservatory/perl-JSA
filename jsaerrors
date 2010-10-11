@@ -1,4 +1,4 @@
-#!env starperl
+#!/bin/env starperl
 
 =head1 NAME
 
