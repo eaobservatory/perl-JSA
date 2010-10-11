@@ -31,6 +31,7 @@ use Exporter 'import';
 our @EXPORT_OK = qw/ connect_to_cadcdp disconnect_from_cadcdp
                      create_recipe_instance
                      dprecinst_url
+                     query_dpstate
                    /;
 
 our $VERBOSE = 0;
@@ -392,6 +393,45 @@ ENDRECIPEID
   $dbh->commit unless $DEBUG;
 
   return $dp_recipe_instance_id;
+
+}
+
+=item query_dpstate
+
+ @results = query_dpstate( $dbh, files => $files,
+                                 state => $state);
+
+Defaults to querying "E" state without file restriction.
+
+=cut
+
+sub query_dpstate {
+  my $dbh = shift;
+  my %filters = @_;
+
+  my $sql = q{
+select R.recipe_instance_id, R.tag from dp_recipe_instance R, dp_file_input F
+    where R.recipe_instance_id = F.recipe_instance_id };
+
+  if (exists $filters{state} && defined $filters{state}) {
+    if (length($filters{state}) == 1) {
+      $sql .= " and state = '$filters{state}'";
+    } else {
+      JSA::Error::CADCDB->throw("State is expected to be a single character (got $filters{state})");
+    }
+  }
+  if (exists $filters{files} && defined $filters{files}) {
+    my $file = $filters{files};
+    if ($file =~ /^[\w_]+/) {
+      $sql .= " and dp_input like 'ad:JCMT/$file%'";
+    } else {
+      JSA::Error::CADCDB->throw("File pattern must only contain letters or numbers (got $file)");
+    }
+  }
+
+  $sql .= " group by R.recipe_instance_id";
+
+  return runQuery( $dbh, $sql, [qw/ recipe_instance_id /]);
 
 }
 

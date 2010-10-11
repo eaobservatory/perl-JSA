@@ -1,0 +1,63 @@
+#!env starperl
+
+=head1 NAME
+
+jsaerrors - report JSA processing runs that are in Error state
+
+=head1 SYNOPSIS
+
+  jsaerrors
+  jsaerrors --files=s4a
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-help>
+
+Print help information.
+
+=item B<-man>
+
+Full manual page.
+
+=item B<-files>
+
+If this option is supplied results will be restricted to files beginning
+with the supplied string. For example "s4" will result in only 450 micron
+processing failures being returned.
+
+=cut
+
+use strict;
+use warnings;
+use JAC::Setup qw/ omp sybase /;
+
+use JSA::CADC_DP qw/ connect_to_cadcdp
+                     disconnect_from_cadcdp
+                     query_dpstate
+                     dprecinst_url /;
+
+use Getopt::Long;
+use Pod::Usage;
+
+my ($help, $man, $files );
+my $status = GetOptions( "help" => \$help,
+                         "man"  => \$man,
+                         "files=s" => \$files,
+                       );
+
+pod2usage( 1 ) if $help;
+pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+
+my $dbh = connect_to_cadcdp;
+my @results = query_dpstate( $dbh, files => $files,
+                             state => "E" );
+disconnect_from_cadcdp( $dbh );
+
+print "Returned " . @results . " processing jobs in E state\n\n";
+for my $recipe ( @results ) {
+  print dprecinst_url( $recipe->{recipe_instance_id} ) . " " .
+    $recipe->{tag} ."\n";
+
+}
