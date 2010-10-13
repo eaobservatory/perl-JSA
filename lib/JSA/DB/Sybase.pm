@@ -99,7 +99,7 @@ given database.
                       'AutoCommit' => 1,
                     }
                   )
-        or $log->logdie( $DBI::errstr );
+        or $log->logcroak( $DBI::errstr );
 
     for ( $dbh )
     {
