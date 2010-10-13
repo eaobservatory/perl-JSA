@@ -40,8 +40,6 @@ our @EXPORT_OK = qw[ connect_to_db ];
 
 $OMP::Config::DEBUG = 0;
 
-my $log;
-
 {
   my $omp_cf;
   my %_handles;
@@ -83,7 +81,7 @@ given database.
 
     my $key = join ':', ( $name ? $name : '', $server, $db, $user );
 
-    $log = Log::Log4perl->get_logger( '' );
+    my $log = Log::Log4perl->get_logger( '' );
     $log->info( "Connecting to ${server}..${db} as ${user}\n" );
 
     if ( exists $_handles{ $key } && $_handles{ $key } ) {
@@ -108,7 +106,7 @@ given database.
       $_->{'syb_show_sql'} = 1 ;
       $_->{'syb_show_eed'} = 1 ;
 
-      $_->do( "use $db" ) or croak $_->errstr;
+      $_->do( "use $db" ) or $log->logdie( $_->errstr );
     }
 
     $_handles{ $key } = $dbh;
