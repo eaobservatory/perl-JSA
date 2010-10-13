@@ -457,7 +457,7 @@ sub mark_transferred_as_deleted {
   # Use the same $dbh during a transaction.
   my $dbh = $self->_dbhandle();
 
-  my $log = Log::Log4perl->get_logger();
+  my $log = Log::Log4perl->get_logger( '' );
   $log->info( 'Before marking files as deleted' );
 
   $dbh->begin_work if $self->_use_trans();
@@ -534,7 +534,7 @@ sub _get_files {
 
   my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
 
-  my $log = Log::Log4perl->get_logger();
+  my $log = Log::Log4perl->get_logger( '' );
   $log->info( "Getting files from JAC database with state '${state}'" );
 
   my $dbh = $self->_dbhandle();
@@ -696,7 +696,7 @@ sub _change_add_state {
     : sub { return $self->_update( @_ ) ; }
     ;
 
-  my $log = Log::Log4perl->get_logger();
+  my $log = Log::Log4perl->get_logger( '' );
   $log->info(
               ( 'add' eq $mode
                 ? qq[Before adding]

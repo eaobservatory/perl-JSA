@@ -126,7 +126,7 @@ sub dbhandle {
     return connect_to_db( $self->{'db-config'}, $self->_name );
   }
 
-  $log = Log::Log4perl->get_logger();
+  $log = Log::Log4perl->get_logger( '' );
   $log->debug( 'Setting external database handle.' );
 
   $self->{ $extern } = shift @_;
@@ -159,7 +159,7 @@ sub use_transaction {
 
   $self->{'trans'} = !! shift @_;
 
-  $log = Log::Log4perl->get_logger();
+  $log = Log::Log4perl->get_logger( '' );
   $log->trace( 'use transactions ' . $self->{'trans'} ? 1 : 0 );
 
   return;
@@ -282,7 +282,7 @@ sub run_select_sql {
 
   my @bind = @{ $arg{'values'} };
 
-  $log = Log::Log4perl->get_logger();
+  $log = Log::Log4perl->get_logger( '' );
   $log->trace( hashref_to_dumper( 'sql' => $arg{'sql'}, 'bind' => $arg{'values'} ) );
 
   my $out = $dbh->selectall_arrayref( $arg{'sql'}, { 'Slice' => {} }, @bind )
@@ -476,7 +476,7 @@ sub update_or_insert {
   $self->use_transaction( 0 );
 
   my $dbh = $self->dbhandle();
-  my $log = Log::Log4perl->get_logger();
+  my $log = Log::Log4perl->get_logger( '' );
 
   my ( $key_val, $idx, $set, $rows );
   # Test if a plain array reference is given or an array reference of array
@@ -575,7 +575,7 @@ sub _run_update_or_insert {
   my ( $self, %arg ) = @_;
 
   my $dbh = $self->dbhandle();
-  my $log = Log::Log4perl->get_logger();
+  my $log = Log::Log4perl->get_logger( '' );
 
   my $rows =
     $self->update( 'values'  => $arg{'where-bind'},
@@ -669,7 +669,7 @@ sub _run_change_sql {
 
   my ( $self, $sql, @bind ) = @_;
 
-  $log = Log::Log4perl->get_logger();
+  $log = Log::Log4perl->get_logger( '' );
   $log->trace( hashref_to_dumper( 'sql' => $sql , 'bind' => \@bind ) );
 
   my $dbh = $self->dbhandle;
@@ -694,7 +694,7 @@ sub _start_trans {
 
   my ( $dbh )= @_;
 
-  my $log = Log::Log4perl->get_logger();
+  my $log = Log::Log4perl->get_logger( '' );
   $log->trace( 'Starting transaction' );
 
   # Start transaction.
@@ -716,7 +716,7 @@ sub _end_trans {
 
   my ( $dbh ) = @_;
 
-  my $log = Log::Log4perl->get_logger();
+  my $log = Log::Log4perl->get_logger( '' );
 
   unless ( $dbh->err() ) {
 
@@ -829,7 +829,7 @@ sub _check_input  {
 
   return unless scalar @err;
 
-  $log = Log::Log4perl->get_logger();
+  $log = Log::Log4perl->get_logger( '' );
   $log->trace( hashref_to_dumper( 'input error' => \@err ) );
 
   throw JSA::Error::BadArgs( join "\n", @err );

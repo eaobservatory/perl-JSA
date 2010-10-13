@@ -18,7 +18,7 @@ Pass default configuration to L<Log::Log4perl> ...
 Note that changes made to config after this point via L<Log::Log4perl>
 will not be reflected back when I<&get_config> is called again.
 
-  $log = Log::Log4perl->get_logger();
+  $log = Log::Log4perl->get_logger( '' );
 
   # See Log::Log4perl for details.
   $log->error( 'Oops,', ' an error happened: ', $error_text );
