@@ -116,11 +116,18 @@ given database.
 
   sub _release_dbh {
 
-    for my $v ( values %_handles ) {
+    my $log = Log::Log4perl->get_logger( '' );
+
+    for my $k ( keys %_handles ) {
+
+      my $v = $_handles{ $k };
 
       if ( $v ) {
 
-        $v->disconnect() and undef $v;
+        $log->info( "Disconnecting from $k" );
+
+        $v->disconnect();
+        undef $v;
       }
     }
     return
