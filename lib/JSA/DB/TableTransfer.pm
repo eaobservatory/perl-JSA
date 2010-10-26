@@ -325,6 +325,7 @@ Set state to C<transferred> of given array reference of files (base names).
 
       my $set = qq[set_${key}];
       my $add = qq[add_${key}];
+      my $put = qq[put_${key}];
       my $get = qq[get_${key}_files];
 
       no strict 'refs';
@@ -342,6 +343,13 @@ Set state to C<transferred> of given array reference of files (base names).
 
            return $self->_change_add_state( 'mode' => 'add',
                                             'state' => $key, 'file' => $files );
+        };
+
+      *$put =
+        sub {
+           my ( $self, $files ) = @_;
+
+           return $self->_put_state( 'state' => $key, 'file' => $files );
         };
 
       *$get =
@@ -641,6 +649,31 @@ sub _simplify_arrayref {
 
   return
     [ map { $_->[0] } @{ $in } ];
+}
+
+# This would be eventual replacement of _change_add_state() after references to
+# add*state() & set*state() have been updated.  This does not care if going to
+# INSERT or UPDATE (JSA::DB->update_or_insert() takes care of that).
+sub _put_state {
+
+  my ( $self, %args ) = @_;
+
+  my ( $files, $state ) =
+    map { $args{ $_ } } qw[ file state ];
+
+  eval { _check_state( $state ) }; croak $@ if $@;
+
+  require JSA::DB;
+  my $db = JSA::DB->new( 'name' => 'transfer-change-add' );
+
+  my @alt = map { _fix_file_name( $_ ) } sort @{ $files };
+  return
+    $db->update_or_insert(  'table'       => $self->name(),
+                            'unique-keys' => [ 'file_id' ],
+                            'columns'     => [ 'file_id', 'status' ],
+                            'values'      => [ map { [ $_, $state ] } @alt ],
+                            'dbhandle'    => $self->_dbhandle(),
+                          );
 }
 
 sub _change_add_state {
