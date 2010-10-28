@@ -50,6 +50,7 @@ use FindBin;
 use File::Temp;
 use List::MoreUtils qw[ any all ];
 use List::Util qw[ min max ];
+use Log::Log4perl;
 use Scalar::Util qw[ blessed looks_like_number ];
 
 use Astro::Coords::Angle::Hour;
@@ -955,6 +956,8 @@ sub _get_obs_group {
 
   my ( $self, %args ) = @_;
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   my $files = $self->files;
 
   my %obs = ( 'nocomments' => 1,
@@ -977,7 +980,7 @@ sub _get_obs_group {
 
         unless ( -r $file && -s _ ) {
 
-          warn "Unreadble or empty file: $file; skipped.\n";
+          $log->logwarn( "Unreadble or empty file: $file; skipped.\n" );
           next;
         }
 
@@ -1190,6 +1193,8 @@ sub prepare_insert_hash {
   throw JSA::Error "Empty hash reference was given to insert."
     unless scalar keys %{ $field_values };
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   # Go through the hash and work out whether we have multiple inserts
   my @have_ref;
   my $nrows = 1;
@@ -1198,16 +1203,17 @@ sub prepare_insert_hash {
     my $ref = ref $field_values->{$key}
       or next;
 
-    die "Unsupported reference type in insert hash!\n"
+    $log->logdie( "Unsupported reference type in insert hash!\n" )
       unless $ref eq 'ARRAY';
 
     my $row_count = scalar @{ $field_values->{$key} };
     if (@have_ref) {
 
       # count rows
-      die "Uneven row count in insert hash ARRAY ref for key '$key'"
-        . " ($row_count != $nrows) compared to first key '$have_ref[0]'"
-        . "(table $table)\n"
+    $log->logdie( "Uneven row count in insert hash ARRAY ref for key '$key'",
+                  " ($row_count != $nrows) compared to first key '$have_ref[0]'",
+                  "(table $table)\n"
+                )
         unless $row_count == $nrows;
     } else {
 
@@ -1251,6 +1257,8 @@ sub insert_hash {
   return $self->conditional_insert_hash( %args )
     if $self->conditional_insert;
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   # Get the fields in sorted order (so that we can match with values)
   # and create a template SQL statement. This can be done with the
   # first hash from @insert_hashes
@@ -1270,7 +1278,7 @@ sub insert_hash {
   if (!$self->debug && $self->load_header_db ) {
 
     $sth = $dbh->prepare($sql)
-      or die "Could not prepare sql statement for insert\n" . $dbh->errstr . "\n" ;
+      or $log->logdie( "Could not prepare sql statement for insert\n", $dbh->errstr, "\n" );
   }
 
   my ( @prim_key );
@@ -1536,12 +1544,14 @@ sub prepare_update_hash {
 
   return if $table eq 'FILES';
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   # work out which key uniquely identifies the row
   my $unique_key = _get_primary_key( $table );
 
   unless ( $unique_key ) {
 
-    die "Major problem with table name: '$table'\n";
+    $log->logdie( "Major problem with table name: '$table'\n" );
   }
 
   my $unique_val = $field_values->{$unique_key};
@@ -1576,9 +1586,9 @@ sub prepare_update_hash {
   $sql .= " from $table where $unique_key = '$unique_val'";
 
   my $ref = $dbh->selectall_arrayref( $sql, { Columns=>{} })
-    or die "Error retrieving existing content using [$sql]: " . $dbh->errstr;
+    or $log->logdie( "Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n" );
 
-  die "Only retrieved partial dataset: " . $dbh->errstr
+  $log->logdie( "Only retrieved partial dataset: ", $dbh->errstr, "\n" )
     if $dbh->err;
 
   # how many rows
@@ -1588,7 +1598,7 @@ sub prepare_update_hash {
     "Can only update if the row exists previously! Obsid $unique_val missing.\n"
       if $count == 0;
 
-  die "Should not be possible to have more than one row. Got $count\n"
+  $log->logdie( "Should not be possible to have more than one row. Got $count\n" )
     if $count > 1;
 
   my $indb = $ref->[0];
@@ -1735,6 +1745,8 @@ sub update_hash {
     if $table eq 'FILES'
     || ! $change;
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   my %differ = %{ $change->{'differ'} };
 
   return 1 unless keys %differ;
@@ -1769,7 +1781,7 @@ sub update_hash {
   if ( $self->load_header_db ) {
 
     my $sth = $dbh->prepare($sql)
-      or die "Could not prepare sql statement for insert\n". $dbh->errstr. "\n";
+      or $log->logdie( "Could not prepare sql statement for insert\n", $dbh->errstr, "\n" );
 
     my $status = $sth->execute( map { $differ{$_} } @sorted );
 
@@ -1994,6 +2006,8 @@ sub fill_headers_FILES {
 
   my ( $self, $inst, $header, $obs ) = @_;
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   # Create file_id - also need to extract NSUBSCAN from subheader if we have more
   # than one file. (although simply using a 1-based index would be sufficient)
   my @files = $obs->simple_filename;
@@ -2012,7 +2026,7 @@ sub fill_headers_FILES {
       $header->{'nsubscan'} = $header->{'NSUBSCAN'};
     } else {
 
-      die "Internal error - NSUBSCAN does not exist yet there is only one file!";
+      $log->logdie( "Internal error - NSUBSCAN does not exist yet there is only one file!\n" );
     }
   }
 
@@ -2160,9 +2174,11 @@ sub get_max_idkey {
 
   return 1 unless $self->load_header_db;
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   my $sth = $dbh->prepare_cached("select max(idkey) from $table");
   $sth->execute
-    or die sprintf "Could not obtain max idkey: %s\n", $dbh->errstr;
+    or $log->logdie( "Could not obtain max idkey: ", $dbh->errstr, "\n" );
 
   my $result = $sth->fetchall_arrayref;
   my $max = $result->[0]->[0];
@@ -2186,13 +2202,15 @@ sub create_dictionary {
   my $dictionary = $self->{'dict'};
   my %dict;
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   open my $DICT, '<', $dictionary
-    or die "Could not open data dictionary '$dictionary': $!\n";
+    or $log->logdie( "Could not open data dictionary '$dictionary': $!\n" );
 
   my @defs = grep { $_ !~ /^\s*(?:#|$)/ } <$DICT>;  # Slurp!
 
   close $DICT
-    or die "Error closing data dictionary '$dictionary': $!\n";
+    or $log->logdie( "Error closing data dictionary '$dictionary': $!\n" );
 
   for my $def (@defs) {
 
@@ -2219,6 +2237,8 @@ degrees).  Status is perl status: 1 is good, 0 bad.
 sub calc_radec {
 
   my ( $self, $inst, $obs, $headerref ) = @_;
+
+  my $log = Log::Log4perl->get_logger( '' );
 
   # Filenames for a subsystem
   my @filenames = $obs->filename;
@@ -2289,7 +2309,7 @@ sub calc_radec {
   unless ( $tracksys ) {
 
     ( undef, %state ) = $self->read_ndf( $filenames[0], qw/ TCS_TR_SYS / );
-    die "Error reading state information from file $filenames[0]\n"
+    $log->logdie( "Error reading state information from file $filenames[0]\n" )
       unless keys %state;
   }
 
@@ -2866,7 +2886,9 @@ sub _print_text {
     unless $self->verbosity
         && defined $text;
 
-  print $text;
+  my $log = Log::Log4perl->get_logger( '' );
+  $log->info( $text );
+
   return;
 }
 
