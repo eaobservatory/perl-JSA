@@ -980,7 +980,7 @@ sub _get_obs_group {
 
         unless ( -r $file && -s _ ) {
 
-          $log->logwarn( "Unreadble or empty file: $file; skipped.\n" );
+          $log->warn( "Unreadble or empty file: $file; skipped.\n" );
           next;
         }
 
