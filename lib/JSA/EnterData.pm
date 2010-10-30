@@ -965,6 +965,8 @@ sub _get_obs_group {
               'header_search' => 'files'
             );
 
+  require OMP::Info::Obs;
+
     unless ( $self->files_given ) {
 
       %args =
@@ -1009,7 +1011,7 @@ sub _get_obs_group {
       require OMP::FileUtils;
 
       my %merged = OMP::FileUtils->merge_dupes( @headers );
-      @obs = OMP::ArchiveDB->_hdrs_to_obs( $obs{'retainhdr'} , %merged );
+      @obs = OMP::Info::Obs->hdrs_to_obs( $obs{'retainhdr'} , %merged );
 
       %args =  ( 'obs' => [ @obs ] );
     }
