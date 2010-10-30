@@ -1006,7 +1006,9 @@ sub _get_obs_group {
           }
       }
 
-      my %merged = OMP::ArchiveDB->_merge_dupes( @headers );
+      require OMP::FileUtils;
+
+      my %merged = OMP::FileUtils->merge_dupes( @headers );
       @obs = OMP::ArchiveDB->_hdrs_to_obs( $obs{'retainhdr'} , %merged );
 
       %args =  ( 'obs' => [ @obs ] );
