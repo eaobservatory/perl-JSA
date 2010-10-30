@@ -61,12 +61,15 @@ our @EXPORT_OK =
       make_logfile
       get_dumper
       hashref_to_dumper
+      set_default_format
+      set_message_format
     ];
 
 my $_log_dir = '/jac_logs/jsa';
 $_log_dir = '/tmp' unless -d $_log_dir;
 
 my $_log_file_key = 'log4perl.appender.log.filename';
+my $_log_fmt_key  = 'log4perl.appender.log.layout.ConversionPattern';
 
 my %_config =
   ( 'log4perl.rootLogger' => 'DEBUG, log',
@@ -75,13 +78,8 @@ my %_config =
     $_log_file_key                 => make_logfile( 'log' ),
     'log4perl.appender.log.mode'   => 'append',
     'log4perl.appender.log.layout' => 'PatternLayout',
-
-    'log4perl.appender.log.layout.ConversionPattern' =>
-      # host log-level process-id time
-      # - file name line-number (sub, if available)
-      # - message\n
-      '%H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M # %m%n'
   );
+set_default_format();
 
 =over 2
 
@@ -101,7 +99,7 @@ Some of the configuration defaults are ...
   file      - /jac_logs/jsa/default.<yyyymmdd>.<process id>
               (appeneded, not overwritten)
 
-  format    - %H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M # %m%n, or ...
+  format    - %H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n, or ...
                 %H : host
                 %p : log level
                 %P : process-id
@@ -109,13 +107,42 @@ Some of the configuration defaults are ...
                 %F : file name
                 %L : line number
                 %M : sub name (if available)
-                #
-                %m : message
                 %n : newline
+                %m : message
 
 =cut
 
 sub get_config { return { %_config }; }
+
+=item B<set_default_format>
+
+Sets the default, verbose format to
+C<%H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n>.
+
+=cut
+
+sub set_default_format {
+
+  $_config{ $_log_fmt_key } =
+    '%H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n';
+
+  return;
+}
+
+=item B<set_default_format>
+
+Sets the default, short format to
+C<%d{yyyyMMdd-hhmm:ss}%n  %m%n>.
+
+=cut
+
+sub set_message_format {
+
+  $_config{ $_log_fmt_key } =
+    '%d{yyyyMMdd-hhmm:ss}%n  %m%n';
+
+  return;
+}
 
 =item B<get_dumper>
 
