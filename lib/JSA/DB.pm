@@ -698,8 +698,8 @@ sub _start_trans {
   $log->trace( 'Starting transaction' );
 
   # Start transaction.
-  #$dbh->{'AutoCommit'} = 0;
-  $dbh->begin_work();
+  $dbh->{'AutoCommit'} = 0;
+  #$dbh->begin_work();
   return;
 }
 
@@ -718,17 +718,21 @@ sub _end_trans {
 
   my $log = Log::Log4perl->get_logger( '' );
 
+  # AutoCommit need to be false already to be able to use explicit transactions
+  # and avoid DBI errors related to AutoCommit being already on & similar.
+  my $autoc = $dbh->{'AutoCommit'};
+
   unless ( $dbh->err() ) {
 
     $log->trace( 'Commiting transaction' );
 
-    $dbh->commit();
+    $dbh->commit() if ! $autoc;
     return 1;
   }
 
   $log->error( 'Rolling back transaction: ', $dbh->errstr() );
 
-  $dbh->rollback();
+  $dbh->rollback() if ! $autoc;
   return;
 }
 
