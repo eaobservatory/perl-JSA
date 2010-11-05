@@ -726,7 +726,7 @@ sub _end_trans {
     return 1;
   }
 
-  $log->logerror( 'Rolling back transaction: ', $dbh->errstr() );
+  $log->error( 'Rolling back transaction: ', $dbh->errstr() );
 
   $dbh->rollback();
   return;
