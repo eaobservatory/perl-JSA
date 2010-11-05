@@ -113,21 +113,21 @@ sub dbhandle {
 
   my $self = shift @_;
 
-  my $extern = 'extern-dbh';
+  my $name = $self->_name() || 'extern-dbh';
 
   unless ( scalar @_ ) {
 
-    return $self->{ $extern }
-      if exists $self->{ $extern }
-      && ref $self->{ $extern };
+    return $self->{ $name }
+      if exists $self->{ $name }
+      && ref $self->{ $name };
 
-    return connect_to_db( $self->{'db-config'}, $self->_name );
+    return connect_to_db( $self->{'db-config'}, $name );
   }
 
   my $log = Log::Log4perl->get_logger( '' );
   $log->debug( 'Setting external database handle.' );
 
-  $self->{ $extern } = shift @_;
+  $self->{ $name } = shift @_;
 
   return;
 }
