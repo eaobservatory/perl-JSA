@@ -2932,7 +2932,7 @@ sub _get_xfer_unconnected_dbh {
   $name ||= 'xfer-new-dbh';
 
   require JSA::DB;
-  my $db = JSA::DB->new( $name => $name );
+  my $db = JSA::DB->new( 'name' => $name );
   $db->use_transaction( 0 );
 
   return $self->_get_xfer( $db->dbhandle(), $name );
