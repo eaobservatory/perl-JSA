@@ -212,17 +212,11 @@ name.
 
   $files = $xfer->get_found_files( 20100612 );
 
-=item B<add_found>
+=item B<put_found_files>
 
-Add state of C<found> of given array reference of files (base names).
+Add state of C<found> of given array reference of files (absolute paths).
 
   $xfer->add_found( [ @files ] );
-
-=item B<set_found>
-
-Set state to C<found> of given array reference of files (base names).
-
-  $xfer->set_found( [ @files ] );
 
 =item B<get_ignored_files>
 
@@ -329,6 +323,17 @@ Set state to C<transferred> of given array reference of files (base names).
       my $get = qq[get_${key}_files];
 
       no strict 'refs';
+      *$get =
+        sub {
+          my ( $self, %filter ) = @_;
+
+          return $self->_get_files( %filter, 'state' => $key );
+        };
+
+      next
+        # put* is handled elsewhere.
+        if $key eq 'found';
+
       *$set =
         sub {
            my ( $self, $files ) = @_;
@@ -350,13 +355,6 @@ Set state to C<transferred> of given array reference of files (base names).
            my ( $self, $files ) = @_;
 
            return $self->_put_state( 'state' => $key, 'file' => $files );
-        };
-
-      *$get =
-        sub {
-          my ( $self, %filter ) = @_;
-
-          return $self->_get_files( %filter, 'state' => $key );
         };
     }
 }
@@ -476,6 +474,35 @@ sub mark_transferred_as_deleted {
   my $sum = 0;
   $sum += $_ for @affected;
   return $sum;
+}
+
+sub put_found_files {
+
+  my ( $self, $files ) = @_;
+
+  my @file = @{ $files };
+
+  return unless scalar @file;
+
+  my $state = $_state{'found'};
+
+  require File::Basename;
+  import File::Basename qw[ fileparse ];
+
+  my @val;
+  for my $f ( @file ) {
+
+    my $alt = _fix_file_name( ( fileparse( $f, '' ) )[0] );
+    push @val, [ $alt, $state, $f ];
+  }
+
+  my $db = _make_jdb();
+  return
+    $db->update_or_insert(  'table'       => $_state_table,
+                            'unique-keys' => [ 'file_id' ],
+                            'columns'     => [ 'file_id', 'status', 'location' ],
+                            'values'      => [ @val ],
+                          );
 }
 
 =item B<name>
@@ -663,8 +690,7 @@ sub _put_state {
 
   eval { _check_state( $state ) }; croak $@ if $@;
 
-  require JSA::DB;
-  my $db = JSA::DB->new( 'name' => 'transfer-change-add' );
+  my $db = _make_jdb();
 
   my @alt = map { _fix_file_name( $_ ) } sort @{ $files };
   return
@@ -793,6 +819,12 @@ sub _check_state {
   throw JSA::Error::BadArgs
     sprintf "Unknown state type, %s, given, exiting ...\n",
       ( defined $type ? $type : 'undef' );
+}
+
+sub _make_jdb {
+
+  require JSA::DB;
+  return JSA::DB->new( 'name' => 'transfer-change-add' );
 }
 
 
