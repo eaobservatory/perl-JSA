@@ -534,7 +534,7 @@ returns nothing.
 =item B<prepare_and_insert>
 
 Inserts observation in database retrieved from disk (see also
-I<insert_obs> method) for a date (see also I<date> method).
+I<insert_observations> method) for a date (see also I<date> method).
 
 Date can be given to the method, or can be set via I<new()> or
 I<date()> method.  Current date is used if no date has been explicitly
@@ -632,12 +632,12 @@ set.
         $observations->{$obs->runnr} = \@subhdrs;
       }
 
-      my $added = $self->insert_obs( 'db' => $db,
-                                      'instrument' => $inst,
-                                      'columns' => $columns,
-                                      'dict'    => \%dict,
-                                      'obs' => $observations,
-                                    );
+      my $added = $self->insert_observations( 'db' => $db,
+                                              'instrument' => $inst,
+                                              'columns' => $columns,
+                                              'dict'    => \%dict,
+                                              'obs' => $observations,
+                                            );
 
 
       push @files_added, @{ $added }
@@ -690,7 +690,7 @@ sub update_only_obstime {
   return $self->{'obstime-only'};
 }
 
-=item B<insert_obs>
+=item B<insert_observations>
 
 Inserts a row  in "FILES", "COMMON", and instrument related tables for
 each observation for each subscan and subsystem used.  Every insert
@@ -702,24 +702,18 @@ reference of observations (run number as keys, array reference of sub
 headers as values); a hash reference of columns (see I<get_columns>);
 and a hash reference of dictionary (see I<create_dictionary>).
 
-  $enter->insert_obs( 'dbhandle' => $dbh,
-                      'instrument' => $inst,
-                      'columns' => \%cols,
-                      'dict'    => \%dict,
-                      'obs'     => \%obs,
-                    );
+  $enter->insert_observations( 'dbhandle' => $dbh,
+                                'instrument' => $inst,
+                                'columns' => \%cols,
+                                'dict'    => \%dict,
+                                'obs'     => \%obs,
+                              );
 
 It is called by I<prepare_and_insert> method.
 
 =cut
 
-  # For each observation:
-  # 1. Insert a row in the COMMON table.
-  # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
-  # 3. Insert a row in the FILES table for each subscan
-  #
-  # fails, the entire observation fails to go in to the DB.
-  sub insert_obs {
+  sub insert_observations {
 
     my ( $self, %args ) = @_ ;
 
@@ -852,6 +846,16 @@ It is called by I<prepare_and_insert> method.
     }
 
     return \@success;
+  }
+
+  # For each observation:
+  # 1. Insert a row in the COMMON table.
+  # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
+  # 3. Insert a row in the FILES table for each subscan
+  #
+  # fails, the entire observation fails to go in to the DB.
+  sub insert_obs {
+
   }
 }
 
@@ -1076,7 +1080,7 @@ Returns true on success, false on failure.
                                 'obs'     => \%obs_per_runnr,
                               );
 
-It is called by I<insert_obs> method.
+It is called by I<insert_observations> method.
 
 =cut
 
