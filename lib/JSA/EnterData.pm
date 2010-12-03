@@ -647,49 +647,6 @@ set.
     return \@files_added;
   }
 
-=item B<skip_state_setting>
-
-Returns truth value to indicate if to skip state setting in transfer
-table, when no arguments given.  Default is not to skip.
-
-  print "Not setting state" if $enter->skip_state_setting();
-
-If a truth value is given, it is stored for later use.
-
-  $enter->skip_state_setting( 0 );
-
-=cut
-
-sub skip_state_setting {
-
-  my $self = shift @_;
-
-  my $store = 'skip-state';
-
-  return $self->{ $store } unless scalar @_;
-
-  $self->{ $store } = !! $_[0];
-  return;
-}
-
-
-=item B<update_only_obstime>
-
-Returns a truth value to inidicate if to update only the times for an
-observattion run.
-
-  print "Only date obs & end will be updated"
-    if $enter->update_only_obstime();
-
-=cut
-
-sub update_only_obstime {
-
-  my ( $self) = @_;
-
-  return $self->{'obstime-only'};
-}
-
 =item B<insert_observations>
 
 Inserts a row  in "FILES", "COMMON", and instrument related tables for
@@ -857,6 +814,49 @@ It is called by I<prepare_and_insert> method.
   sub insert_obs {
 
   }
+}
+
+=item B<skip_state_setting>
+
+Returns truth value to indicate if to skip state setting in transfer
+table, when no arguments given.  Default is not to skip.
+
+  print "Not setting state" if $enter->skip_state_setting();
+
+If a truth value is given, it is stored for later use.
+
+  $enter->skip_state_setting( 0 );
+
+=cut
+
+sub skip_state_setting {
+
+  my $self = shift @_;
+
+  my $store = 'skip-state';
+
+  return $self->{ $store } unless scalar @_;
+
+  $self->{ $store } = !! $_[0];
+  return;
+}
+
+
+=item B<update_only_obstime>
+
+Returns a truth value to inidicate if to update only the times for an
+observattion run.
+
+  print "Only date obs & end will be updated"
+    if $enter->update_only_obstime();
+
+=cut
+
+sub update_only_obstime {
+
+  my ( $self) = @_;
+
+  return $self->{'obstime-only'};
 }
 
 sub _filter_header {
