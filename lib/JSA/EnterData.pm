@@ -674,14 +674,44 @@ It is called by I<prepare_and_insert> method.
 
     my ( $self, %args ) = @_ ;
 
-    my ( $inst, $db, $obs ) = map { $args{ $_ } } qw[ instrument db obs ];
-    my $dbh = $db->handle();
+    my ( $obs ) = map { $args{ $_ } } qw[ obs ];
 
     # Pass everything but observations hash reference to other subs.
     my %pass_args =
-      map { $_ => $args{ $_ } } qw[ instrument columns dict ];
+      map { $_ => $args{ $_ } } qw[ instrument db columns dict ];
 
-    my ( @success, @sub_obs, @base );
+    my @success;
+
+    my %run =
+      ( 'inserted' =>
+          sub {
+            my ( $self, %arg ) = @_;
+
+            push @success, map { $_->filename } @{ $arg{'obs'} };
+            $self->_print_text( "successful\n" );
+            return;
+          },
+
+        'simulation' =>
+          sub {
+            my ( $self, %arg ) = @_;
+
+            my $xfer  = $self->_get_xfer_unconnected_dbh();
+            $xfer->put_simulation( $arg{'file-id'} );
+            return;
+          },
+
+        'error' =>
+          sub {
+            my ( $self, %arg ) = @_;
+
+            my $xfer  = $self->_get_xfer_unconnected_dbh();
+            $xfer->put_error( $arg{'file-id'} );
+            return;
+          },
+      );
+
+    my ( @sub_obs, @base );
     RUN:
     for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
 
@@ -689,117 +719,24 @@ It is called by I<prepare_and_insert> method.
 
       @base = map { $_->simple_filename } @sub_obs;
 
-      for ( @base ) {
-
-        if ( exists $touched{ $_ } ) {
-
-          $self->_print_text( "\talready processed: $_\n" )
-            if 1 < $self->verbosity;
-
-          next RUN;
-        }
-      }
-
-      $touched{ $_ } = undef for @base;
-
-      for my $sub_ob ( @sub_obs ) {
-
-        if ( $inst->can( 'fill_max_subscan' ) ) {
-
-          $inst->fill_max_subscan( $sub_ob->hdrhash, $sub_ob );
-        }
-
-        if ( $inst->can( 'transform_header' ) ) {
-
-          my ( $hash , $array ) = $inst->transform_header( $sub_ob->hdrhash );
-          $sub_ob->hdrhash( $hash );
-        }
-      }
-
-      my $common_obs = $obs->{$runnr}->[0];
-
-      # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
-      # does not untie).  This is so that a single element array reference when
-      # assigned to one of the keys is assigned as reference (not as the element
-      # contained with in).
-      my $common_hdrs = { %{ $common_obs->hdrhash } };
-
-      $self->_print_text( sprintf "\t[%s]... ", join ', ', @base );
-
-      if ( ! $self->process_simulation && $common_hdrs->{SIMULATE} ) {
-
-        my $xfer  = $self->_get_xfer_unconnected_dbh();
-        $xfer->put_simulation( [ @base ] );
-
-        $self->_print_text( "simulation data. Skipping\n" );
-        next RUN;
-      }
-
-      # XXX Skip badly needed data verification for scuba2 until implemented.
-      unless ( JSA::EnterData::SCUBA2->name_is_scuba2( $inst->name ) ) {
-
-        my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs );
-
-        my %invalid = $verify->verify_headers;
-
-        for (keys %invalid) {
-
-          my $val = $invalid{$_}->[0];
-          if ( $val =~ /does not match/i ) {
-
-            $self->_print_text( "$_ : $val\n" );
-            undef $common_hdrs->{$_};
-          } elsif ( $val =~ /should not/i ) {
-
-            $self->_print_text( "$_ : $val\n" );
-            undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
-          }
-        }
-      }
-
-      unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
-
-        my $xfer = $self->_get_xfer_unconnected_dbh();
-        $xfer->put_error( [ @base ] );
-
-        next RUN;
-      }
-
-
-      #$dbh->begin_work if $self->load_header_db;
-      $db->begin_trans() if $self->load_header_db;
-
-      $self->fill_headers_COMMON( $common_hdrs, $common_obs );
-
-      my $error =
-        $self->_modify_db_on_obsend( %pass_args,
-                                    'dbhandle' => $dbh,
-                                    'table'   => 'COMMON',
-                                    'headers' => $common_hdrs,
-                                  );
-
-      if ( $dbh->err() ) {
-
-        $db->rollback_trans();
-        $self->_print_error_simple_dup( $error );
-
-        next RUN;
-      }
-
-      unless ( $self->update_only_obstime() ) {
-
-        $self->add_subsys_obs( %pass_args,
-                                'db' => $db,
-                                'obs' => $obs->{$runnr},
+      my $ans =
+        $self->insert_obs_set(  'run-obs' => \@sub_obs,
+                                'file-id' => \@base,
+                                %pass_args,
                               )
-          or next RUN ;
+                              or next;
+
+      if ( exists $run{ $ans } ) {
+
+        $run{ $ans }->( $self,
+                        'obs'     => \@sub_obs,
+                        'file-id' => \@base,
+                      );
       }
+      else {
 
-      $db->commit_trans() if $self->load_header_db;
-
-      push @success, map { $_->filename } @sub_obs;
-
-      $self->_print_text( "successful\n" );
+        throw JSA::Error::BadArgs "Do not know what to run for state '$ans'."
+      }
     }
 
     return \@success;
@@ -811,8 +748,122 @@ It is called by I<prepare_and_insert> method.
   # 3. Insert a row in the FILES table for each subscan
   #
   # fails, the entire observation fails to go in to the DB.
-  sub insert_obs {
+  sub insert_obs_set {
 
+    my ( $self, %arg ) = @_;
+
+    my ( $inst, $db, $run_obs, $files ) =
+     map { $arg{ $_ } } qw[ instrument db run-obs file-id ];
+
+    my $dbh  = $db->handle();
+    my @file = @{ $files };
+
+    my %pass_arg =
+      map { $_ => $arg{ $_ } } qw[ instrument columns dict ];
+
+    for ( @file ) {
+
+      if ( exists $touched{ $_ } ) {
+
+        $self->_print_text( "\talready processed: $_\n" )
+          if 1 < $self->verbosity;
+
+        return;
+      }
+    }
+
+    @touched{ @file } = ();
+
+    for my $obs ( @{ $run_obs } ) {
+
+      if ( $inst->can( 'fill_max_subscan' ) ) {
+
+        $inst->fill_max_subscan( $obs->hdrhash, $obs );
+      }
+
+      if ( $inst->can( 'transform_header' ) ) {
+
+        my ( $hash , $array ) = $inst->transform_header( $obs->hdrhash );
+        $obs->hdrhash( $hash );
+      }
+    }
+
+    my $common_obs = $run_obs->[0];
+
+    # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
+    # does not untie).  This is so that a single element array reference when
+    # assigned to one of the keys is assigned as reference (not as the element
+    # contained with in).
+    my $common_hdrs = { %{ $common_obs->hdrhash } };
+
+    $self->_print_text( sprintf "\t[%s]... ", join ', ', @file );
+
+    if ( ! $self->process_simulation && $common_hdrs->{SIMULATE} ) {
+
+      $self->_print_text( "simulation data; skipping\n" );
+      return 'simulation';
+    }
+
+    # XXX Skip badly needed data verification for scuba2 until implemented.
+    unless ( JSA::EnterData::SCUBA2->name_is_scuba2( $inst->name ) ) {
+
+      my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs );
+
+      my %invalid = $verify->verify_headers;
+
+      for (keys %invalid) {
+
+        my $val = $invalid{$_}->[0];
+        if ( $val =~ /does not match/i ) {
+
+          $self->_print_text( "$_ : $val\n" );
+          undef $common_hdrs->{$_};
+        } elsif ( $val =~ /should not/i ) {
+
+          $self->_print_text( "$_ : $val\n" );
+          undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
+        }
+      }
+    }
+
+    unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
+
+      $self->_print_text( "problem while finding bounds; skipping\n" );
+      return 'error';
+    }
+
+    #$dbh->begin_work if $self->load_header_db;
+    $db->begin_trans() if $self->load_header_db;
+
+    $self->fill_headers_COMMON( $common_hdrs, $common_obs );
+
+    my $error =
+      $self->_modify_db_on_obsend( %pass_arg,
+                                  'dbhandle' => $dbh,
+                                  'table'    => 'COMMON',
+                                  'headers'  => $common_hdrs,
+                                );
+
+    if ( $dbh->err() ) {
+
+      $db->rollback_trans();
+      $self->_print_error_simple_dup( $error );
+
+      return 'error';
+    }
+
+    unless ( $self->update_only_obstime() ) {
+
+      $self->add_subsys_obs( %pass_arg,
+                              'db'  => $db,
+                              'obs' => $run_obs,
+                            )
+        or return 'error';
+    }
+
+    $db->commit_trans() if $self->load_header_db;
+
+    return 'inserted';
   }
 }
 
@@ -1296,7 +1347,7 @@ sub insert_hash {
     @prim_key = ref $prim_key ? @{ $prim_key } : $prim_key ;
   }
 
-  my $xfer = $self->_get_xfer( $dbh );
+  my $xfer = $self->_get_xfer_unconnected_dbh();
 
   # and insert all the rows
   for my $row (@insert_hashes) {
