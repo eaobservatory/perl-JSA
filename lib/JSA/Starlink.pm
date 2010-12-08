@@ -315,7 +315,10 @@ sub prov_update_parent_path {
               # This hack does not work for multi-subsystem hybrids
               # since we lose the subscan number
               $newpath = $path;
-              $newpath =~ s/_[a-z]+(\d+)/_0$1/;
+              if ($newpath =~ /_[a-z]+(\d+)/) {
+                my $newnum = sprintf( "%04d", $1);
+                $newpath =~ s/_[a-z]+\d+/_$newnum/;
+              }
             }
           }
         } else {
