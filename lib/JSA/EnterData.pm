@@ -1031,54 +1031,54 @@ sub _get_obs_group {
 
   require OMP::Info::Obs;
 
-    unless ( $self->files_given ) {
+  unless ( $self->files_given ) {
 
-      %args =
-        ( 'date' => $args{'date'} ,
-          'instrument' => $args{'name'},
-          %obs
-        );
-    }
-    else {
+    %args =
+      ( 'date' => $args{'date'} ,
+        'instrument' => $args{'name'},
+        %obs
+      );
+  }
+  else {
 
-      my @obs;
-      for my $file (  @{ $files } ) {
+    my @obs;
+    for my $file (  @{ $files } ) {
 
-        unless ( -r $file && -s _ ) {
+      unless ( -r $file && -s _ ) {
 
-          $log->warn( "Unreadble or empty file: $file; skipped.\n" );
-          next;
-        }
-
-        try {
-
-          push @obs, OMP::Info::Obs->readfile( $file , %obs );
-        }
-        catch OMP::Error::ObsRead with {
-
-          my ( $err ) = @_;
-
-          throw $err
-            unless $err->text() =~ m/^Error reading FITS header from file/;
-        };
+        $log->warn( "Unreadble or empty file: $file; skipped.\n" );
+        next;
       }
 
-      my @headers;
-      for my $ob ( @obs ) {
+      try {
 
-        push @headers,
-          { 'filename' => $ob->{'FILENAME'}->[0],
-            'header' => $ob->hdrhash,
-          }
+        push @obs, OMP::Info::Obs->readfile( $file , %obs );
       }
+      catch OMP::Error::ObsRead with {
 
-      require OMP::FileUtils;
+        my ( $err ) = @_;
 
-      my %merged = OMP::FileUtils->merge_dupes( @headers );
-      @obs = OMP::Info::Obs->hdrs_to_obs( $obs{'retainhdr'} , %merged );
-
-      %args =  ( 'obs' => [ @obs ] );
+        throw $err
+          unless $err->text() =~ m/^Error reading FITS header from file/;
+      };
     }
+
+    my @headers;
+    for my $ob ( @obs ) {
+
+      push @headers,
+        { 'filename' => $ob->{'FILENAME'}->[0],
+          'header' => $ob->hdrhash,
+        }
+    }
+
+    require OMP::FileUtils;
+
+    my %merged = OMP::FileUtils->merge_dupes( @headers );
+    @obs = OMP::Info::Obs->hdrs_to_obs( $obs{'retainhdr'} , %merged );
+
+    %args =  ( 'obs' => [ @obs ] );
+  }
 
   return
     OMP::Info::ObsGroup->new( %args );
