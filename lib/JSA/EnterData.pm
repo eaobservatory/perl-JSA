@@ -688,7 +688,6 @@ It is called by I<prepare_and_insert> method.
             my ( $self, %arg ) = @_;
 
             push @success, map { $_->filename } @{ $arg{'obs'} };
-            $self->_print_text( "successful\n" );
             return;
           },
 
@@ -719,12 +718,20 @@ It is called by I<prepare_and_insert> method.
 
       @base = map { $_->simple_filename } @sub_obs;
 
-      my $ans =
-        $self->insert_obs_set(  'run-obs' => \@sub_obs,
-                                'file-id' => \@base,
-                                %pass_args,
-                              )
-                              or next;
+      my $ans;
+      try {
+        $ans = $self->insert_obs_set( 'run-obs' => \@sub_obs,
+                                      'file-id' => \@base,
+                                      %pass_args,
+                                    );
+      }
+      catch JSA::Error with {
+
+        my ( $e ) = @_;
+
+        $ans = 'error';
+      };
+      next unless defined $ans;
 
       if ( exists $run{ $ans } ) {
 
@@ -862,6 +869,8 @@ It is called by I<prepare_and_insert> method.
     }
 
     $db->commit_trans() if $self->load_header_db;
+
+    $self->_print_text( "successful\n" );
 
     return 'inserted';
   }
@@ -1215,8 +1224,8 @@ sub add_subsys_obs {
       if ( $dbh->err() ) {
 
         $db->rollback_trans() if $self->load_header_db;
-        $self->_print_text( "$error\n\n" );
-        return;
+        $self->_print_text( "$error\n\n" )
+        return 'error';
       }
     }
 
