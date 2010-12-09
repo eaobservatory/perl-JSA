@@ -497,7 +497,7 @@ sub files {
   my ( $files ) = @_;
 
   throw JSA::Error 'Need a non-empty array reference.'
-    unless ref $files && scalar @{ $files };
+    unless $files && ref $files && scalar @{ $files };
 
   $self->{'files'} = $files;
   return;
@@ -1024,6 +1024,16 @@ sub _get_obs_group {
 
   my $files = $self->files;
 
+  unless ( $args{'path-not-from-db'} ) {
+
+    my $xfer = $self->_get_xfer_unconnected_dbh();
+    my $tmp  = $xfer->get_found_files();
+
+    $files = [ map { $_ ? @{ $_ } : () } $files, $tmp ];
+
+    $self->files( $files ) if $files && scalar @{ $files };
+  }
+
   my %obs = ( 'nocomments' => 1,
               'retainhdr' => 1,
               'header_search' => 'files'
@@ -1224,7 +1234,7 @@ sub add_subsys_obs {
       if ( $dbh->err() ) {
 
         $db->rollback_trans() if $self->load_header_db;
-        $self->_print_text( "$error\n\n" )
+        $self->_print_text( "$error\n\n" );
         return 'error';
       }
     }
