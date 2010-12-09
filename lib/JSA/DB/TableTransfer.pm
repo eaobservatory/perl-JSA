@@ -322,6 +322,9 @@ Set state to C<transferred> of given array reference of files (base names).
       my $put = qq[put_${key}];
       my $get = qq[get_${key}_files];
 
+      next
+        if $key eq 'found';
+
       no strict 'refs';
       *$get =
         sub {
@@ -329,10 +332,6 @@ Set state to C<transferred> of given array reference of files (base names).
 
           return $self->_get_files( %filter, 'state' => $key );
         };
-
-      next
-        # put* is handled elsewhere.
-        if $key eq 'found';
 
       *$set =
         sub {
@@ -474,6 +473,38 @@ sub mark_transferred_as_deleted {
   my $sum = 0;
   $sum += $_ for @affected;
   return $sum;
+}
+
+sub get_found_files {
+
+  my ( $self, $pattern ) = @_;
+
+  my $sql =
+    sprintf
+      qq[ SELECT s.file_id , s.location
+          FROM $_state_table s , $_state_descr_table d
+          WHERE s.status = ?
+            AND s.status = d.state
+            AND s.location IS NOT NULL
+        ]
+        ;
+
+  $sql .= ' AND file_id like ? '
+    if $pattern;
+
+  $sql .= ' ORDER BY s.file_id, s.location ';
+
+  my $dbh = $self->_dbhandle();
+  my $out = $dbh->selectcol_arrayref( $sql,
+                                      # Return only file paths.
+                                      { 'Columns' => [2] },
+                                      $_state{'found'},
+                                      ( $pattern ? $pattern : () )
+                                    )
+                                  or throw JSA::Error::DBError $dbh->errstr;
+
+
+  return $out;
 }
 
 sub put_found_files {
