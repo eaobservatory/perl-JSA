@@ -682,6 +682,9 @@ sub _run_change_sql {
                   };
 }
 
+{
+  my $trans = 0;
+
 =item B<_start_trans>
 
 Given a database handle, starts a transaction; returns nothing.
@@ -690,18 +693,25 @@ Given a database handle, starts a transaction; returns nothing.
 
 =cut
 
-sub _start_trans {
+  sub _start_trans {
 
-  my ( $dbh )= @_;
+    my ( $dbh )= @_;
 
-  my $log = Log::Log4perl->get_logger( '' );
-  $log->trace( 'Starting transaction' );
+    $dbh->{'AutoCommit'} and return;
 
-  # Start transaction.
-  $dbh->{'AutoCommit'} = 0;
-  #$dbh->begin_work();
-  return;
-}
+    my $log = Log::Log4perl->get_logger( '' );
+    $log->trace( 'Starting transaction' );
+
+    # Start transaction.
+    if ( $trans == 0 ) {
+
+      $dbh->{'AutoCommit'} = 0;
+      #$dbh->begin_work();
+    }
+
+    $trans++;
+    return;
+  }
 
 =item B<_end_trans>
 
@@ -712,28 +722,46 @@ errors.  On error, rolls back a transaction.  Returns nothing.
 
 =cut
 
-sub _end_trans {
+  sub _end_trans {
 
-  my ( $dbh ) = @_;
+    return unless $trans;
 
-  my $log = Log::Log4perl->get_logger( '' );
+    my ( $dbh ) = @_;
 
-  # AutoCommit need to be false already to be able to use explicit transactions
-  # and avoid DBI errors related to AutoCommit being already on & similar.
-  my $autoc = $dbh->{'AutoCommit'};
+    # AutoCommit need to be false already to be able to use explicit transactions
+    # and avoid DBI errors related to AutoCommit being already on & similar.
+    $dbh->{'AutoCommit'} and return;
 
-  unless ( $dbh->err() ) {
+    my $autoc = $dbh->{'AutoCommit'};
 
-    $log->trace( 'Commiting transaction' );
+    my $log = Log::Log4perl->get_logger( '' );
 
-    $dbh->commit() if ! $autoc;
-    return 1;
+    unless ( $dbh->err() ) {
+
+      $log->trace( 'Commiting transaction' );
+
+      if ( $trans == 1  && ! $autoc ) {
+
+        $dbh->commit()
+          or throw JSA::Error 'Cannot commit transaction: ' . $dbh->errstr();
+      }
+
+      --$trans;
+      return;
+    }
+
+    $log->error( 'Rolling back transaction: ', $dbh->errstr() );
+
+    if ( $trans && ! $autoc ) {
+
+      $trans = 0;
+
+      $dbh->rollback()
+        or throw JSA::Error 'Cannot rollback transaction: ' . $dbh->errstr();
+    }
+
+    return;
   }
-
-  $log->error( 'Rolling back transaction: ', $dbh->errstr() );
-
-  $dbh->rollback() if ! $autoc;
-  return;
 }
 
 =item B<_extract_key_val>
