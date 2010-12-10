@@ -829,7 +829,7 @@ sub _run_change_sql {
 
   return $dbh->do( $sql, undef, @bind )
             or do {
-                    $dbh->rollback;
+                    $dbh->rollback if $self->_use_trans();
                     throw JSA::Error::DBError $dbh->errstr;
                   };
 }
