@@ -46,8 +46,6 @@ use List::Util qw[ min sum ];
 use List::MoreUtils qw[ any ];
 use Log::Log4perl;
 
-use JAC::Setup qw[ omp ];
-
 use JSA::Error qw[ :try ];
 use OMP::Config;
 

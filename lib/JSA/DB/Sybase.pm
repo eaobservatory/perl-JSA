@@ -32,8 +32,6 @@ use Carp qw[ croak ];
 use Exporter qw[ import ];
 use Log::Log4perl;
 
-use JAC::Setup qw[ omp ];
-
 use OMP::Config;
 
 our @EXPORT_OK = qw[ connect_to_db ];

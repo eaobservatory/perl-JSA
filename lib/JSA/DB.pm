@@ -30,8 +30,6 @@ use List::MoreUtils qw[ any all firstidx ];
 use Log::Log4perl;
 use Scalar::Util qw[ looks_like_number ];
 
-use JAC::Setup qw[ omp ];
-
 use JSA::Error qw[ :try ];
 use JSA::DB::Sybase qw[ connect_to_db ];
 use JSA::LogSetup qw[ hashref_to_dumper ];
