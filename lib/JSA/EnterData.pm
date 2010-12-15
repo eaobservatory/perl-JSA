@@ -833,12 +833,6 @@ It is called by I<prepare_and_insert> method.
       }
     }
 
-    unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
-
-      $self->_print_text( "problem while finding bounds; skipping\n" );
-      return 'error';
-    }
-
     #$dbh->begin_work if $self->load_header_db;
     $db->begin_trans() if $self->load_header_db;
 
