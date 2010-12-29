@@ -381,7 +381,7 @@ ENDRECIPEID
   my @inserts;
   for my $mem (@to_add) {
     chomp( $mem );
-    my $dp_file_input_id = sprintf "0x%016lx", (++$dp_file_input_bigint);
+    my $dp_file_input_id = bigintstr(++$dp_file_input_bigint);
     my %dp_file_input = ( input_id => $dp_file_input_id,
                           recipe_instance_id => $dp_recipe_instance_id,
                           dp_input => $mem,
@@ -531,7 +531,7 @@ sub binaryAsBigint {
   return Math::BigInt->new("0x". $bin );
 }
 
-# Convert a big int to a string suitable for insertion into
+# Convert a (big) int to a string suitable for insertion into
 # a sybase BINARY field
 
 sub bigintstr {
