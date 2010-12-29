@@ -30,6 +30,7 @@ use OMP::Config;
 use Exporter 'import';
 our @EXPORT_OK = qw/ connect_to_cadcdp disconnect_from_cadcdp
                      create_recipe_instance
+                     remove_recipe_instance
                      dprecinst_url
                      query_dpstate
                    /;
@@ -393,6 +394,41 @@ ENDRECIPEID
   $dbh->commit unless $DEBUG;
 
   return $dp_recipe_instance_id;
+
+}
+
+=item remove_recipe_instance
+
+Remove recipe instances (supplied as integers) from the
+data processing tables. Returns the number of jobs removed.
+
+  $n = remove_recipe_instance( $dbh, @recipe_instance_ids );
+
+Verifies that all ids look like a simple integer.
+
+=cut
+
+sub remove_recipe_instance {
+  my $dbh = shift;
+  my @recipe_instance_ids = @_;
+
+  for my $id (@recipe_instance_ids) {
+    JSA::Error::BadArgs->throw("ID $id does not look like an integer")
+        unless $id =~ /^\d+$/;
+  }
+
+  # Convert the integers to hex
+  @recipe_instance_ids = map { bigintstr( $_ ) } @recipe_instance_ids;
+
+  $dbh->begin_work();
+
+  # Need to remove from two tables
+  my $sql = "DELETE FROM dp_recipe_instance WHERE recipe_instance_id = ?";
+  executeWithRollback( $dbh, $sql, @recipe_instance_ids );
+  $sql = "DELETE FROM dp_file_input WHERE recipe_instance_id = ?";
+  executeWithRollback( $dbh, $sql, @recipe_instance_ids );
+
+  $dbh->commit;
 
 }
 
