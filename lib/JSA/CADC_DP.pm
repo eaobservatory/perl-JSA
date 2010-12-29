@@ -558,14 +558,14 @@ sub executeWithRollback {
   if (!$sth) {
     my $err = $DBI::errstr;
     $dbh->rollback;
-    JSA::Error::CADCDB( $err );
+    JSA::Error::CADCDB->throw( $err );
   }
 
   for my $i (@items) {
     if (!$sth->execute( $i )) {
       my $err = $DBI::errstr;
       $dbh->rollback;
-      JSA::Error::CADCDB( $err );
+      JSA::Error::CADCDB->throw( $err );
     }
   }
   $sth->finish;
