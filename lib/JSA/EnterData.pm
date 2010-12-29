@@ -499,7 +499,16 @@ sub files {
   throw JSA::Error 'Need a non-empty array reference.'
     unless $files && ref $files && scalar @{ $files };
 
-  $self->{'files'} = $files;
+  my %seen;
+  my $old = $self->{'files'};
+  $self->{'files'} =
+    [ grep
+      { ! $seen{ $_ }++ }
+      ( ( $old && ref $old ? @{ $old } : () ),
+        @{ $files }
+      )
+    ];
+
   return;
 }
 
@@ -1016,16 +1025,13 @@ sub _get_obs_group {
 
   my $log = Log::Log4perl->get_logger( '' );
 
-  my $files = $self->files;
-
   unless ( $args{'path-not-from-db'} ) {
 
     my $xfer = $self->_get_xfer_unconnected_dbh();
     my $tmp  = $xfer->get_found_files();
 
-    $files = [ map { $_ ? @{ $_ } : () } $files, $tmp ];
-
-    $self->files( $files ) if $files && scalar @{ $files };
+    $self->files( [ map {  $_ && ref $_ ? @{ $_ } : () } $tmp, $self->files() ] )
+      if $tmp && scalar @{ $tmp };
   }
 
   my %obs = ( 'nocomments' => 1,
@@ -1045,6 +1051,7 @@ sub _get_obs_group {
   }
   else {
 
+    my $files = $self->files;
     my @obs;
     for my $file (  @{ $files } ) {
 
