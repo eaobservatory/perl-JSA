@@ -186,6 +186,7 @@ my %DR_RECIPES = (
 my @BAD_OBSIDSS = (qw/
                      scuba2_28_20100223T051545_450
                      scuba2_29_20100223T052321_450
+                     scuba2_67_20100306T152738_450
                      /);
 my %BAD_OBSIDSS = map { $_ => undef } @BAD_OBSIDSS;
 
