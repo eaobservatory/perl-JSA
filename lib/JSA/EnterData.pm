@@ -1702,7 +1702,7 @@ sub prepare_update_hash {
     my $new = $field_values->{$key};
     my $old = $indb->{$key};
 
-    next if ! ( defined $new && defined $old );
+    next if ! ( defined $old || defined $new );
 
     my %test =
       ( 'start' => exists $start{ $key },
