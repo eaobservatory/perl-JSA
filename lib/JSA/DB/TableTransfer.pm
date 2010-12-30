@@ -462,15 +462,11 @@ sub mark_transferred_as_deleted {
 
   $log->debug( join( "  \n", @alt ) );
 
-  my @affected;
   my $affected = $self->_run_change_sql( $sql, $_state{'transferred'}, @file );
-  push @affected, $affected if $affected;
 
   $dbh->commit if $self->_use_trans();
 
-  my $sum = 0;
-  $sum += $_ for @affected;
-  return $sum;
+  return $affected;
 }
 
 sub get_found_files {
