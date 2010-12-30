@@ -677,7 +677,7 @@ sub at_cadc {
   for my $f ( @prefix ) {
 
     push @file, $f
-      if any { $f =~ /^$_\d{8}/ } @inst
+      if any { $f =~ /^$_\d{8}/ } @inst;
   }
 
   return _check_cadc( @file );
