@@ -422,10 +422,11 @@ sub remove_recipe_instance {
 
   $dbh->begin_work();
 
-  # Need to remove from two tables
-  my $sql = "DELETE FROM dp_recipe_instance WHERE recipe_instance_id = ?";
+  # Need to remove from two tables. Need to delete from dp_file_input
+  # before deleting from dp_recipe_instance.
+  my $sql = "DELETE FROM dp_file_input WHERE recipe_instance_id = ?";
   executeWithRollback( $dbh, $sql, @recipe_instance_ids );
-  $sql = "DELETE FROM dp_file_input WHERE recipe_instance_id = ?";
+  $sql = "DELETE FROM dp_recipe_instance WHERE recipe_instance_id = ?";
   executeWithRollback( $dbh, $sql, @recipe_instance_ids );
 
   $dbh->commit;
@@ -709,7 +710,7 @@ Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>
 
 =head1 COPYRIGHT
 
-Copyright (C) 2009-2010 Science and Technology Facilities Council. All Rights Reserved.
+Copyright (C) 2009-2011 Science and Technology Facilities Council. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
