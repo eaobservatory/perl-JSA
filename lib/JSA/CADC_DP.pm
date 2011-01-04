@@ -424,8 +424,17 @@ sub remove_recipe_instance {
 
   # Need to remove from two tables. Need to delete from dp_file_input
   # before deleting from dp_recipe_instance.
+
+  print "Removing rows from dp_file_input.\n";
   my $sql = "DELETE FROM dp_file_input WHERE recipe_instance_id = ?";
   executeWithRollback( $dbh, $sql, @recipe_instance_ids );
+
+  print "Removing rows from dp_recipe_output.\n";
+  $sql = "DELETE FROM dp_recipe_output WHERE recipe_instance_id = ?";
+  executeWithRollback( $dbh, $sql, @recipe_instance_ids );
+
+  print "Removing row from dp_recipe_instance.\n";
+
   $sql = "DELETE FROM dp_recipe_instance WHERE recipe_instance_id = ?";
   executeWithRollback( $dbh, $sql, @recipe_instance_ids );
 
