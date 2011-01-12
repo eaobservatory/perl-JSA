@@ -262,6 +262,7 @@ sub read_jcmtstate {
   dat_annul( $mloc, $status);
 
   # find out how many time slice there are going to be
+  # Assumes that RTS_NUM is first so won't be compressed.
   dat_index( $jloc, 1, my $iloc, $status );
   dat_size( $iloc, my $size, $status );
   dat_annul( $iloc, $status );
@@ -319,6 +320,7 @@ sub read_jcmtstate {
       last if $status != &NDF::SAI__OK;
       dat_index( $jloc, $i, my $iloc, $status );
       dat_name( $iloc, my $name, $status );
+      dat_size( $iloc, my $nelem, $status );
 
       # skip if we are selecting a subset
       next if (@items && !exists $items{$name});
@@ -333,24 +335,37 @@ sub read_jcmtstate {
 
       my $coderef;
       if ($type =~ /^_(DOUBLE|REAL)$/) {
-        $coderef = ($use_cell ? \&dat_get0d : \&dat_get1d );
+        $coderef = ($use_cell ? \&dat_get0d : \&dat_getvd );
       } elsif ($type eq '_INTEGER') {
-        $coderef = ($use_cell ? \&dat_get0i : \&dat_get1i );
+        $coderef = ($use_cell ? \&dat_get0i : \&dat_getvi );
       } else {
-        $coderef = ($use_cell ? \&dat_get0c : \&dat_get1c );
+        $coderef = ($use_cell ? \&dat_get0c : \&dat_getvc );
       }
 
       my @values;
       if ($use_cell) {
-        for my $c (@posns) {
-          my @cell = ( $c );
-          dat_cell( $iloc, 1, @cell, my $cloc, $status );
-          $coderef->( $cloc, my $val, $status );
-          dat_annul( $cloc, $status );
-          push(@values, $val);
+        if ($nelem == 1) {
+          # this is actually a scalar so the value is a constant
+          $coderef->( $iloc, my $val, $status );
+          @values = map { $val } (0..$#posns);
+        } else {
+          for my $c (@posns) {
+            my @cell = ( $c );
+            dat_cell( $iloc, 1, @cell, my $cloc, $status );
+            $coderef->( $cloc, my $val, $status );
+            dat_annul( $cloc, $status );
+            push(@values, $val);
+          }
         }
       } else {
         $coderef->( $iloc, $size, \@values, my $el, $status );
+
+        if ($el < $size && $el == 1) {
+          # duplicate scalar items
+          my $val = $values[0];
+          @values = map { $val } (1..$size);
+        }
+
       }
 
       # store the results
