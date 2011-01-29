@@ -323,7 +323,11 @@ sub read_jcmtstate {
       last if $status != &NDF::SAI__OK;
       dat_index( $jloc, $i, my $iloc, $status );
       dat_name( $iloc, my $name, $status );
-      dat_size( $iloc, my $nelem, $status );
+      my @dims;
+      dat_shape( $iloc, 1, @dims, my $actdim, $status);
+
+      # Check for special case of 1 element vector
+      my $is_array = ( $actdim == 0 ? 0 : 1 );
 
       # skip if we are selecting a subset
       next if (@items && !exists $items{$name});
@@ -347,7 +351,7 @@ sub read_jcmtstate {
 
       my @values;
       if ($use_cell) {
-        if ($nelem == 1) {
+        if (!$is_array) {
           # this is actually a scalar so the value is a constant
           $coderef->( $iloc, my $val, $status );
           @values = map { $val } (0..$#posns);
