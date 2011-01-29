@@ -241,7 +241,10 @@ the list can be supplied as additional arguments.
 
 If multiple positions are to be read, results will be returned
 as a reference to an array indexed by component name. If only
-one position is requested a simple scalar will be used.
+one position is requested a simple scalar will be used. Note that
+if there is only one time slice but all were requested then that
+single time slice will be returned using array references to avoid
+surprises to the caller.
 
 RTS_TASKS is never read by default. It can be read if explicitly
 specified.
@@ -368,8 +371,8 @@ sub read_jcmtstate {
 
       }
 
-      # store the results
-      $results{$name} = ( @values > 1 ? \@values : $values[0] );
+      # store the results (do not use a scalar if we asked for all entries)
+      $results{$name} = ( (@values > 1 || !$use_cell) ? \@values : $values[0] );
 
       # free the locator associated with this component
       dat_annul( $iloc, $status );
