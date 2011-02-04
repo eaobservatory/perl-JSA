@@ -586,6 +586,8 @@ set.
     my $db = OMP::DBbackend::Archive->new;
     my $dbh = $db->handle;
 
+    $dbh->{'syb_show_eed'} = $dbh->{'syb_show_sql'} = 1;
+
     # The %columns hash will contain a key for each table, each key's value
     # being an anonymous hash containing the column information.  Store this
     # information for the COMMON table initially.
@@ -871,7 +873,15 @@ It is called by I<prepare_and_insert> method.
         or return 'error';
     }
 
+   try {
     $db->commit_trans() if $self->load_header_db;
+
+   }
+   catch Error::Simple with {
+
+     my ( $e ) = @_;
+     throw JSA::Error $e;
+   }
 
     $self->_print_text( "successful\n" );
 
@@ -1422,6 +1432,8 @@ sub conditional_insert_hash {
   my ( $table, $dbh, $insert ) =
     @args{ qw[ table dbhandle insert ] };
 
+  $dbh->{'syb_show_eed'} = $dbh->{'syb_show_sql'} = 1;
+
   return $self->insert_hash( %args )
     unless $self->conditional_insert;
 
@@ -1438,10 +1450,12 @@ sub conditional_insert_hash {
   # &DBI::prepare is not used for this SQL string as place holders do not work
   # after SELECT clause, need to place the values directly.  See
   # _make_insert_select_sql() && _fill_in_sql() methods.
-  my $sql = $self->_make_insert_select_sql( 'table' => $table,
-                                            'columns' => \@fields,
-                                            'primary' => $prim_key,
-                                          );
+  my $sql =
+    $self->_make_insert_select_sql( 'dbhandle' => $dbh,
+                                    'table'    => $table,
+                                    'primary'  => $prim_key,
+                                    'columns'  => \@fields,
+                                  );
 
   my ( $err, @prim_key, @affected );
   @prim_key = ref $prim_key ? @{ $prim_key } : ( $prim_key ) ;
@@ -1460,21 +1474,31 @@ sub conditional_insert_hash {
 
     last unless $self->load_header_db;
 
-    my $filled = $self->_fill_in_sql( 'sql' => $sql,
-                                      'dbhandle' => $dbh,
-                                      'table' => $table,
-                                      'columns' => \@fields,
-                                      'values' => \@values,
-                                    );
+    my $format =
+      join q[ , ],
+        $self->_get_cols_format( 'dbhandle' => $dbh,
+                                  'table'   => $table,
+                                  'columns' => \@fields,
+                                  'values'  => \@values,
+                                );
+    my $tmp = sprintf $sql, $format;
+    my $filled =
+      sprintf $tmp,
+        $self->_quote_vals( 'dbhandle' => $dbh,
+                            'table'   => $table,
+                            'columns' => \@fields,
+                            'values'  => \@values,
+                          );
 
     my @prim_val = map { $row->{ $_ } } @prim_key;
+
     my $affected = $dbh->do( $filled,
                               $prim_key
                               ? ( undef, @prim_val )
                               : ()
                             );
 
-    if ( $table eq 'FILES' && $affected > 0 ) {
+    if ( $table eq 'FILES' && $affected && $affected > 0 ) {
 
       $self->skip_state_setting()
         or $xfer->put_ingested( [ $row->{'file_id'} ] );
@@ -1526,7 +1550,8 @@ sub _make_insert_select_sql {
 
   my ( $self, %args ) = @_;
 
-  my ( $table, $cols, $primary ) = @args{qw[ table columns primary ]};
+  my ( $dbh, $table, $cols, $primary ) =
+    @args{qw[ dbhandle table columns primary ]};
 
   throw JSA::Error::BadArgs "No primary keys given."
     unless defined $primary;
@@ -1541,13 +1566,11 @@ sub _make_insert_select_sql {
             ;
   }
 
-  my @col = @{ $cols };
   return
-    sprintf q[ INSERT INTO %s (%s) SELECT %s ]
+    sprintf q[ INSERT INTO %s (%s) SELECT %%s ]
           . q[ WHERE NOT EXISTS ( SELECT 1 FROM %s WHERE %s ) ],
           $table,
-          join( q[ , ], @col ),
-          join( q[ , ], ('%s') x scalar @col ),
+          join( q[ , ], @{ $cols } ),
           $table,
           $where
           ;
@@ -1577,32 +1600,121 @@ sub _fill_in_sql {
 
   my ( $self, %args ) = @_;
 
-  my ( $sql, $dbh ) = @args{qw[ sql dbhandle ]};
+  return
+    sprintf $args{'sql'}, $self->_quote_vals( %args );
+}
 
-  my $types = $self->get_columns( $args{'table'}, $dbh );
+{
+  my ( %types, %val_format, $num_re );
 
-  my @val;
+  sub _init_num_regex {
 
-  # Handle number type values (for consumption in Sybase ASE 15.0) outside of
-  # &DBI::quote as it puts quotes around such values.
-  my $int_re = qr{\b (?: int | float | real | bit | boolean )}xi;
+    $num_re = qr{\b ( decimal | boolean | float | real | int | bit )}xi
+      unless $num_re;
 
-  for ( my $i = 0; $i < scalar @{ $args{'values'} }; $i++ ) {
-
-    my $val = $args{'values'}->[ $i ];
-    my $type = $types->{ $args{'columns'}->[ $i ] };
-
-    push @val,
-      ! defined $val
-      ? 'NULL'
-      : $type =~ m/$int_re/
-        ? $val
-        : $dbh->quote( $val, $type )
-        ;
+    return;
   }
 
-  return
-    sprintf $sql, @val;
+  sub _init_val_format {
+
+    %val_format =
+      ( 'int'     => '%d',
+        'bit'     => '%d',
+        'boolean' => '%d',
+        'decimal' => '%0.16f',
+        'float'   => '%0.16f',
+        'real'    => '%0.16f',
+        ''        => '%s',
+        undef     => '%s',
+        'char'    => '%s',
+        'varchar' => '%s',
+      )
+      unless scalar keys %val_format;
+
+    return;
+  }
+
+  sub _get_format {
+
+    my ( $type ) = @_;
+
+    _init_num_regex();
+    _init_val_format();
+
+    no warnings 'uninitialized';
+    return $val_format{ ( $type =~ $num_re )[0] };
+  }
+
+  sub _get_types {
+
+    my ( $self, $dbh, $table ) = @_;
+
+    return $types{ $table }
+      if $types{ $table };
+
+    return
+      $types{ $table } = $self->get_columns( $table, $dbh )
+  }
+
+  sub _get_cols_format {
+
+    my ( $self, %args ) = @_;
+
+    my ( $dbh, $table, $cols, $vals ) =
+      @args{qw[ dbhandle table columns values ]};
+
+    my $size = scalar @{ $cols };
+
+    my $types = $self->_get_types( $dbh, $table );
+
+    my @format;
+    for ( my $i = 0; $i < $size; $i++ ) {
+
+      push @format,
+        _get_format( $types->{ $cols->[ $i ] } );
+
+      if ( $vals && '%s' ne $format[ $i ] ) {
+
+        my $v = $vals->[ $i ];
+
+        $format[ $i ] = '%s'
+          if ! defined $v
+          || ( $v && $v =~ m/\bNULL\b/i )
+          ;
+      }
+    }
+    return @format;
+  }
+
+  sub _quote_vals {
+
+    my ( $self, %args ) = @_;
+
+    my ( $dbh, $table, $values ) = @args{qw[ dbhandle table values ]};
+    my $size = scalar @{ $values };
+
+    my $types = $self->_get_types( $dbh, $table );
+
+    # Handle number type values (for consumption in Sybase ASE 15.0) outside of
+    # &DBI::quote as it puts quotes around such values.
+    _init_num_regex();
+
+    my @val;
+    for ( my $i = 0; $i < $size; $i++ ) {
+
+      my $val = $values->[ $i ];
+      my $type = $types->{ $args{'columns'}->[ $i ] };
+
+      push @val,
+        ! defined $val
+        ? 'NULL'
+        : $type =~ m/$num_re/
+          ? $val
+          : $dbh->quote( $val, $type )
+          ;
+    }
+    return @val;
+  }
 }
 
 =item B<update_hash>
@@ -2654,7 +2766,7 @@ sub _modify_db_on_obsend {
     my ( $err_text, $try_insert );
     try {
 
-      $err_text = $self->_update_or_insert( %args )
+      $err_text = $self->_update_or_insert( %args );
     }
     catch JSA::Error::DBError with {
 
@@ -2695,7 +2807,6 @@ sub _modify_db_on_obsend {
 
     my $change;
     try {
-
       $change =
         $self->prepare_update_hash( @args{qw/ table dbhandle /}, $vals );
     }
