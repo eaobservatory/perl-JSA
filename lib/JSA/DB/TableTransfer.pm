@@ -399,6 +399,7 @@ sub get_files_not_end_state {
   my @state =
     @_state{qw[ deleted
                 transferred
+                simulation
               ]
             };
 
