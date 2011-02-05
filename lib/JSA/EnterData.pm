@@ -1377,8 +1377,7 @@ sub insert_hash {
     @prim_key = ref $prim_key ? @{ $prim_key } : $prim_key ;
   }
 
-  my $xfer = $self->_get_xfer_unconnected_dbh();
-
+  my @file;
   # and insert all the rows
   for my $row (@insert_hashes) {
 
@@ -1394,16 +1393,18 @@ sub insert_hash {
 
     my $status = $sth->execute(@values);
 
-    if ( $table eq 'FILES' && defined $status && $status > 0 ) {
+    if ( $table eq 'FILES' && defined $status && $status > 0
+          && ! $self->skip_state_setting()
+        ) {
 
-      $self->skip_state_setting()
-        or $xfer->put_ingested( [ $row->{'file_id'} ] );
+      push @file, $row->{'file_id'};
     }
 
-    return $status if !$status;
+   return ( $status, scalar @file ? [ @file ] : () )
+     if !$status;
   }
 
-  return;
+  return ( undef, scalar @file ? [ @file ] : () );
 }
 
 =item B<conditional_insert_hash>
@@ -1460,8 +1461,7 @@ sub conditional_insert_hash {
   my ( $err, @prim_key, @affected );
   @prim_key = ref $prim_key ? @{ $prim_key } : ( $prim_key ) ;
 
-  my $xfer = $self->_get_xfer( $dbh );
-
+  my ( $sum, @file );
   for my $row (@insert_hashes) {
 
     my @values = @{$row}{@fields};
@@ -1498,22 +1498,19 @@ sub conditional_insert_hash {
                               : ()
                             );
 
-    if ( $table eq 'FILES' && $affected && $affected > 0 ) {
+    if ( $table eq 'FILES' && $affected && $affected > 0
+          && ! $self->skip_state_setting()
+        ) {
 
-      $self->skip_state_setting()
-        or $xfer->put_ingested( [ $row->{'file_id'} ] );
+      push @file, $row->{'file_id'};
     }
 
-    return if ! defined $affected;
+    return ( $sum, scalar @file ? [ @file ] : () ) unless $affected;
 
-    push @affected, $affected;
+    $sum += $affected;
   }
 
-  return @affected if wantarray;
-
-  my $sum = 0;
-  $sum += $_ for @affected;
-  return $sum;
+  return ( $sum, scalar @file ? [ @file ] : () );
 }
 
 =item B<_make_insert_select_sql>
@@ -2620,14 +2617,14 @@ sub _change_FILES {
                                   ),
                             );
 
-  my $error;
+  my ( $files , $error );
   try {
 
     _verify_file_name( $insert_ref->{'file_id'} );
 
     my $hash = $self->prepare_insert_hash( $table, $insert_ref );
 
-    $error =
+    ( $error, $files ) =
       $self->insert_hash( 'table'    => $table,
                           'dbhandle' => $dbh,
                           'insert' => $hash,
@@ -2648,6 +2645,12 @@ sub _change_FILES {
     $db->rollback_trans() if $self->load_header_db();
     $self->_print_error_simple_dup( $error );
     return;
+  }
+
+  if ( $files && scalar @{ $files } ) {
+
+    my $xfer = $self->_get_xfer_unconnected_dbh();
+    $xfer->put_ingested( $files );
   }
 
   return;
