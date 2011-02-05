@@ -7,3 +7,4 @@ Makefile.old
 *.o
 Build
 _build
+MYMETA.yml

@@ -1,4 +1,4 @@
-#!/bin/env starperl
+#!/usr/bin/env starperl
 
 =head1 NAME
 
@@ -204,6 +204,7 @@ my @JUNK_OBSIDSS = (qw/
                         scuba2_106_20100310T152601_450
                         scuba2_68_20100306T153932_450
                         scuba2_66_20100306T151319_450
+                        scuba2_9_20100304T040112_450
                       /);
 my %JUNK_OBSIDSS = map { $_ => undef } @JUNK_OBSIDSS;
 

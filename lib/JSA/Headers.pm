@@ -241,7 +241,10 @@ the list can be supplied as additional arguments.
 
 If multiple positions are to be read, results will be returned
 as a reference to an array indexed by component name. If only
-one position is requested a simple scalar will be used.
+one position is requested a simple scalar will be used. Note that
+if there is only one time slice but all were requested then that
+single time slice will be returned using array references to avoid
+surprises to the caller.
 
 RTS_TASKS is never read by default. It can be read if explicitly
 specified.
@@ -262,6 +265,7 @@ sub read_jcmtstate {
   dat_annul( $mloc, $status);
 
   # find out how many time slice there are going to be
+  # Assumes that RTS_NUM is first so won't be compressed.
   dat_index( $jloc, 1, my $iloc, $status );
   dat_size( $iloc, my $size, $status );
   dat_annul( $iloc, $status );
@@ -319,6 +323,11 @@ sub read_jcmtstate {
       last if $status != &NDF::SAI__OK;
       dat_index( $jloc, $i, my $iloc, $status );
       dat_name( $iloc, my $name, $status );
+      my @dims;
+      dat_shape( $iloc, 1, @dims, my $actdim, $status);
+
+      # Check for special case of 1 element vector
+      my $is_array = ( $actdim == 0 ? 0 : 1 );
 
       # skip if we are selecting a subset
       next if (@items && !exists $items{$name});
@@ -333,28 +342,41 @@ sub read_jcmtstate {
 
       my $coderef;
       if ($type =~ /^_(DOUBLE|REAL)$/) {
-        $coderef = ($use_cell ? \&dat_get0d : \&dat_get1d );
+        $coderef = ($use_cell ? \&dat_get0d : \&dat_getvd );
       } elsif ($type eq '_INTEGER') {
-        $coderef = ($use_cell ? \&dat_get0i : \&dat_get1i );
+        $coderef = ($use_cell ? \&dat_get0i : \&dat_getvi );
       } else {
-        $coderef = ($use_cell ? \&dat_get0c : \&dat_get1c );
+        $coderef = ($use_cell ? \&dat_get0c : \&dat_getvc );
       }
 
       my @values;
       if ($use_cell) {
-        for my $c (@posns) {
-          my @cell = ( $c );
-          dat_cell( $iloc, 1, @cell, my $cloc, $status );
-          $coderef->( $cloc, my $val, $status );
-          dat_annul( $cloc, $status );
-          push(@values, $val);
+        if (!$is_array) {
+          # this is actually a scalar so the value is a constant
+          $coderef->( $iloc, my $val, $status );
+          @values = map { $val } (0..$#posns);
+        } else {
+          for my $c (@posns) {
+            my @cell = ( $c );
+            dat_cell( $iloc, 1, @cell, my $cloc, $status );
+            $coderef->( $cloc, my $val, $status );
+            dat_annul( $cloc, $status );
+            push(@values, $val);
+          }
         }
       } else {
         $coderef->( $iloc, $size, \@values, my $el, $status );
+
+        if ($el < $size && $el == 1) {
+          # duplicate scalar items
+          my $val = $values[0];
+          @values = map { $val } (1..$size);
+        }
+
       }
 
-      # store the results
-      $results{$name} = ( @values > 1 ? \@values : $values[0] );
+      # store the results (do not use a scalar if we asked for all entries)
+      $results{$name} = ( (@values > 1 || !$use_cell) ? \@values : $values[0] );
 
       # free the locator associated with this component
       dat_annul( $iloc, $status );
