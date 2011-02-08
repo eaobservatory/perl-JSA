@@ -547,13 +547,18 @@ I<insert_observations> method) for a date (see also I<date> method).
 
 Date can be given to the method, or can be set via I<new()> or
 I<date()> method.  Current date is used if no date has been explicitly
-set.
+set.  File paths are fetched from database unless otherwise specified.
 
-  # Insert either for the set or current date.
+  # Insert either for the set or current date, get file paths from
+  # database.
   $enter->prepare_and_insert;
 
   # Insert for Jun 25, 2008.
-  $enter->prepare_and_insert( '20080625' );
+  $enter->prepare_and_insert( 'date' => '20080625' );
+
+  # Insert either for the set or current date, get file paths from
+  # disk.
+  $enter->prepare_and_insert( 'path-not-from-db' => 1 );
 
 =cut
 
@@ -563,7 +568,9 @@ set.
 
   sub prepare_and_insert {
 
-    my ( $self, $date ) = @_;
+    my ( $self, %arg ) = @_;
+
+    my ( $date ) = @arg{qw[ date ]};
 
     # Format date first before getting it back.
     $self->date( $date ) if defined $date ;
@@ -606,7 +613,10 @@ set.
       # for each subscan in the observation.  No need to retrieve associated
       # obslog comments. That's <no. of subsystems used> *
       # <no. of subscans objects returned per observation>.
-      $group = $self->_get_obs_group( 'name' => $name, 'date' => $date );
+      $group = $self->_get_obs_group( 'name' => $name,
+                                      'date' => $date,
+                                      map { $_ => $arg{ $_ } } 'path-not-from-db',
+                                    );
       my @obs =
         $self->_filter_header( $inst,
                               [ $group->obs ],
