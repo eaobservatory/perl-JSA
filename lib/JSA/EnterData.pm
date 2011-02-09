@@ -127,6 +127,9 @@ BEGIN {
 
       # Update only an observation run time.
       'obstime-only' => 0,
+
+      # To avoid getting file paths with 'f'ound state from database.
+      'path-not-from-db' => 0
     );
 
   #  Generate some accessor functions.
