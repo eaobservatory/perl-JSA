@@ -729,6 +729,8 @@ It is called by I<prepare_and_insert> method.
             $xfer->put_error( $arg{'file-id'} );
             return;
           },
+
+        'nothing-to-do' => sub {},
       );
 
     my ( @sub_obs, @base );
@@ -816,7 +818,11 @@ It is called by I<prepare_and_insert> method.
       }
     }
 
-    my $common_obs = $run_obs->[0];
+    my $common_obs = $run_obs->[0]
+      or do {
+              $self->_print_text( 'XXX First run obs is undefined|false; nothing to do.' );
+              return 'nothing-to-do';
+            };
 
     # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
     # does not untie).  This is so that a single element array reference when
@@ -835,7 +841,11 @@ It is called by I<prepare_and_insert> method.
     # XXX Skip badly needed data verification for scuba2 until implemented.
     unless ( JSA::EnterData::SCUBA2->name_is_scuba2( $inst->name ) ) {
 
-      my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs );
+      my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs )
+        or do {
+                my $log = Log::Log4perl->get_logger( '' );
+                $log->logdie( "XXX Could not make JCMT::DataVerify object: $!" );
+              };
 
       my %invalid = $verify->verify_headers;
 
