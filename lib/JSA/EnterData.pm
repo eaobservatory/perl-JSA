@@ -1057,11 +1057,7 @@ sub _get_obs_group {
 
   unless ( $args{'path-not-from-db'} ) {
 
-    my $xfer = $self->_get_xfer_unconnected_dbh();
-    my $tmp  = $xfer->get_found_files();
-
-    $self->files( [ map {  $_ && ref $_ ? @{ $_ } : () } $tmp, $self->files() ] )
-      if $tmp && scalar @{ $tmp };
+    $self->_get_files_from_db();
   }
 
   my %obs = ( 'nocomments' => 1,
@@ -1123,6 +1119,20 @@ sub _get_obs_group {
 
   return
     OMP::Info::ObsGroup->new( %args );
+}
+
+sub _get_files_from_db {
+
+  my ( $self ) = @_;
+
+  my $xfer = $self->_get_xfer_unconnected_dbh();
+  my $tmp  = $xfer->get_found_files();
+
+  # Merge any new & old file in one list.
+  $self->files( [ map {  $_ && ref $_ ? @{ $_ } : () } $tmp, $self->files() ] )
+    if $tmp && scalar @{ $tmp };
+
+  return;
 }
 
 =item B<skip_obs>
