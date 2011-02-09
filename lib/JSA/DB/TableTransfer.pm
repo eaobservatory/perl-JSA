@@ -203,19 +203,6 @@ Set state to C<final> of given array reference of files (base names).
 
   $xfer->set_final( [ @files ] );
 
-=item B<get_found_files>
-
-Return a array reference of files with C<found> state, given a partial file
-name.
-
-  $files = $xfer->get_found_files( 20100612 );
-
-=item B<put_found_files>
-
-Add state of C<found> of given array reference of files (absolute paths).
-
-  $xfer->add_found( [ @files ] );
-
 =item B<get_ignored_files>
 
 Return a array reference of files with C<ignored> state, given a partial file
@@ -363,6 +350,146 @@ while ( my ( $k, $v ) = each %_state ) {
   push @{ $_rev_state{  $v } }, $k;
 }
 
+=item B<get_found_files>
+
+Return a array reference of files with C<found> state, given a partial file
+name.
+
+  $files = $xfer->get_found_files( 20100612 );
+
+=cut
+
+sub get_found_files {
+
+  my ( $self, $pattern ) = @_;
+
+  my $sql =
+    sprintf
+      qq[ SELECT s.file_id , s.location
+          FROM $_state_table s , $_state_descr_table d
+          WHERE s.status = ?
+            AND s.status = d.state
+            AND s.location IS NOT NULL
+        ]
+        ;
+
+  $sql .= ' AND file_id like ? '
+    if $pattern;
+
+  $sql .= ' ORDER BY s.file_id, s.location ';
+
+  my $dbh = $self->_dbhandle();
+  my $out = $dbh->selectcol_arrayref( $sql,
+                                      # Return only file paths.
+                                      { 'Columns' => [2] },
+                                      $_state{'found'},
+                                      ( $pattern ? $pattern : () )
+                                    )
+                                  or throw JSA::Error::DBError $dbh->errstr;
+
+
+  return $out;
+}
+
+=item B<add_found>
+
+Adds state of C<found> of given array reference of files (absolute
+paths).
+
+  $xfer->add_found( [ @files ] );
+
+=cut
+
+sub add_found {
+
+  my ( $self, $files ) = @_;
+
+  my $vals = _process_paths( $files )
+    or return;
+
+  my $db = _make_jdb();
+  return
+    $db->insert(  'table'   => $_state_table,
+                  'columns' => [ 'file_id', 'status', 'location' ],
+                  'values'  => $vals,
+                );
+}
+
+=item B<set_found>
+
+Updates state of C<found> of given array reference of files (absolute
+paths).
+
+  $xfer->set_found( [ @files ] );
+
+=cut
+
+sub set_found {
+
+  my ( $self, $files ) = @_;
+
+  return
+    $self->put_found( $files, my $update_only = 1 );
+}
+
+=item B<put_found>
+
+Adds or changes state of C<found> of given array reference of files
+(absolute paths).
+
+  $xfer->put_found( [ @files ] );
+
+=cut
+
+sub put_found {
+
+  my ( $self, $files, $mod_only ) = @_;
+
+  my $vals = _process_paths( $files )
+    or return;
+
+  my $db = _make_jdb();
+  return
+    $db->update_or_insert(  'table'       => $_state_table,
+                            'unique-keys' => [ 'file_id' ],
+                            'columns'     => [ 'file_id', 'status', 'location' ],
+                            'values'      => $vals,
+                            'update-only' => $mod_only,
+                          );
+}
+
+sub _process_paths {
+
+  my ( $paths ) = @_;
+
+  my @path = @{ $paths };
+
+  return unless scalar @path;
+
+  my $state = $_state{'found'};
+
+  require File::Basename;
+  import File::Basename qw[ fileparse ];
+
+  my @val;
+  for my $f ( @path ) {
+
+    my $alt = _fix_file_name( ( fileparse( $f, '' ) )[0] );
+    push @val, [ $alt, $state, $f ];
+  }
+
+  return unless scalar @val;
+  return [ @val ];
+}
+
+=item B<code_to_descr>
+
+Returns a descriptive text given a state code.
+
+  $text = JSA::DB::TableTransfer( 'f' );
+
+=cut
+
 sub code_to_descr {
 
   my ( $code ) = @_;
@@ -370,6 +497,14 @@ sub code_to_descr {
   return unless exists $_rev_state{ $code };
   return $_rev_state{ $code };
 }
+
+=item B<code_to_descr>
+
+Returns a state code given kwown descriptive text.
+
+  $code = JSA::DB::TableTransfer( 'found' );
+
+=cut
 
 sub descr_to_code {
 
@@ -468,67 +603,6 @@ sub mark_transferred_as_deleted {
   $dbh->commit if $self->_use_trans();
 
   return $affected;
-}
-
-sub get_found_files {
-
-  my ( $self, $pattern ) = @_;
-
-  my $sql =
-    sprintf
-      qq[ SELECT s.file_id , s.location
-          FROM $_state_table s , $_state_descr_table d
-          WHERE s.status = ?
-            AND s.status = d.state
-            AND s.location IS NOT NULL
-        ]
-        ;
-
-  $sql .= ' AND file_id like ? '
-    if $pattern;
-
-  $sql .= ' ORDER BY s.file_id, s.location ';
-
-  my $dbh = $self->_dbhandle();
-  my $out = $dbh->selectcol_arrayref( $sql,
-                                      # Return only file paths.
-                                      { 'Columns' => [2] },
-                                      $_state{'found'},
-                                      ( $pattern ? $pattern : () )
-                                    )
-                                  or throw JSA::Error::DBError $dbh->errstr;
-
-
-  return $out;
-}
-
-sub put_found_files {
-
-  my ( $self, $files ) = @_;
-
-  my @file = @{ $files };
-
-  return unless scalar @file;
-
-  my $state = $_state{'found'};
-
-  require File::Basename;
-  import File::Basename qw[ fileparse ];
-
-  my @val;
-  for my $f ( @file ) {
-
-    my $alt = _fix_file_name( ( fileparse( $f, '' ) )[0] );
-    push @val, [ $alt, $state, $f ];
-  }
-
-  my $db = _make_jdb();
-  return
-    $db->update_or_insert(  'table'       => $_state_table,
-                            'unique-keys' => [ 'file_id' ],
-                            'columns'     => [ 'file_id', 'status', 'location' ],
-                            'values'      => [ @val ],
-                          );
 }
 
 =item B<name>
