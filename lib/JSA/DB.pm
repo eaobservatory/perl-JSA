@@ -440,6 +440,8 @@ Accepts the following arguments as hash value of ...
   values  - array reference of array references of values to be
             UPDATEd and/or INSERTed (see update() & insert() method).
 
+  update-only - truth value to skip INSERT even if no rows exist.
+
   $affected =
     $db->update_or_insert(  'table' => $name,
                             # For UPDATE.
@@ -460,8 +462,8 @@ sub update_or_insert {
 
   my ( $keys, $cols, $vals ) = @arg{qw[ unique-keys columns values ]};
 
-  my %pass = (  'table'   => $arg{'table'},
-                'columns' => $cols,
+  my %pass = ( 'columns' => $cols,
+                map { $_ => $arg{ $_ } } qw[ table update-only ],
               );
 
   my @key        = _to_list( $keys );
@@ -582,6 +584,8 @@ sub _run_update_or_insert {
 
   my $e = $dbh->err();
   $log->debug( 'After update, rows: ', $rows, '  err: ', defined $e ? $e : '' );
+
+  return if $arg{'update-only'};
 
   if ( ! $rows ) {
 
