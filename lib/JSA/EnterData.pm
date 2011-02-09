@@ -424,6 +424,19 @@ sub force_disk {
   return;
 }
 
+=item B<path_not_from_db>
+
+When called without a truth value, returns a truth value to indicate
+if to avoid database to fetch raw file paths to ingest.
+
+  print "Getting paths from database"
+    unless $enter->path_not_from_db();
+
+Else, sets the truth value to inidicate to access database.
+
+  # Avoid database access.
+  $enter->path_not_from_db( 1 );
+
 =item B<load_header_db>
 
 Returns the set truth value to indicate where to load in the header
@@ -559,9 +572,7 @@ set.  File paths are fetched from database unless otherwise specified.
   # Insert for Jun 25, 2008.
   $enter->prepare_and_insert( 'date' => '20080625' );
 
-  # Insert either for the set or current date, get file paths from
-  # disk.
-  $enter->prepare_and_insert( 'path-not-from-db' => 1 );
+  $enter->prepare_and_insert();
 
 =cut
 
@@ -618,7 +629,6 @@ set.  File paths are fetched from database unless otherwise specified.
       # <no. of subscans objects returned per observation>.
       $group = $self->_get_obs_group( 'name' => $name,
                                       'date' => $date,
-                                      map { $_ => $arg{ $_ } } 'path-not-from-db',
                                     );
       my @obs =
         $self->_filter_header( $inst,
@@ -1058,17 +1068,15 @@ sub _get_obs_group {
 
   my $log = Log::Log4perl->get_logger( '' );
 
-  unless ( $args{'path-not-from-db'} ) {
-
-    $self->_get_files_from_db();
-  }
-
   my %obs = ( 'nocomments' => 1,
               'retainhdr' => 1,
               'header_search' => 'files'
             );
 
   require OMP::Info::Obs;
+
+  # Prime file list from database if possible.
+  $self->_get_files_from_db();
 
   unless ( $self->files_given ) {
 
@@ -1127,6 +1135,8 @@ sub _get_obs_group {
 sub _get_files_from_db {
 
   my ( $self ) = @_;
+
+  return if $self->path_not_from_db();
 
   my $xfer = $self->_get_xfer_unconnected_dbh();
   my $tmp  = $xfer->get_found_files();
