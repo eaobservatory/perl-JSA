@@ -2017,7 +2017,7 @@ sub update_hash {
     my @bind = map { $differ{$_} } @sorted;
 
     my $status = $sth->execute( @bind );
-    throw JSA::Error::DBError "Error running {$sql, @bind}: " . $dbh->errstr()
+    throw JSA::Error::DBError 'UPDATE error: ' . $dbh->errstr() . "\n... with { $sql, @bind }"
       if $dbh->err();
 
     return $status;
