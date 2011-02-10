@@ -2014,7 +2014,11 @@ sub update_hash {
     my $sth = $dbh->prepare($sql)
       or $log->logdie( "Could not prepare sql statement for insert\n", $dbh->errstr, "\n" );
 
-    my $status = $sth->execute( map { $differ{$_} } @sorted );
+    my @bind = map { $differ{$_} } @sorted;
+
+    my $status = $sth->execute( @bind );
+    throw JSA::Error::DBError "Error running {$sql, @bind}: " . $dbh->errstr()
+      if $dbh->err();
 
     return $status;
   }
