@@ -2012,7 +2012,7 @@ sub update_hash {
   if ( $self->load_header_db ) {
 
     my $sth = $dbh->prepare($sql)
-      or $log->logdie( "Could not prepare sql statement for insert\n", $dbh->errstr, "\n" );
+      or $log->logdie( "Could not prepare sql statement for UPDATE\n", $dbh->errstr, "\n" );
 
     my @bind = map { $differ{$_} } @sorted;
 
