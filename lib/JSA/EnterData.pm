@@ -2493,7 +2493,8 @@ sub calc_radec {
   catch JSA::Error::StarlinkCommand with {
 
     my ( $err ) = @_;
-    print $err->text;
+    $log->error( $err->text );
+    print 'Bound calculation error with files starting with ', $filenames[0], '; see log.';
   };
   # Allow JSA::Error::BadExec error to move up.
 
