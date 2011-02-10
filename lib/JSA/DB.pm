@@ -164,17 +164,17 @@ sub use_transaction {
 =item B<select_t>
 
 Executes SELECT query given a hash of table names, array reference of
-column names, where clauses with placeholders, and array reference of
-bind values.
+column names to select, where clauses with placeholders, and array
+reference of bind values.
 
 Returns an array reference of hash references of selected columns.
 
-  $affected =
+  $result =
     $jdb->select_t( 'table'   => 'the_table',
-                  'columns' => [ 'a', 'b' ],
-                  'where'   => [ a = ? AND b = ? ]
-                  'values'  => [ 1, 2 ]
-                );
+                    'columns' => [ 'a', 'b' ],
+                    'where'   => [ a = ? AND b = ? ],
+                    'values'  => [ 1, 2 ]
+                  );
 
 Optional hash pairs are "order" & "group" respectively for C<ORDER BY>
 and C<GROUP BY> clauses ...
@@ -223,6 +223,111 @@ sub select_t {
     $self->run_select_sql( 'sql' => $sql,
                             'values' => $arg{'values'}
                           );
+}
+
+=item B<select_loop>
+
+It is similar to I<select_t> in terms of parameters accepted and
+values returned.  Difference is that instead of selecting everything
+in one go ($dbh->selectall_arrayref()), it collects results row by row
+($dbh->prepare(), $st->execute(), $st->fetchrow_array*()).
+
+Use it instead when "OR" clauses (by virtue of bind parameter array
+references) are in some "large" number (say, 100).  This is mainly to
+avoid running in limit of allowed bind parameters; better performance
+is a side benefit.
+
+Executes SELECT query given a hash of table name, array reference of
+column names to select, where clauses with placeholders, and array
+reference of bind values.  In case of bind values are themselves array
+references, each array reference is used per SELECT in WHERE clause.
+
+Returns an array reference of hash references of selected columns.
+
+  $result =
+    $jdb->select_loop( 'table'   => 'the_table',
+                        'columns' => [ 'a', 'b' ],
+                        'where'   => [ a = ? AND b = ? ],
+                        'values'  => [[ 1, 2 ], [3, 4]]
+                      );
+
+Optional hash pairs are "order" & "group" respectively for C<ORDER BY>
+and C<GROUP BY> clauses ...
+
+  $result =
+    $jdb->select_loop( 'table'   => 'the_table',
+                        ...
+                        'order' => [ 'b' , 'a' ]
+                      );
+
+On database related errors, throws L<JSA::Error::DBError> type of
+exceptions.
+
+=cut
+
+sub select_loop {
+
+  my ( $self, %arg ) = @_;
+
+  _check_input( %arg,
+                '_check_' =>
+                { 'table'   => 0,
+                  'columns' => 1,
+                  'where'   => 0,
+                  'values'  => 1,
+                }
+              );
+
+  my $sql =
+    sprintf 'SELECT %s FROM %s WHERE %s',
+      ( map { _to_string( $_ ) } @arg{qw[ columns table ]}
+      ),
+      _where_string( $arg{'where'} )
+    ;
+
+  for my $opt (qw[ order group ] ) {
+
+    next unless exists $arg{ $opt };
+
+    $sql .= sprintf ' %s BY %s', uc $opt, _to_string( $arg{ $opt } );
+  }
+
+  my $log = Log::Log4perl->get_logger( '' );
+  my $dbh = $self->dbhandle();
+
+  my $handle_err =
+    sub {
+          my ( @text ) = @_;
+          my $text = join '', @text;
+          $log->error( $text );
+          throw JSA::Error::DBError $text;
+        };
+
+  my $st = $dbh->prepare( $sql )
+    or $handle_err->( 'prepare() failed: ', $dbh->errstr(), "\n{ $sql }." );
+
+  my ( @out, @bind, @tmp, $tmp, $status );
+  for my $val ( @{ $arg{'values'} } ) {
+
+    @bind = $val && ref $val ? @{ $val } : ( $val );
+
+    $status = $st->execute( @bind );
+
+    $handle_err->( 'execute() failed: ', $dbh->errstr(), "\n{ ", @bind, ' }' )
+      if $dbh->err();
+
+    $tmp = $dbh->fetchall_arrayref( $arg{'sql'}, { 'Slice' => {} }, @bind );
+
+    $handle_err->( 'fetchall*() failed: ', $dbh->errstr(), "\n{ ", @bind, ' }' )
+      if $dbh->err();
+
+    next unless $tmp && scalar @{ $tmp };
+
+    push @out, $tmp;
+  }
+
+  return unless scalar @out;
+  return [ @out ];
 }
 
 =item B<exist>
@@ -769,7 +874,7 @@ errors.  On error, rolls back a transaction.  Returns nothing.
 =item B<_extract_key_val>
 
 Returns a list of two array references -- one of (database table) key
-values, other of indices which do not relate to keys -- given an array
+values, other of indexen which do not relate to keys -- given an array
 reference of table column names, an array reference of related values,
 and a list of key names.
 
