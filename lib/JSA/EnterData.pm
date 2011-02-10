@@ -2211,8 +2211,18 @@ sub fill_headers_COMMON {
     $header->{'BACKEND'} = $header->{'INSTRUME'};
   }
 
-  # Sybase ASE 15 cannot convert '0.000000000000000e+00' to a datetime value.
+  _fix_dates( $header );
+  return;
+}
+
+# Sybase ASE 15 cannot convert '0.000000000000000e+00' to a datetime value.  Set
+# those to undef, thus NULL.
+sub _fix_dates {
+
+  my ( $header ) = @_;
+
   my $date_re = qr{ (?: \b date | dat(?: en | st )\b ) }xi;
+
   for my $k ( keys %{ $header } ) {
 
     next unless $k =~ $date_re;
