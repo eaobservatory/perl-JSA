@@ -805,7 +805,7 @@ sub _put_state {
     $db->update_or_insert(  'table'       => $self->name(),
                             'unique-keys' => [ 'file_id' ],
                             'columns'     => [ 'file_id', 'status' ],
-                            'values'      => [ map { [ $_, $state ] } @alt ],
+                            'values'      => [ map { [ $_, $_state{ $state } ] } @alt ],
                             'dbhandle'    => $self->_dbhandle(),
                           );
 }
@@ -848,7 +848,7 @@ sub _change_add_state {
 
     # Explicitly pass $dbh.
     my $affected = $run->( 'file'     => $alt,
-                            'state'   => $state
+                            'state'   => $_state{ $state }
                           );
 
     push @affected, $affected if $affected;
