@@ -407,7 +407,7 @@ sub add_found {
   my $vals = _process_paths( $files )
     or return;
 
-  my $db = _make_jdb();
+  my $db = $self->_make_jdb();
   return
     $db->insert(  'table'   => $_state_table,
                   'columns' => [ 'file_id', 'status', 'location' ],
@@ -448,7 +448,7 @@ sub put_found {
   my $vals = _process_paths( $files )
     or return;
 
-  my $db = _make_jdb();
+  my $db = $self->_make_jdb();
   return
     $db->update_or_insert(  'table'       => $_state_table,
                             'unique-keys' => [ 'file_id' ],
@@ -657,20 +657,37 @@ sub _get_files {
 
   my ( $self, %filter ) = @_;
 
+  my $log = Log::Log4perl->get_logger( '' );
+
   my ( $state, $date, $instr ) = _extract_filter( %filter );
 
-  my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
+  my @select = qw[ file_id ];
+  push @select, 'location'
+    if $state eq 'found';
 
-  my $log = Log::Log4perl->get_logger( '' );
+  $state = $_state{ $state };
+
+  my %where;
+  $where{' status = ?'} = $state;
+
+  my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
+  $where{' file_id like ?'} = $fragment if defined $fragment;
+
   $log->info( "Getting files from JAC database with state '${state}'" );
 
-  my $dbh = $self->_dbhandle();
+  my $db = $self->_make_jdb();
+  my $out =
+    $db->select_loop( 'table'   => $_state_table,
+                      'columns' => [ @select ],
+                      'where'   => [ keys %where ],
+                      'values'  => [[ values %where ]],
+                    );
 
   return
-    $self->_run_select_sql( $dbh,
-                            'state' => $_state{ $state },
-                            'file' => $fragment
-                          );
+    unless $out
+    && ref $out && scalar @{ $out };
+
+  return $db->_simplify_arrayref_hashrefs( $out );
 }
 
 sub _extract_filter {
@@ -764,19 +781,10 @@ sub _run_select_sql {
   return
     unless $out && scalar @{ $out };
 
-  return _simplify_arrayref( $out );
+  require JSA::DB;
+  return JSA::DB->_simplify_arrayref( $out );
 }
 
-sub _simplify_arrayref {
-
-  my ( $in ) = @_;
-
-  return
-    unless $in && scalar @{ $in };
-
-  return
-    [ map { $_->[0] } @{ $in } ];
-}
 
 # This would be eventual replacement of _change_add_state() after references to
 # add*state() & set*state() have been updated.  This does not care if going to
@@ -790,7 +798,7 @@ sub _put_state {
 
   eval { _check_state( $state ) }; croak $@ if $@;
 
-  my $db = _make_jdb();
+  my $db = $self->_make_jdb();
 
   my @alt = map { _fix_file_name( $_ ) } sort @{ $files };
   return
@@ -923,8 +931,18 @@ sub _check_state {
 
 sub _make_jdb {
 
+  my ( $self ) = @_;
+
   require JSA::DB;
-  return JSA::DB->new( 'name' => 'transfer-change-add' );
+
+  my $dbh = $self->_dbhandle();
+  return
+    JSA::DB->new( 'name' => 'transfer-change-add',
+                  ( $dbh && ref $dbh
+                    ? ( 'dbhandle' => $dbh )
+                    : ()
+                  )
+                );
 }
 
 

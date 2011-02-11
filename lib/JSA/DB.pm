@@ -316,9 +316,9 @@ sub select_loop {
     $handle_err->( 'execute() failed: ', $dbh->errstr(), "\n{ ", @bind, ' }' )
       if $dbh->err();
 
-    $tmp = $dbh->fetchall_arrayref( $arg{'sql'}, { 'Slice' => {} }, @bind );
+    $tmp = $st->fetchall_arrayref( {} );
 
-    $handle_err->( 'fetchall*() failed: ', $dbh->errstr(), "\n{ ", @bind, ' }' )
+    $handle_err->( 'fetchall*() failed: ', $dbh->errstr() )
       if $dbh->err();
 
     next unless $tmp && scalar @{ $tmp };
@@ -327,6 +327,11 @@ sub select_loop {
   }
 
   return unless scalar @out;
+
+  return $out[0]
+    if 1 == scalar @out
+    && ref $out[0] eq 'ARRAY';
+
   return [ @out ];
 }
 
@@ -1041,6 +1046,41 @@ sub _to_list {
   return ( @{ $in } ) if $in && ref $in;
 
   return ( $in );
+}
+
+sub _simplify_arrayref {
+
+  my ( $self, $in ) = @_;
+
+  return
+    unless $in && scalar @{ $in };
+
+  return
+    [ map { $_->[0] } @{ $in } ];
+}
+
+sub _simplify_arrayref_hashrefs {
+
+  my ( $self, $in ) = @_;
+
+  return $in
+    unless $in
+    && ref $in
+    && scalar @{ $in };
+
+  my $ele = $in->[0];
+
+  return $in
+    unless defined $ele
+    && ref $ele eq 'HASH';
+
+  my @key = keys %{ $ele };
+
+  return $in
+    if 1 != scalar @key;
+
+  return
+    [ map { $_->{ $key[0] } } @{ $in } ];
 }
 
 sub _massage_for_col {
