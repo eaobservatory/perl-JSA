@@ -947,16 +947,16 @@ sub _db_files_for_obsidss {
   return unless scalar @obsidss;
 
   my $where =
-    sprintf 'obsid_subsysnr IN (%s)', join ', ' , ('?') x scalar @obsidss;
+    sprintf 'obsid_subsysnr IN (%s)', join ', ' , ('?') x 1;
 
   require JSA::DB;
   my $db    = JSA::DB->new( 'name' => __PACKAGE__ );
-  my $files = $db->select_t( 'table'    => 'FILES',
-                              'columns' => [ 'file_id' ],
-                              'where'   => [ $where ],
-                              'values'  => [ @obsidss ],
-                            )
-                            or return;
+  my $files = $db->select_loop( 'table'    => 'FILES',
+                                'columns' => [ 'file_id' ],
+                                'where'   => [ $where ],
+                                'values'  => [ @obsidss ],
+                              )
+                              or return;
 
   return map { $_->{'file_id'} } @{ $files };
 }
