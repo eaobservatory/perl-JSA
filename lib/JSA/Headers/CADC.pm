@@ -7,7 +7,7 @@ JSA::Headers::CADC - CADC header functions
 =head1 SYNOPSIS
 
   use JSA::Headers::CADC qw/ correct_asn_id /;
-  $asn_id = correct_asn_id( $mode, $hdr );
+  $asn_id = correct_asn_id( $mode, $hdr, $usesurvey );
 
 =head1 DESCRIPTION
 
@@ -38,12 +38,13 @@ mode.
 
 Returns undef if there is no ASN_ID header.
 
-  $asn_id = correct_asn_id( $mode, $hdr );
+  $asn_id = correct_asn_id( $mode, $hdr, $usesurvey );
 
 Processing mode can be one of ("obs", "night", "project", "public").
 Nothing is prepended for "obs" or "public" processing. The UT date is prepended
 in "night" mode and the SURVEY or project id is prepended in
-project mode.
+project mode (although the survey is only used if the optional third
+argument is true.
 
 $hdr can be either an Astro::FITS::Header object or a reference to a hash.
 
@@ -52,6 +53,7 @@ $hdr can be either an Astro::FITS::Header object or a reference to a hash.
 sub correct_asn_id {
   my $mode = shift;
   my $hdr = shift;
+  my $usesurvey = shift;
 
   my %header;
   if (blessed($hdr)) {
@@ -75,7 +77,7 @@ sub correct_asn_id {
       $prefix = $header{UTDATE};
     } elsif( $mode eq 'project' ) {
       my $survey = $header{SURVEY};
-      if( defined( $survey ) ) {
+      if( defined( $survey ) && $usesurvey ) {
         $prefix = $survey;
       } else {
         $prefix = $header{PROJECT};
