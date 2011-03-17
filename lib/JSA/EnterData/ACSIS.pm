@@ -109,6 +109,81 @@ Returns the database table related to the instrument.
 sub table { return 'ACSIS'; }
 
 
+=item B<raw_basename_regex>
+
+Returns the regex to match base file name, with array, date and run
+number captured ...
+
+  qr{ a
+      (\d{8})
+      _
+      (\d{5})
+      _\d{2}_\d{4}[.]sdf
+    }x;
+
+  $re = JSA::EnterData::ACSIS->raw_basename_regex();
+
+=cut
+
+sub raw_basename_regex {
+
+  return
+    qr{ a
+        (\d{8})       # date,
+        _
+        (\d{5})       # run number,
+        _\d{2}        # subsystem.
+        _\d{4}[.]sdf
+      }x;
+}
+
+
+=item B<raw_parent_dir>
+
+Returns the parent directory of a raw file without date and run number
+components.
+
+  $root = JSA::EnterData::ACSIS->raw_parent_dir();
+
+=cut
+
+sub raw_parent_dir { return '/jcmtdata/raw/acsis/spectra/'; }
+
+
+=item B<make_raw_paths>
+
+Given a list of base file names, returns a list of (unverified)
+absolute paths.
+
+  my @path = JSA::EnterData::ACSIS->make_raw_paths( @basename );
+
+=cut
+
+sub make_raw_paths {
+
+  my ( $self, @base ) = @_;
+
+  return unless scalar @base;
+
+  my $re   = $self->raw_basename_regex();
+  my $root = $self->raw_parent_dir();
+
+  require File::Spec;
+
+  my @path;
+  for my $name ( @base ) {
+
+    my ( $date, $run ) = ( $name =~ $re );
+    next
+      unless $date && $run;
+
+    push @path,
+      File::Spec->catfile( $root, $date, $run, $name );
+  }
+  return @path;
+}
+
+
 # Create obsid_subsysnr
 sub _fill_headers_obsid_subsys {
 

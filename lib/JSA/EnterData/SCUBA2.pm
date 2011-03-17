@@ -135,6 +135,7 @@ sub name_is_scuba2 {
   return $name =~ $re;
 }
 
+
 =item B<table>
 
 Returns the database table related to the instrument.
@@ -144,6 +145,81 @@ Returns the database table related to the instrument.
 =cut
 
 sub table { return 'SCUBA2'; }
+
+
+=item B<raw_basename_regex>
+
+Returns the regex to match base file name, with array, date and run
+number captured ...
+
+  qr/(s[48][a-d])
+      (\d{8})
+      _
+      (\d{5})
+      _\d{4}[.]sdf
+    /x;
+
+  $re = JSA::EnterData::SCUBA2->raw_basename_regex();
+
+=cut
+
+sub raw_basename_regex {
+
+  return
+    qr{ (s[48][a-d])  # array,
+        (\d{8})       # date,
+        _
+        (\d{5})       # run number.
+        _\d{4}[.]sdf
+      }x;
+}
+
+
+=item B<raw_parent_dir>
+
+Returns the parent directory of a raw file, without array, date, &
+run number components.
+
+  $root = JSA::EnterData::SCUBA2->raw_parent_dir();
+
+=cut
+
+sub raw_parent_dir { return '/jcmtdata/raw/scuba2'; }
+
+
+=item B<make_raw_paths>
+
+Given a list of base file names, returns a list of (unverified)
+absolute paths.
+
+  my @path = JSA::EnterData::SCUBA2->make_raw_paths( @basename );
+
+=cut
+
+sub make_raw_paths {
+
+  my ( $self, @base ) = @_;
+
+  return unless scalar @base;
+
+  my $re   = $self->raw_basename_regex();
+  my $root = $self->raw_parent_dir();
+
+  require File::Spec;
+
+  my @path;
+  for my $name ( @base ) {
+
+    my ( $array, $date, $run ) = ( $name =~ $re );
+    next
+      unless $array && $date && $run;
+
+    push @path,
+      File::Spec->catfile( $root, $array, $date, $run, $name );
+  }
+  return @path;
+}
+
 
 BEGIN {
 
