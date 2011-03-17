@@ -1122,8 +1122,10 @@ sub _get_obs_group {
 
     require OMP::FileUtils;
 
-    my %merged = OMP::FileUtils->merge_dupes( @headers );
-    @obs = OMP::Info::Obs->hdrs_to_obs( $obs{'retainhdr'} , %merged );
+    my $merged = OMP::FileUtils->merge_dupes( @headers );
+    @obs = OMP::Info::Obs->hdrs_to_obs( 'retainhdr' => $obs{'retainhdr'},
+                                        'fits'      => $merged
+                                        );
 
     %args =  ( 'obs' => [ @obs ] );
   }
