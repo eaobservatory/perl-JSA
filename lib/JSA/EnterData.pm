@@ -2510,7 +2510,8 @@ sub calc_radec {
 
     my ( $err ) = @_;
     $log->error( $err->text );
-    print 'Bound calculation error with files starting with ', $filenames[0], '; see log.';
+    printf "Bound calculation error with files starting with %s; see log\n",
+      $filenames[0];
   };
   # Allow JSA::Error::BadExec error to move up.
 
