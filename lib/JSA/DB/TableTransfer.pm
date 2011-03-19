@@ -905,7 +905,7 @@ sub _update {
   # same rows are not updated with the old information.
   if ( 't' eq $arg{'state'} ) {
 
-    $sql = join ' AND ', $sql, q[state <> ?];
+    $sql = join ' AND ', $sql, q[status <> ?];
     push @bind, $arg{'state'};
   }
 
