@@ -540,9 +540,11 @@ sub get_files_not_end_state {
 
   my $sql =
     sprintf
-      qq[SELECT s.file_id, s.status, d.descr
+      qq[SELECT s.file_id, s.status, d.descr, s.error
           FROM $_state_table s , $_state_descr_table d
-          WHERE s.status NOT IN ( %s )
+          WHERE (  s.status NOT IN ( %s )
+                OR s.error = 1
+                )
           AND s.status = d.state
         ],
         join ', ', ( '?' ) x scalar @state
@@ -665,10 +667,10 @@ sub _get_files {
   push @select, 'location'
     if $state eq 'found';
 
-  $state = $_state{ $state };
+  ( $state, my $state_col ) = _alt_state( $_state{ $state } );
 
   my %where;
-  $where{' status = ?'} = $state;
+  $where{qq[ $state_col = ?]} = $state;
 
   my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
   $where{' file_id like ?'} = $fragment if defined $fragment;
@@ -765,13 +767,16 @@ sub _run_select_sql {
   my ( $file, $state ) = @bind{qw[ file state ]};
 
   my $sql = qq[SELECT file_id from $_state_table];
+
   if ( any { $_ } ( $file, $state ) ) {
 
-    $sql .=
-      ' WHERE'
-      . join ' AND ',
-          $file ? ' file_id like ?' : (),
-          $state ? ' status = ?' : (),
+    ( undef, my $state_col ) = _alt_state( $state );
+
+    my @where;
+    push @where, ' file_id like ?'   if $file;
+    push @where, qq[ $state_col = ?] if defined $state;
+
+    $sql .= ' WHERE' . join ' AND ', @where;
   }
   $sql .= ' ORDER BY file_id';
 
@@ -798,14 +803,16 @@ sub _put_state {
 
   eval { _check_state( $state ) }; croak $@ if $@;
 
+  ( $state, my $state_col ) = _alt_state( $_state{ $state } );
+
   my $db = $self->_make_jdb();
 
   my @alt = map { _fix_file_name( $_ ) } sort @{ $files };
   return
     $db->update_or_insert(  'table'       => $self->name(),
                             'unique-keys' => [ 'file_id' ],
-                            'columns'     => [ 'file_id', 'status' ],
-                            'values'      => [ map { [ $_, $_state{ $state } ] } @alt ],
+                            'columns'     => [ 'file_id', $state_col ],
+                            'values'      => [ map { [ $_, $state ] } @alt ],
                             'dbhandle'    => $self->_dbhandle(),
                           );
 }
@@ -818,6 +825,8 @@ sub _change_add_state {
     map { $args{ $_ } } qw[ mode file state ];
 
   eval { _check_state( $state ) }; croak $@ if $@;
+
+  ( $state, my $state_col ) = _alt_state( $_state{ $state } );
 
   # Use the same $dbh during a transaction.
   my $dbh = $self->_dbhandle();
@@ -847,8 +856,9 @@ sub _change_add_state {
     $log->debug( qq[  ${alt}\n] );
 
     # Explicitly pass $dbh.
-    my $affected = $run->( 'file'     => $alt,
-                            'state'   => $_state{ $state }
+    my $affected = $run->( 'file'       => $alt,
+                            'state'     => $state,
+                            'state-col' => $state_col,
                           );
 
     push @affected, $affected if $affected;
@@ -865,8 +875,10 @@ sub _insert {
 
   my ( $self, %arg ) = @_;
 
+  my $state_col = $arg{'state-col'} || 'status';
+
   my $sql =
-    qq[INSERT INTO $_state_table ( file_id, status ) VALUES ( ? , ? )];
+    qq[INSERT INTO $_state_table ( file_id, $state_col ) VALUES ( ? , ? )];
 
   return
     $self->_run_change_sql( $sql,
@@ -878,8 +890,10 @@ sub _update {
 
   my ( $self, %arg ) = @_;
 
+  my $state_col = $arg{'state-col'} || 'status';
+
   my $sql =
-    qq[UPDATE $_state_table SET status = ? WHERE file_id = ?];
+    qq[UPDATE $_state_table SET $state_col = ? WHERE file_id = ?];
 
   my ( @bind ) = map { $arg{ $_ } } qw[ state file ];
 
@@ -927,6 +941,18 @@ sub _check_state {
   throw JSA::Error::BadArgs
     sprintf "Unknown state type, %s, given, exiting ...\n",
       ( defined $type ? $type : 'undef' );
+}
+
+sub _alt_state {
+
+  my ( $state ) = @_;
+
+  unless ( $state =~ m/^e(?:rr)/ ) {
+
+    return ( 'satuts' => $state );
+  }
+
+  return ( 'error' => 1 );
 }
 
 sub _make_jdb {
