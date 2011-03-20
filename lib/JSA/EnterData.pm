@@ -894,6 +894,9 @@ It is called by I<prepare_and_insert> method.
       $db->rollback_trans();
       $self->_print_error_simple_dup( $error );
 
+      return 'nothing-to-do'
+        if $self->_is_insert_dup_error( $error );
+
       return 'error';
     }
 
