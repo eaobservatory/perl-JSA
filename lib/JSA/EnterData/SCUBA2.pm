@@ -1025,12 +1025,15 @@ sub _db_files_for_obsidss {
   my $where =
     sprintf 'obsid_subsysnr IN (%s)', join ', ' , ('?') x 1;
 
+  my %seen;
+  my @oid = grep { ! $seen{ $_ }++ } @obsidss;
+
   require JSA::DB;
   my $db    = JSA::DB->new( 'name' => __PACKAGE__ );
   my $files = $db->select_loop( 'table'    => 'FILES',
                                 'columns' => [ 'file_id' ],
                                 'where'   => [ $where ],
-                                'values'  => [ @obsidss ],
+                                'values'  => [ @oid ],
                               )
                               or return;
 
