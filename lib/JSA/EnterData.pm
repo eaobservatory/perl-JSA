@@ -1076,7 +1076,7 @@ sub _get_obs_group {
   require OMP::Info::Obs;
 
   # Prime file list from database if possible.
-  $self->_get_files_from_db();
+  #$self->_get_files_from_db();
 
   unless ( $self->files_given ) {
 
