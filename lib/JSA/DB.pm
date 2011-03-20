@@ -323,7 +323,7 @@ sub select_loop {
 
     next unless $tmp && scalar @{ $tmp };
 
-    push @out, $tmp;
+    push @out, @{ $tmp };
   }
 
   return unless scalar @out;
