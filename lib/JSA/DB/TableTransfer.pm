@@ -667,7 +667,7 @@ sub _get_files {
   push @select, 'location'
     if $state eq 'found';
 
-  ( $state, my $state_col ) = _alt_state( $_state{ $state } );
+  ( my $state_col, $state ) = _alt_state( $_state{ $state } );
 
   my %where;
   $where{qq[ $state_col = ?]} = $state;
@@ -770,7 +770,7 @@ sub _run_select_sql {
 
   if ( any { $_ } ( $file, $state ) ) {
 
-    ( undef, my $state_col ) = _alt_state( $state );
+    ( my $state_col, undef ) = _alt_state( $state );
 
     my @where;
     push @where, ' file_id like ?'   if $file;
@@ -803,7 +803,7 @@ sub _put_state {
 
   eval { _check_state( $state ) }; croak $@ if $@;
 
-  ( $state, my $state_col ) = _alt_state( $_state{ $state } );
+  ( my $state_col, $state ) = _alt_state( $_state{ $state } );
 
   my $db = $self->_make_jdb();
 
@@ -826,7 +826,7 @@ sub _change_add_state {
 
   eval { _check_state( $state ) }; croak $@ if $@;
 
-  ( $state, my $state_col ) = _alt_state( $_state{ $state } );
+  ( my $state_col, $state  ) = _alt_state( $_state{ $state } );
 
   # Use the same $dbh during a transaction.
   my $dbh = $self->_dbhandle();
@@ -949,7 +949,7 @@ sub _alt_state {
 
   unless ( $state =~ m/^e(?:rr)/ ) {
 
-    return ( 'satuts' => $state );
+    return ( 'status' => $state );
   }
 
   return ( 'error' => 1 );
