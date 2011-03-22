@@ -776,7 +776,7 @@ sub _run_select_sql {
     push @where, ' file_id like ?'   if $file;
     push @where, qq[ $state_col = ?] if defined $state;
 
-    $sql .= ' WHERE' . join ' AND ', @where;
+    $sql .= ' WHERE ' . join ' AND ', @where;
   }
   $sql .= ' ORDER BY file_id';
 
