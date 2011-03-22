@@ -1072,7 +1072,8 @@ sub _get_obs_group {
   my $log = Log::Log4perl->get_logger( '' );
 
   my %obs = ( 'nocomments' => 1,
-              'retainhdr' => 1,
+              'retainhdr'  => 1,
+              'ignorebad'  => 1,
               'header_search' => 'files'
             );
 
