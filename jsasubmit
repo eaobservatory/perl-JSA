@@ -546,6 +546,21 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
 }
 
+# Write to the logging directory
+if (!$debug) {
+  my $logdir = "/jac_logs/jsa";
+  my $froot = "jsasubmit-". (defined $ut ? $ut : $project) . ".log";
+  my $outfile = File::Spec->catfile( $logdir, $froot );
+  if (-d $logdir) {
+    if (open( my $logfh, ">", $outfile ) ) {
+      for my $msg (all_messages()) {
+	print $logfh $msg;
+      }
+      close $logfh;
+    }
+  }
+}
+
 if ($noemail || $debug) {
   # do not need to send an email message
 } else {
@@ -571,11 +586,11 @@ exit;
 
   sub log_message {
     my @msg = @_;
+    # Always cache. Sometimes print.
     if ($noemail || $debug) {
       print @msg;
-    } else {
-      push(@MESSAGES, @msg);
     }
+    push(@MESSAGES, @msg);
   }
 
   sub all_messages {
