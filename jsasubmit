@@ -83,6 +83,7 @@ use OMP::Info::ObsGroup;
 use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
 use OMP::Constants qw/ :obs /;
 
+use Data::Dumper;
 use Getopt::Long;
 use Net::SMTP;
 use Pod::Usage;
@@ -387,64 +388,39 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       }
     }
 
-    # with no subheaders sometimes we get an empty hash so we check for that
-    if( exists $hdr->{SUBHEADERS} &&
-        defined $hdr->{SUBHEADERS} &&
-        @{$hdr->{SUBHEADERS}} > 0 &&
-        keys %{$hdr->{SUBHEADERS}->[0]} > 0 ) {
+    my @subsystems = $obs->subsystems;
 
-      # There are sometimes multiple files per subsystem
-      # but they each have a separate subhdr. We need to merge them
-      # back to a per-subsystem scheme
+    for my $subsys (@subsystems) {
+      my @all_obsidss = $subsys->obsidss;
+      my $obsidss = $all_obsidss[0];
 
-      my %commonhdr = %$hdr;
-      my %subsystems;
-      for my $subhdr ( @{$commonhdr{SUBHEADERS}} ) {
-        my $obsidss = get_obsidss( $obs->obsid, $subhdr, \%commonhdr );
-        if (exists $subsystems{$obsidss}) {
-          push( @{$subsystems{$obsidss}{FILE_ID}}, $subhdr->{FILE_ID});
-        } else {
-          # initialise the subsystem entry
-          $subsystems{$obsidss} = { %$subhdr };
-          $subsystems{$obsidss}{FILE_ID} = [ $subhdr->{FILE_ID} ];
-        }
+      # local copies
+      my $obsidss_not_in_group = $not_in_group;
+      my %obsidss_current = %current;
+
+      if (exists $JUNK_OBSIDSS{$obsidss}) {
+	log_message( "Subsystem $obsidss will not be processed in any way\n");
+	next;
       }
 
-      for my $obsidss (sort keys %subsystems) {
-        # local copies
-        my $obsidss_not_in_group = $not_in_group;
-        my %obsidss_current = %current;
-
-        if (exists $JUNK_OBSIDSS{$obsidss}) {
-          log_message( "Subsystem $obsidss will not be processed in any way\n");
-          next;
-        }
-
-        if (exists $BAD_OBSIDSS{$obsidss}) {
-          log_message( "Subsystem $obsidss should not be included in group processing\n" );
-          next if $mode ne "night";
-          $obsidss_not_in_group = 1;
-          $obsidss_current{mode} = "obs";
-        }
-
-        my $subhdr = $subsystems{$obsidss};
-
-        # Merge common with subheader
-        my %tmphdr = (%commonhdr, %{$subhdr});
-
-        if( defined( $tmphdr{'FREQ_SIG_LOWER'} ) ) {
-          $tmphdr{'FRQSIGLO'} = $tmphdr{'FREQ_SIG_LOWER'};
-        }
-        if( defined( $tmphdr{'FREQ_SIG_UPPER'} ) ) {
-          $tmphdr{'FRQSIGHI'} = $tmphdr{'FREQ_SIG_UPPER'};
-        }
-
-        assign_to_group( $instrument, $obs->obsid, $frameclass, $obsidss_not_in_group,
-                         \%tmphdr, \%obsidss_current, $tmphdr{FILE_ID}, \%groups );
+      if (exists $BAD_OBSIDSS{$obsidss}) {
+	log_message( "Subsystem $obsidss should not be included in group processing\n" );
+	next if $mode ne "night";
+	$obsidss_not_in_group = 1;
+	$obsidss_current{mode} = "obs";
       }
-    } else {
-      assign_to_group( $instrument, $obs->obsid, $frameclass, $not_in_group,
-                       $hdr, \%current, [$obs->filename], \%groups );
+
+      my $subsyshdr = $subsys->hdrhash;
+
+      if( defined( $subsyshdr->{'FREQ_SIG_LOWER'} ) ) {
+	$subsyshdr->{'FRQSIGLO'} = $subsyshdr->{'FREQ_SIG_LOWER'};
+      }
+      if( defined( $subsyshdr->{'FREQ_SIG_UPPER'} ) ) {
+	$subsyshdr->{'FRQSIGHI'} = $subsyshdr->{'FREQ_SIG_UPPER'};
+      }
+
+      assign_to_group( $instrument, $subsys->obsid, $frameclass, $obsidss_not_in_group,
+		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups );
     }
   }
 
