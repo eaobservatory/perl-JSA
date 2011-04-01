@@ -1071,6 +1071,8 @@ sub _get_obs_group {
 
   my $log = Log::Log4perl->get_logger( '' );
 
+  my $xfer = $self->_get_xfer_unconnected_dbh();
+
   my %obs = ( 'nocomments' => 1,
               'retainhdr'  => 1,
               'ignorebad'  => 1,
@@ -1093,6 +1095,8 @@ sub _get_obs_group {
   else {
 
     my $files = $self->files;
+    $xfer->put_found( $files );
+
     my @obs;
     for my $file (  @{ $files } ) {
 
