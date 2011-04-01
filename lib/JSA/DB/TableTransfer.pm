@@ -947,7 +947,9 @@ sub _alt_state {
 
   my ( $state ) = @_;
 
-  unless ( $state =~ m/^e(?:rr)/ ) {
+  my $re = qr/^ e (?:rr (?:or)? )? $/x;
+
+  unless ( $state =~ $re ) {
 
     return ( 'status' => $state );
   }
