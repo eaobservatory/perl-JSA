@@ -484,7 +484,7 @@ sub _process_paths {
   for my $f ( @path ) {
 
     my $alt = _fix_file_name( ( fileparse( $f, '' ) )[0] );
-    push @val, [ $alt, $state, $f ];
+    push @val, [ $alt, $state, $alt eq $f ? undef : $f ];
   }
 
   return unless scalar @val;
