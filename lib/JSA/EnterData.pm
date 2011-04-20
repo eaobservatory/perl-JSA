@@ -69,7 +69,7 @@ use JCMT::DataVerify;
 use OMP::ArchiveDB;
 use OMP::DBbackend::Archive;
 use OMP::Info::ObsGroup;
-use OMP::DateTool;
+use OMP::DateTools;
 use OMP::General;
 
 use DateTime;
