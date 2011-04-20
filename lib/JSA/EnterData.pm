@@ -69,6 +69,7 @@ use JCMT::DataVerify;
 use OMP::ArchiveDB;
 use OMP::DBbackend::Archive;
 use OMP::Info::ObsGroup;
+use OMP::DateTool;
 use OMP::General;
 
 use DateTime;
@@ -2176,18 +2177,18 @@ sub fill_headers_COMMON {
 
     } else {
       # Release it
-      $release_date = OMP::General->yesterday(1);
+      $release_date = OMP::DateTool->yesterday(1);
     }
 
   }
   elsif ($obs->isScience) {
 
     # semester release
-    my $semester = OMP::General->determine_semester( date => $obsdate,
+    my $semester = OMP::DateTool->determine_semester( date => $obsdate,
                                                       tel => 'JCMT'
                                                     );
     my ($sem_begin, $sem_end) =
-      OMP::General->semester_boundary( semester => $semester, tel => 'JCMT' );
+      OMP::DateTool->semester_boundary( semester => $semester, tel => 'JCMT' );
 
     # Use DateTime so that we can have proper addition. Add 1 year 1 day because
     # sem_end refers to the UT date and doesn't specify hours/minutes/seconds
@@ -2198,7 +2199,7 @@ sub fill_headers_COMMON {
   } else {
 
     # immediate release
-    $release_date = OMP::General->yesterday(1);
+    $release_date = OMP::DateTool->yesterday(1);
   }
   $header->{'release_date'} = $release_date->strftime($self->sybase_date_format);
 
