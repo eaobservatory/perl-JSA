@@ -1095,7 +1095,7 @@ sub _get_obs_group {
   else {
 
     my $files = $self->files;
-    $xfer->put_found( $files );
+    $xfer->add_found( $files );
 
     my @obs;
     for my $file (  @{ $files } ) {
