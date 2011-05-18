@@ -117,14 +117,14 @@ sub get_config { return { %_config }; }
 =item B<set_default_format>
 
 Sets the default, verbose format to
-C<%H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n>.
+C<%H %p %P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n>.
 
 =cut
 
 sub set_default_format {
 
   $_config{ $_log_fmt_key } =
-    '%H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n';
+    '%H %p %P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n';
 
   return;
 }
