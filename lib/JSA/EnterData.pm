@@ -1080,6 +1080,7 @@ sub _get_obs_group {
               'header_search' => 'files'
             );
 
+  require OMP::FileUtils;
   require OMP::Info::Obs;
 
   # Prime file list from database if possible.
@@ -1087,60 +1088,87 @@ sub _get_obs_group {
 
   unless ( $self->files_given ) {
 
-    %args =
-      ( 'date' => $args{'date'} ,
-        'instrument' => $args{'name'},
-        %obs
-      );
+    # OMP uses Time::Piece (instead of DateTime).
+    require Time::Piece;
+
+    my $date = $args{'date'};
+    $date = $date->ymd( '' )
+      if defined $date
+      && ref $date
+      && $date->isa( 'DateTime' );
+
+    $date =
+      defined $date
+      ? Time::Piece->strptime( $date, '%Y%m%d' )
+      : Time::Piece::gmtime()
+      ;
+
+    my @file = OMP::FileUtils->files_on_disk( 'date' => $date,
+                                              'instrument' => $args{'name'}
+                                            );
+
+    $self->files( [ map { ! defined $_ ? () : ref $_ ? @{ $_ } : $_ } @file ] );
   }
-  else {
 
-    my $files = $self->files;
-    $xfer->add_found( $files );
+  my $files = $self->files;
+  $xfer->add_found( $files );
 
-    my @obs;
-    for my $file (  @{ $files } ) {
+  my @obs;
+  for my $file (  @{ $files } ) {
 
-      unless ( -r $file && -s _ ) {
+    unless ( -r $file && -s _ ) {
 
-        $log->warn( "Unreadble or empty file: $file; skipped.\n" );
-        next;
-      }
-
-      try {
-
-        push @obs, OMP::Info::Obs->readfile( $file , %obs );
-      }
-      catch OMP::Error::ObsRead with {
-
-        my ( $err ) = @_;
-
-        throw $err
-          unless $err->text() =~ m/^Error reading FITS header from file/;
-      };
+      $log->warn( "Unreadble or empty file: $file; skipped.\n" );
+      next;
     }
 
-    my @headers;
-    for my $ob ( @obs ) {
+    my $text = '';
+    my $err;
+    try {
 
-      push @headers,
-        { 'filename' => $ob->{'FILENAME'}->[0],
-          'header' => $ob->hdrhash,
-        }
+      push @obs, OMP::Info::Obs->readfile( $file , %obs );
     }
+    catch OMP::Error::ObsRead with {
 
-    require OMP::FileUtils;
+      ( $err ) = @_;
 
-    my $merged = OMP::FileUtils->merge_dupes( @headers );
-    @obs = OMP::Info::Obs->hdrs_to_obs( 'retainhdr' => $obs{'retainhdr'},
-                                        'fits'      => $merged
-                                        );
+      #throw $err
+      #  unless $err->text() =~ m/^Error reading FITS header from file/;
+      $text = 'Error during file reading when making Obs:';
+    }
+    otherwise {
 
-    %args =  ( 'obs' => [ @obs ] );
+      ( $err ) = @_;
+      $text = 'Unknown Error';
+    };
+
+    if ( $err ) {
+
+      $text .=  ': ' . $err->text();
+
+      $xfer->put_error( $file, $text );
+      $log->error( $text );
+    }
   }
+
+  return unless scalar @obs;
+
+  my @headers;
+  for my $ob ( @obs ) {
+
+    push @headers,
+      { 'filename' => $ob->{'FILENAME'}->[0],
+        'header' => $ob->hdrhash,
+      }
+  }
+
+  my $merged = OMP::FileUtils->merge_dupes( @headers );
+  @obs = OMP::Info::Obs->hdrs_to_obs( 'retainhdr' => $obs{'retainhdr'},
+                                      'fits'      => $merged
+                                      );
 
   return
-    OMP::Info::ObsGroup->new( %args );
+    OMP::Info::ObsGroup->new( 'obs' => [ @obs ] );
 }
 
 sub _get_files_from_db {
