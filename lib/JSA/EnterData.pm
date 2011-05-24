@@ -1107,10 +1107,19 @@ sub _get_obs_group {
                                               'instrument' => $args{'name'}
                                             );
 
-    $self->files( [ map { ! defined $_ ? () : ref $_ ? @{ $_ } : $_ } @file ] );
+    # Flatten 2-D array reference.
+    @file = map { ! defined $_ ? () : ref $_ ? @{ $_ } : $_ } @file;
+
+    $self->files( [ @file ] ) if scalar @file;
   }
 
   my $files = $self->files;
+
+  return
+    unless defined $files
+        && ref $files
+        && scalar @{ $files };
+
   $xfer->add_found( $files );
 
   my @obs;
@@ -3207,13 +3216,6 @@ sub _print_text {
 =item B<_get_xfer_unconnected_dbh>
 
 It is similar to above I<_get_xfer> method about what it accepts and
-returns.  Difference is that this method uses a new database handle
-unconnected to the one used elsewhere.
-
-=cut
-
-sub _get_xfer_unconnected_dbh {
-
   my ( $self, $name ) = @_;
 
   $name ||= 'xfer-new-dbh';
