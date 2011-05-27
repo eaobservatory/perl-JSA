@@ -124,7 +124,7 @@ C<%H %p %P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n>.
 sub set_default_format {
 
   $_config{ $_log_fmt_key } =
-    '%H %p %P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n';
+    '%H %5p %6P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n';
 
   return;
 }
