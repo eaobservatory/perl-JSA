@@ -156,7 +156,7 @@ sub use_transaction {
   $self->{'trans'} = !! shift @_;
 
   my $log = Log::Log4perl->get_logger( '' );
-  $log->trace( 'use transactions ' . $self->{'trans'} ? 1 : 0 );
+  #$log->trace( 'use transactions ' . $self->{'trans'} ? 1 : 0 );
 
   return;
 }
@@ -293,6 +293,8 @@ sub select_loop {
   }
 
   my $log = Log::Log4perl->get_logger( '' );
+  $log->debug( hashref_to_dumper( $sql => [ @arg{qw[where values]} ] ) );
+
   my $dbh = $self->dbhandle();
 
   my $handle_err =

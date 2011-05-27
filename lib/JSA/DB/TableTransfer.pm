@@ -856,13 +856,14 @@ sub _change_add_state {
               ),
               qq[ '${state}' state for files\n]
             );
+  $log->debug( '  ' . join "\n  ", map { $_ } @{ $files } );
 
   my @affected;
   for my $file ( sort @{ $files } ) {
 
     my $alt = _fix_file_name( $file );
 
-    $log->debug( qq[  ${alt}\n] );
+    #$log->debug( qq[  ${alt}\n] );
 
     # Explicitly pass $dbh.
     my $affected = $run->( 'file'       => $alt,
