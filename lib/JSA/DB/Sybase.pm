@@ -80,11 +80,11 @@ given database.
     my $key = join ':', ( $name ? $name : '', $server, $db, $user );
 
     my $log = Log::Log4perl->get_logger( '' );
-    $log->info( "Connecting to ${server}..${db} as ${user}\n" );
+    #$log->info( "Connecting to ${server}..${db} as ${user}\n" );
 
     if ( exists $_handles{ $key } && $_handles{ $key } ) {
 
-      $log->trace( "  found cached connection" );
+      #$log->trace( "  found cached connection" );
       return $_handles{ $key };
     }
 
