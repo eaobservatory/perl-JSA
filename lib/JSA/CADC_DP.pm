@@ -39,10 +39,8 @@ our $VERBOSE = 0;
 our $DEBUG = 0;  # Do not write to the database
 
 # Define connection information.
-my $READDATABASE = "jcmtmd";
 my $WRITEDATABASE = "data_proc";
 my $DBSERVER = "CADC_ASE";
-my $AD = "JCMT";
 my $DBUSER = OMP::Config->getData( 'cadc_dp.user' );
 my $DBPSWD = OMP::Config->getData( 'cadc_dp.password' );
 
