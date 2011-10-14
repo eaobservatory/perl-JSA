@@ -394,6 +394,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       my @all_obsidss = $subsys->obsidss;
       my $obsidss = $all_obsidss[0];
 
+      die "Error determining an OBSIDSS for an observation. Can not proceed\n"
+        unless defined $obsidss;
+
       # local copies
       my $obsidss_not_in_group = $not_in_group;
       my %obsidss_current = %current;
