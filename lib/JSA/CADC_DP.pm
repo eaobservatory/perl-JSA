@@ -83,6 +83,7 @@ sub connect_to_cadcdp {
                           { PrintError => 0,
                             RaiseError => 0,
                             AutoCommit => 0,
+                            syb_chained_txn => 0, # Might be a sybase 12.5 client library issue
                           } ) or &cadc_dberror;
   if (!$dbh) {
     throw JSA::Error::CADCDB( "Could not connect to database as $DBUSER" );
