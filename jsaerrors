@@ -57,7 +57,7 @@ disconnect_from_cadcdp( $dbh );
 
 print "Returned " . @results . " processing jobs in E state\n\n";
 for my $recipe ( @results ) {
-  print dprecinst_url( $recipe->{recipe_instance_id} ) . " " .
+  print dprecinst_url( $recipe->{identity_instance_id} ) . " " .
     $recipe->{tag} ."\n";
 
 }

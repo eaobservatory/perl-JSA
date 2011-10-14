@@ -44,6 +44,11 @@ my $DBSERVER = "CADC_ASE";
 my $DBUSER = OMP::Config->getData( 'cadc_dp.user' );
 my $DBPSWD = OMP::Config->getData( 'cadc_dp.password' );
 
+$DBSERVER = "SYB_JAC";
+$WRITEDATABASE = "devjcmt";
+$DBUSER = "jcmt";
+$DBPSWD = "jcmtarc";
+
 =head1 DATA PROCESSING CONSTANTS
 
 The following constants are available to define a data processing recipe.
@@ -218,58 +223,39 @@ select recipe_id
    where script_name="jsawrapdr" and description like '%$dp_recipe_tag'
 ENDRECIPEID
 
-  my $dp_recipe_id = queryBinaryValue( $dbh, $sql );
+  my $dp_recipe_id = querySingleValue( $dbh, $sql );
   throw JSA::Error::CADCDB( "Cannot retrieve good recipe_id from dp_recipe" )
     unless $dp_recipe_id;
 
   # We first need to see if the supplied tag already exists in the recipe
   # instance table.
   $sql = "SELECT * FROM dp_recipe_instance WHERE tag = '$tag' ";
-  my %dp_recipe_instance_info = querySingleRow( $dbh, $sql, [ "recipe_instance_id",
-                                                              "recipe_id" ]);
+  my %dp_recipe_instance_info = querySingleRow( $dbh, $sql );
 
   my $updating = 0;
-  my $dp_recipe_instance_id;
+  my $dp_identity_instance_id;
   # if we found it we can reuse the instance
   if ( keys %dp_recipe_instance_info ) {
 
-    # Convert binary to string form
-    for my $k (qw/ recipe_instance_id recipe_id /) {
-      $dp_recipe_instance_info{$k} = bigintstr( $dp_recipe_instance_info{$k} );
-    }
-
-    $dp_recipe_instance_id = $dp_recipe_instance_info{recipe_instance_id};
+    $dp_identity_instance_id = $dp_recipe_instance_info{identity_instance_id};
 
     # We have found a pre-existing instance with this tag but we can only
     # proceed if the instance is in the "E" or "Y" state.
 
     if ( $dp_recipe_instance_info{state} !~ /^[EY]$/) {
       if ($VERBOSE) {
-        print "Skipping update for recipe_id $dp_recipe_instance_id as it is in state '$dp_recipe_instance_info{state}'\n";
+        print "Skipping update for recipe_id $dp_identity_instance_id as it is in state '$dp_recipe_instance_info{state}'\n";
       }
-      return "-" . $dp_recipe_instance_id;
+      return "-" . $dp_identity_instance_id;
     }
 
     $updating = 1;
 
   } else {
 
-    ###############################################
-    # Use the maximum current value of recipe_instance_id in
-    # dp_recipe_instance to generate a "new" recipe_instance_id
-    ###############################################
-
-    my $dp_recipe_instance_bigint = queryMaxBinaryValue( $dbh, "dp_recipe_instance",
-                                                         "recipe_instance_id") +1;
-    $dp_recipe_instance_id = bigintstr($dp_recipe_instance_bigint);
+    # if we are not updating we will need to insert and then read back the value
+    # for the file insert
   }
-
-  ###############################################
-  # Use the maximum cuurent value of input_id in
-  # dp_file_input to generate a "new" input_id
-  ###############################################
-
-  my $dp_file_input_bigint  = queryMaxBinaryValue( $dbh, "dp_file_input", "input_id" );
 
   # Start a transaction.
   $dbh->begin_work unless $DEBUG;
@@ -280,7 +266,6 @@ ENDRECIPEID
 
   # Form a hash with all the relevant content
   my %dp_recipe_instance = (
-                            recipe_instance_id => $dp_recipe_instance_id,
                             recipe_id => $dp_recipe_id,
                             state => " ",
                             priority => $priority,
@@ -303,7 +288,7 @@ ENDRECIPEID
     $dp_recipe_instance{parameters} = join(" ", @paramlist);
   }
 
-  if ($updating) {
+  if (defined $dp_identity_instance_id) {
     # if we are updating then we need to find out what needs to be
     # changed and just update that. At the very least we will
     # be changing state back to " ".
@@ -312,21 +297,32 @@ ENDRECIPEID
       if ( $dp_recipe_instance_info{$k} ne $dp_recipe_instance{$k}) {
         $dp_recipe_update{$k} = $dp_recipe_instance{$k};
 
-        # tag and recipe_instance_id MUST match
-        if ($k eq 'tag' || $k eq 'recipe_instance_id') {
+        # tag and identity_instance_id MUST match
+        if ($k eq 'tag' || $k eq 'identity_instance_id') {
           print "Comparing $k => $dp_recipe_instance_info{$k} (DB) vs $dp_recipe_instance{$k} (NEW)\n"
             if $DEBUG;
-          JSA::Error::CADCDB->throw( "Can not be updating with differing tags or recipe_instance_id" );
+          $dbh->rollback();
+          JSA::Error::CADCDB->throw( "Can not be updating with differing tags or identity_instance_id" );
         }
       }
     }
 
     updateWithRollback( $dbh, "dp_recipe_instance",
-                        { recipe_instance_id => $dp_recipe_instance_id },
+                        { identity_instance_id => $dp_identity_instance_id },
                         %dp_recipe_update );
 
   } else {
-    insertWithRollback( $dbh, "dp_recipe_instance", \%dp_recipe_instance);
+    insertWithRollbackPH( $dbh, "dp_recipe_instance", \%dp_recipe_instance);
+
+    # Now we need to get the identity_instance_id that resulted from this
+    # insert. We assume that the tag will give us the relevant row.
+    croak "Must have a tag for JSA data processing"
+      unless defined $tag;
+    my $sql = "SELECT * from dp_recipe_instance WHERE tag = '$tag' ";
+    my %row = querySingleRow( $dbh, $sql );
+
+    $dp_identity_instance_id = $row{identity_instance_id};
+
   }
 
   ###############################################
@@ -342,14 +338,13 @@ ENDRECIPEID
   my @to_add;
   if ($updating) {
     my @results = runQuery( $dbh,
-                            "SELECT input_id, dp_input FROM dp_file_input WHERE recipe_instance_id = $dp_recipe_instance_id",
-                            [ qw/ input_id /]
+                            "SELECT identity_input_id, dp_input FROM dp_file_input WHERE identity_instance_id = $dp_identity_instance_id"
                           );
 
     # Flatten into a simple hash indexed by dp_input
     my %files_in_db;
     for my $r (@results) {
-      $files_in_db{$r->{dp_input}} = bigintstr($r->{input_id});
+      $files_in_db{$r->{dp_input}} = $r->{identity_input_id};
     }
 
     # Convert the requested files into a hash for ease of
@@ -366,7 +361,7 @@ ENDRECIPEID
 
     # Anything left in files_in_db need to be deleted
     if (keys %files_in_db) {
-      $sql = "DELETE FROM dp_file_input WHERE input_id = ?";
+      $sql = "DELETE FROM dp_file_input WHERE identity_input_id = ?";
       executeWithRollback( $dbh, $sql, values %files_in_db );
     }
 
@@ -381,18 +376,17 @@ ENDRECIPEID
   my @inserts;
   for my $mem (@to_add) {
     chomp( $mem );
-    my $dp_file_input_id = bigintstr(++$dp_file_input_bigint);
-    my %dp_file_input = ( input_id => $dp_file_input_id,
-                          recipe_instance_id => $dp_recipe_instance_id,
+    my %dp_file_input = ( identity_instance_id => $dp_identity_instance_id+0,
                           dp_input => $mem,
                           input_role => "infile" );
     push(@inserts, \%dp_file_input);
   }
-  insertWithRollback( $dbh, "dp_file_input", @inserts );
+
+  insertWithRollback( $dbh, "dp_file_input", @inserts);
 
   $dbh->commit unless $DEBUG;
 
-  return $dp_recipe_instance_id;
+  return $dp_identity_instance_id;
 
 }
 
@@ -401,7 +395,7 @@ ENDRECIPEID
 Remove recipe instances (supplied as integers) from the
 data processing tables. Returns the number of jobs removed.
 
-  $n = remove_recipe_instance( $dbh, @recipe_instance_ids );
+  $n = remove_recipe_instance( $dbh, @identity_instance_ids );
 
 Verifies that all ids look like a simple integer.
 
@@ -409,33 +403,26 @@ Verifies that all ids look like a simple integer.
 
 sub remove_recipe_instance {
   my $dbh = shift;
-  my @recipe_instance_ids = @_;
+  my @identity_instance_ids = @_;
 
-  for my $id (@recipe_instance_ids) {
+  for my $id (@identity_instance_ids) {
     JSA::Error::BadArgs->throw("ID $id does not look like an integer")
         unless $id =~ /^\d+$/;
   }
-
-  # Convert the integers to hex
-  @recipe_instance_ids = map { bigintstr( $_ ) } @recipe_instance_ids;
 
   $dbh->begin_work();
 
   # Need to remove from two tables. Need to delete from dp_file_input
   # before deleting from dp_recipe_instance.
 
-  print "Removing rows from dp_file_input.\n";
-  my $sql = "DELETE FROM dp_file_input WHERE recipe_instance_id = ?";
-  executeWithRollback( $dbh, $sql, @recipe_instance_ids );
+  my $sql = "DELETE FROM dp_file_input WHERE identity_instance_id = ?";
+  executeWithRollback( $dbh, $sql, @identity_instance_ids );
 
-  print "Removing rows from dp_recipe_output.\n";
-  $sql = "DELETE FROM dp_recipe_output WHERE recipe_instance_id = ?";
-  executeWithRollback( $dbh, $sql, @recipe_instance_ids );
+  $sql = "DELETE FROM dp_recipe_output WHERE identity_instance_id = ?";
+  executeWithRollback( $dbh, $sql, @identity_instance_ids );
 
-  print "Removing row from dp_recipe_instance.\n";
-
-  $sql = "DELETE FROM dp_recipe_instance WHERE recipe_instance_id = ?";
-  executeWithRollback( $dbh, $sql, @recipe_instance_ids );
+  $sql = "DELETE FROM dp_recipe_instance WHERE identity_instance_id = ?";
+  executeWithRollback( $dbh, $sql, @identity_instance_ids );
 
   $dbh->commit;
 
@@ -455,8 +442,8 @@ sub query_dpstate {
   my %filters = @_;
 
   my $sql = q{
-select R.recipe_instance_id, R.tag from dp_recipe_instance R, dp_file_input F
-    where R.recipe_instance_id = F.recipe_instance_id };
+select R.identity_instance_id, R.tag from dp_recipe_instance R, dp_file_input F
+    where R.identity_instance_id = F.identity_instance_id };
 
   if (exists $filters{state} && defined $filters{state}) {
     if (length($filters{state}) == 1) {
@@ -474,9 +461,9 @@ select R.recipe_instance_id, R.tag from dp_recipe_instance R, dp_file_input F
     }
   }
 
-  $sql .= " group by R.recipe_instance_id";
+  $sql .= " group by R.identity_instance_id";
 
-  return runQuery( $dbh, $sql, [qw/ recipe_instance_id /]);
+  return runQuery( $dbh, $sql );
 
 }
 
@@ -506,7 +493,7 @@ sub queryValue {
 sub runQuery {
   my ($dbh, $sql, $bin) = @_;
 
-  print "VERBOSE sql=$sql\n" if $VERBOSE;
+  print "VERBOSE runQuery sql=$sql\n" if $VERBOSE;
   my $sth = $dbh->prepare( $sql ) or &cadc_dberror;
   $sth->execute or &cadc_dberror;
 
@@ -544,30 +531,26 @@ sub querySingleRow {
   } elsif (@results > 1) {
     JSA::Error::CADCDB->throw( "Got ".@results ." results from SQL '$_[1]' when expected only one" );
   }
+  if ($VERBOSE) {
+    print "Result from single row query:\n";
+    for my $k (keys %{$results[0]}) {
+      my $value = $results[0]->{$k};
+      print " -- $k => ". (defined $value ? $value : "NULL") ."\n";
+    }
+  }
   return %{$results[0]};
 }
 
-# Find the max value of a supplied binary column
-# We have to pad trailing zeroes and assume a fixed
-# size of 16 characters
-# Args are ($dbh, table, $column)
-sub queryMaxBinaryValue {
-  my ($dbh, $table, $column) = @_;
+# Expect one result from supplied sql
+sub querySingleValue {
+  my %result = querySingleRow(@_);
 
-  my $sql = "select isnull(max($column),0) from $table";
-  my $maxval = queryValue( $dbh, $sql );
-  return binaryAsBigint( $maxval );
-}
-
-# Query a binary value
-sub queryBinaryValue {
-  my ($dbh, $sql) = @_;
-  my $result = queryValue( $dbh, $sql );
-  if (defined $result) {
-    return bigintstr( binaryAsBigint( $result ) );
+  if (keys %result > 1) {
+    JSA::Error::CADCDB->throw("Got more than one result from sql query '$_[1]'");
   }
-  return;
+  return scalar values %result;
 }
+
 
 # Pad a binary value with trailing zeroes and convert to a BigInt
 sub binaryAsBigint {
@@ -576,18 +559,51 @@ sub binaryAsBigint {
   return Math::BigInt->new("0x". $bin );
 }
 
-# Convert a (big) int to a string suitable for insertion into
-# a sybase BINARY field
+# Decide how to quote an SQL value that will be used for an INSERT
+# or UPDATE etc
 
-sub bigintstr {
-  return sprintf( "0x%016lx", $_[0] );
+sub quotesql {
+  my $value = shift;
+  return ( $value =~ /^\-?[\d.x]+$/ ? $value : "\"$value\"" );
+}
+
+# Execute the supplied SQL. If there is a ? in the SQL string
+# replace it with the value. Placeholders are not used explicitly
+# because of problems with bigints. Use executeWithRollbackPH
+# if bigints are not involved with placeholders
+
+sub executeWithRollback {
+  my $dbh = shift;
+  my $sql = shift;
+  my @items = @_;
+
+  if ($DEBUG || $VERBOSE) {
+
+  }
+
+  for my $item (@items) {
+    my $usesql = $sql;
+    my $value = quotesql($item);
+    $sql =~ s/\?/$value/;
+    if ($DEBUG || $VERBOSE) {
+      print "".($DEBUG ? "Would be " : "") .
+        "Executing SQL = $sql\n";
+      next if $DEBUG;
+    }
+    my $rows_changed = $dbh->do($sql);
+    if (!$rows_changed) {
+      my $err = $DBI::errstr;
+      $dbh->rollback;
+      throw JSA::Error::CADCDB( $err );
+    }
+  }
 }
 
 # Takes some SQL and an array of items that will be used
 # for the placeholder. "execute" assumes one placeholder only
 # and execute will be called once for each item.
 
-sub executeWithRollback {
+sub executeWithRollbackPH {
   my $dbh = shift;
   my $sql = shift;
   my @items = @_;
@@ -618,12 +634,60 @@ sub executeWithRollback {
 }
 
 
+# Insert with rollback without using placeholders
+# Given a database handle, a table name and a hash
+# of row information. Multiple hash references can be
+# supplied for efficient reuse of statement handle.
+
+# We have problems inserting bigint values using placeholders
+
+sub insertWithRollback {
+  my $dbh = shift;
+  my $table = shift;
+  my @rows = @_;
+  return unless @rows;
+
+  # Assume that each entry has the same keys
+
+  my @columns = sort keys %{$rows[0]};
+
+  # Build up the SQL without placeholders because
+  # DBD::Sybase has issues with bigint inserts
+  my $basesql = "INSERT INTO $table (". join(", ", @columns).
+    ") VALUES (";
+
+  for my $row (@rows) {
+    my $added = '';
+    for my $col (@columns) {
+      # need to make a guess since we are not querying sybase for
+      # the column types
+      my $value = $row->{$col};
+      $added .= "," if $added;
+      $added .= quotesql( $value );
+    }
+    my $sql = $basesql . $added . ")";
+    if ($DEBUG || $VERBOSE) {
+      print "". ($DEBUG ? "Would be " : "").
+        "Executing: '$sql'\n";
+    }
+    next if $DEBUG;
+    my $rows_changed = $dbh->do($sql);
+    if (!$rows_changed) {
+      my $err = $DBI::errstr;
+      $dbh->rollback;
+      throw JSA::Error::CADCDB( $err );
+    }
+  }
+
+  return;
+}
+
 # Insert with rollback using placeholders
 # Given a database handle, a table name and a hash
 # of row information. Multiple hash references can be
 # supplied for efficient reuse of statement handle.
 
-sub insertWithRollback {
+sub insertWithRollbackPH {
   my $dbh = shift;
   my $table = shift;
   my @rows = @_;
@@ -655,6 +719,7 @@ sub insertWithRollback {
 
   for my $row (@rows) {
     my @values = map { $row->{$_} } @columns;
+
     if (!$sth->execute(@values)) {
       my $err = $DBI::errstr;
       $dbh->rollback;
@@ -664,16 +729,65 @@ sub insertWithRollback {
   $sth->finish;
 }
 
-# Update entries in a table with rollback
+# Update entries without Place holders
 
 sub updateWithRollback {
   my $dbh = shift;
   my $table = shift;
   my $whereref = shift;
   my %updates = @_;
+  return unless keys %updates; # Nothing to do
 
-  JSA::Error::CADCDB->throw( "Must supply a where clause for an update!")
-      unless (defined $whereref && scalar keys %$whereref);
+  unless (defined $whereref && scalar keys %$whereref) {
+    $dbh->rollback;
+    JSA::Error::CADCDB->throw( "Must supply a where clause for an update!");
+  }
+
+  my @updcolumns = sort keys %updates;
+  my @wherecols = sort keys %$whereref;
+
+  my $setsql = '';
+  for my $updcol (@updcolumns) {
+    $setsql .= " AND " if $setsql;
+    $setsql .= " $updcol = ". quotesql( $updates{$updcol} );
+  }
+
+  my $wheresql = '';
+  for my $wherecol (@wherecols) {
+    $wheresql .= " AND " if $wheresql;
+    $wheresql .= " $wherecol = ". quotesql( $whereref->{$wherecol});
+  }
+
+  my $sql = "UPDATE $table SET $setsql WHERE $wheresql";
+
+  if ($DEBUG || $VERBOSE) {
+    print "". ($DEBUG ? "Would be " : "").
+      "Executing: '$sql'\n";
+  }
+  return if $DEBUG;
+  my $rows_changed = $dbh->do($sql);
+  if (!$rows_changed) {
+    my $err = $DBI::errstr;
+    $dbh->rollback;
+    throw JSA::Error::CADCDB( $err );
+  }
+  return;
+}
+
+
+# Update entries in a table with rollback and placeholders
+
+sub updateWithRollbackPH {
+  my $dbh = shift;
+  my $table = shift;
+  my $whereref = shift;
+  my %updates = @_;
+  return unless keys %updates; # Nothing to do
+
+  unless (defined $whereref && scalar keys %$whereref) {
+    $dbh->rollback;
+    JSA::Error::CADCDB->throw( "Must supply a where clause for an update!");
+  }
 
   my @updcolumns = sort keys %updates;
   my @wherecols = sort keys %$whereref;
