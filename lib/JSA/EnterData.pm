@@ -3213,9 +3213,17 @@ sub _print_text {
                                     );
   }
 }
+
 =item B<_get_xfer_unconnected_dbh>
 
 It is similar to above I<_get_xfer> method about what it accepts and
+returns.  Difference is that this method uses a new database handle
+unconnected to the one used elsewhere.
+
+=cut
+
+sub _get_xfer_unconnected_dbh {
+
   my ( $self, $name ) = @_;
 
   $name ||= 'xfer-new-dbh';
