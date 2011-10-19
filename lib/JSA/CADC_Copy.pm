@@ -711,49 +711,6 @@ sub _check_cadc {
   return \%at_cadc;
 }
 
-sub _check_cadc_jcmtInfo_or_curl {
-
-  my ( @prefix ) = @_;
-
-  return unless scalar @prefix;
-
-  # Decide whether we are running jcmtInfo or using curl
-  my $info_cmd = "/home/cadcops/bin/jcmtInfo";
-  my $use_info = -e $info_cmd;
-
-  # Go through each instrument prefix and push the list of files onto
-  # our array.
-  my @uploaded;
-  foreach my $prefix ( @prefix ) {
-    # Use a sybase wildcard to get all matching files
-    my $match = "${prefix}%";
-    my ($stdout, $stderr, $stat);
-
-    # Run the CADC command if it is around
-    if ( $use_info ) {
-      ($stdout, $stderr, $stat) = run_command( { nothrow => 1},
-                                               $info_cmd,
-                                               $match );
-    } else {
-      # Try to use curl with a URL (which is what jcmtInfo does anyhow)
-      my $url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=' . $match;
-
-      ($stdout, $stderr, $stat) = run_command( "curl",
-                                               "--silent",
-                                               "--location",
-                                               $url);
-    }
-
-    # each line should be a new file id
-    push @uploaded, _filter_curl_output( $stdout, $stat );
-  }
-
-  # Now make the hash that we'll return.
-  my %at_cadc = map { chomp( $_ ); $_ => undef } @uploaded;
-
-  return \%at_cadc;
-}
-
 sub _filter_curl_output {
 
   my ( $files, $stat ) = @_;
