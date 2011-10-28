@@ -549,7 +549,16 @@ sub get_files_not_end_state {
 
   my $sql =
     sprintf
-      qq[SELECT s.file_id, s.status, d.descr, s.error
+      qq[SELECT s.file_id, s.status, d.descr, s.error, s.comment,
+         -- Extract date from file name.
+         CASE
+            WHEN SUBSTRING( file_id, 1, 1 ) = 's'
+              -- SCUBA-2 files.
+              THEN SUBSTRING( file_id, 4, 8 )
+           ELSE
+              -- ACSIS files.
+              SUBSTRING( file_id, 2, 8 )
+          END AS date
           FROM $_state_table s , $_state_descr_table d
           WHERE (  s.status NOT IN ( %s )
                 OR s.error = 1
@@ -562,7 +571,7 @@ sub get_files_not_end_state {
   $sql .= ' AND file_id like ? '
     if $pattern;
 
-  $sql .= ' ORDER BY file_id';
+  $sql .= ' ORDER BY date, file_id';
 
   my $dbh = $self->_dbhandle();
   my $out = $dbh->selectall_hashref( $sql, 'file_id', undef,
