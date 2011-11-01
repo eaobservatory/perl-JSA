@@ -740,7 +740,7 @@ It is called by I<prepare_and_insert> method.
             my ( $self, %arg ) = @_;
 
             my $xfer  = $self->_get_xfer_unconnected_dbh();
-            $xfer->put_error( $arg{'file-id'} );
+            $xfer->put_error( $arg{'file-id'}, $arg{'comment'} );
             return;
           },
 
@@ -755,18 +755,19 @@ It is called by I<prepare_and_insert> method.
 
       @base = map { $_->simple_filename } @sub_obs;
 
-      my $ans;
+      my ( $ans, $comment );
       try {
-        $ans = $self->insert_obs_set( 'run-obs' => \@sub_obs,
-                                      'file-id' => \@base,
-                                      %pass_args,
-                                    );
+        ( $ans, $comment ) = $self->insert_obs_set( 'run-obs' => \@sub_obs,
+                                                    'file-id' => \@base,
+                                                    %pass_args,
+                                                  );
       }
       catch JSA::Error with {
 
         my ( $e ) = @_;
 
         $ans = 'error';
+        $comment = "$e";
       };
       next unless defined $ans;
 
@@ -775,6 +776,7 @@ It is called by I<prepare_and_insert> method.
         $run{ $ans }->( $self,
                         'obs'     => \@sub_obs,
                         'file-id' => \@base,
+                        'comment' =>  $comment,
                       );
       }
       else {
@@ -835,7 +837,7 @@ It is called by I<prepare_and_insert> method.
     my $common_obs = $run_obs->[0]
       or do {
               $self->_print_text( 'XXX First run obs is undefined|false; nothing to do.' );
-              return 'nothing-to-do';
+              return ( 'nothing-to-do', '' );
             };
 
     # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
@@ -849,7 +851,7 @@ It is called by I<prepare_and_insert> method.
     if ( ! $self->process_simulation && $common_hdrs->{SIMULATE} ) {
 
       $self->_print_text( "simulation data; skipping\n" );
-      return 'simulation';
+      return ( 'simulation', '' );
     }
 
     # XXX Skip badly needed data verification for scuba2 until implemented.
@@ -878,6 +880,15 @@ It is called by I<prepare_and_insert> method.
       }
     }
 
+    if ( 'acsis' eq lc $inst->name() ) {
+
+      unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
+          
+        $self->_print_text( "problem while finding bounds; skipping\n" );
+        return ( 'error', 'ACSIS: could not find bounds' );
+      }
+    }
+
     #$dbh->begin_work if $self->load_header_db;
     $db->begin_trans() if $self->load_header_db;
 
@@ -895,10 +906,10 @@ It is called by I<prepare_and_insert> method.
       $db->rollback_trans();
       $self->_print_error_simple_dup( $error );
 
-      return 'nothing-to-do'
+      return ( 'nothing-to-do' )
         if $self->_is_insert_dup_error( $error );
 
-      return 'error';
+      return ( 'error', "$error" );
     }
 
     unless ( $self->update_only_obstime() ) {
@@ -907,7 +918,7 @@ It is called by I<prepare_and_insert> method.
                               'db'  => $db,
                               'obs' => $run_obs,
                             )
-        or return 'error';
+        or return ( 'error', "while adding subsys obs: $run_obs" );
     }
 
    try {
@@ -922,7 +933,7 @@ It is called by I<prepare_and_insert> method.
 
     $self->_print_text( "successful\n" );
 
-    return 'inserted';
+    return ( 'inserted', '' );
   }
 }
 
