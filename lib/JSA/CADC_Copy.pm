@@ -692,6 +692,11 @@ sub _check_cadc {
   my @curl = (qw[ curl --silent --location ]);
   my $cadc_url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=';
 
+  # To avoid hammering the server when run multiple times in a row.
+  my $sleepy_time = scalar( @prefix ) -1;
+  # Time to wait for a random, reasonable amount.
+  my $wait        = 20;
+
   # Go through each instrument prefix and push the list of files onto
   # our array.
   my @uploaded;
@@ -704,6 +709,8 @@ sub _check_cadc {
     my ($stdout, $stderr, $stat) = run_command( @curl, $url);
 
     push @uploaded, _filter_curl_output( $stdout, $stat );
+
+    $sleepy_time-- > 0 and sleep $wait;
   }
 
   my %at_cadc = map { chomp( $_ ); $_ => undef } @uploaded;
