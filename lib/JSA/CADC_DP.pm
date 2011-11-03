@@ -543,7 +543,8 @@ sub querySingleValue {
   if (keys %result > 1) {
     JSA::Error::CADCDB->throw("Got more than one result from sql query '$_[1]'");
   }
-  return scalar values %result;
+  my @values = values %result;
+  return $values[0];
 }
 
 
