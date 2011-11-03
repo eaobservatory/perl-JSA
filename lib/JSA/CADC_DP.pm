@@ -307,7 +307,7 @@ ENDRECIPEID
                         %dp_recipe_update );
 
   } else {
-    insertWithRollbackPH( $dbh, "dp_recipe_instance", \%dp_recipe_instance);
+    insertWithRollback( $dbh, "dp_recipe_instance", \%dp_recipe_instance);
 
     # Now we need to get the identity_instance_id that resulted from this
     # insert. We assume that the tag will give us the relevant row.
