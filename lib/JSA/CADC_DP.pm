@@ -44,11 +44,6 @@ my $DBSERVER = "CADC_ASE";
 my $DBUSER = OMP::Config->getData( 'cadc_dp.user' );
 my $DBPSWD = OMP::Config->getData( 'cadc_dp.password' );
 
-$DBSERVER = "SYB_JAC";
-$WRITEDATABASE = "devjcmt";
-$DBUSER = "jcmt";
-$DBPSWD = "jcmtarc";
-
 =head1 DATA PROCESSING CONSTANTS
 
 The following constants are available to define a data processing recipe.
