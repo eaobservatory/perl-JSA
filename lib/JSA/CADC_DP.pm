@@ -743,7 +743,7 @@ sub updateWithRollback {
 
   my $setsql = '';
   for my $updcol (@updcolumns) {
-    $setsql .= " AND " if $setsql;
+    $setsql .= ", " if $setsql;
     $setsql .= " $updcol = ". quotesql( $updates{$updcol} );
   }
 
