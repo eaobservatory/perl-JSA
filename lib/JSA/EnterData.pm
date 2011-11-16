@@ -903,13 +903,15 @@ It is called by I<prepare_and_insert> method.
 
     if ( $dbh->err() ) {
 
+      my $text = $dbh->errstr();
+
       $db->rollback_trans();
-      $self->_print_error_simple_dup( $error );
+      $self->_print_error_simple_dup( $text );
 
       return ( 'nothing-to-do' )
-        if $self->_is_insert_dup_error( $error );
+        if $self->_is_insert_dup_error( $text );
 
-      return ( 'error', $error );
+      return ( 'error', $text );
     }
 
     unless ( $self->update_only_obstime() ) {
