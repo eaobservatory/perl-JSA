@@ -1346,9 +1346,12 @@ sub add_subsys_obs {
 
       if ( $dbh->err() ) {
 
+        my $text = $dbh->errstr();
+
         $db->rollback_trans() if $self->load_header_db;
         $self->_print_text( "$error\n\n" );
-        return 'error';
+
+        return (  'error', $text );
       }
     }
 
@@ -3114,6 +3117,8 @@ insert error message, then prints "File metadata already present".
 sub _print_error_simple_dup {
 
   my ( $self, $err ) = @_;
+
+  return unless defined $err;
 
   return
     $self->
