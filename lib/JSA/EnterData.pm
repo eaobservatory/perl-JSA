@@ -909,7 +909,7 @@ It is called by I<prepare_and_insert> method.
       return ( 'nothing-to-do' )
         if $self->_is_insert_dup_error( $error );
 
-      return ( 'error', "$error" );
+      return ( 'error', $error );
     }
 
     unless ( $self->update_only_obstime() ) {
