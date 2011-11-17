@@ -399,7 +399,6 @@ if( ! $skipdp ) {
 
   my ($dprstdout, $dprstderr, $extat) = run_command("dpRetrieve",
                                                     "--id=$id",
-                                                    "--debug",
                                                     "--inputs=$inputs");
   log_command( "dpRetrieve", $dprstdout, $dprstderr ) if $canfar;
 
