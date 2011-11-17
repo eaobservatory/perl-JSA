@@ -837,7 +837,7 @@ It is called by I<prepare_and_insert> method.
     my $common_obs = $run_obs->[0]
       or do {
               $self->_print_text( 'XXX First run obs is undefined|false; nothing to do.' );
-              return ( 'nothing-to-do', '' );
+              return ( 'nothing-to-do', 'First run obs is undef|false' );
             };
 
     # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
@@ -908,7 +908,7 @@ It is called by I<prepare_and_insert> method.
       $db->rollback_trans();
       $self->_print_error_simple_dup( $text );
 
-      return ( 'nothing-to-do' )
+      return ( 'nothing-to-do' , 'ignored duplicate insert' )
         if $self->_is_insert_dup_error( $text );
 
       return ( 'error', $text );
