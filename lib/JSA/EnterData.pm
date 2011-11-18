@@ -1133,16 +1133,20 @@ sub _get_obs_group {
         && ref $files
         && scalar @{ $files };
 
-  $xfer->add_found( $files );
-
   my @obs;
   for my $file (  @{ $files } ) {
 
     unless ( -r $file && -s _ ) {
 
-      $log->warn( "Unreadble or empty file: $file; skipped.\n" );
+      my $ignored = 'Unreadble or empty file';
+
+      $xfer->add_ignored( [ $file ], $ignored );
+
+      $log->warn( "$ignored: $file; skipped.\n" );
       next;
     }
+
+    $xfer->add_found( [ $file ], '' );
 
     my $text = '';
     my $err;
