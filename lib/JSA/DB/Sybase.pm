@@ -41,6 +41,7 @@ $OMP::Config::DEBUG = 0;
 {
   my $omp_cf;
   my %_handles;
+  my %_log;
 
 =item B<connect_to_db>
 
@@ -80,7 +81,13 @@ given database.
     my $key = join ':', ( $name ? $name : '', $server, $db, $user );
 
     my $log = Log::Log4perl->get_logger( '' );
-    #$log->info( "Connecting to ${server}..${db} as ${user}\n" );
+
+    my $log_text = "Connecting to ${server}..${db} as ${user}\n";
+    exists $_log{ $log_text }
+      or do {
+              $log->info( $log_text );
+              $_log{ $log_text }++;
+            };
 
     if ( exists $_handles{ $key } && $_handles{ $key } ) {
 
@@ -122,9 +129,9 @@ given database.
 
       if ( $v ) {
 
-        $log->info( "Disconnecting from $k" );
+        $v->disconnect()
+          or $log->warn( "Problem disconnecting from $k: " , $v->errstr() );
 
-        $v->disconnect();
         undef $v;
       }
     }
