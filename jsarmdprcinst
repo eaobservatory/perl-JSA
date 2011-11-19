@@ -99,7 +99,7 @@ if (@bad) {
   }
 }
 
-print "Will be attempt to remove ". @recipe_instances . " recipe instance".
+print "Will attempt to remove ". @recipe_instances . " recipe instance".
   (@recipe_instances > 1 ? "s" : "") . " from the database\n";
 
 my $term = Term::ReadLine->new( "Recipe instance" );
