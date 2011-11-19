@@ -573,20 +573,16 @@ sub executeWithRollback {
   my $sql = shift;
   my @items = @_;
 
-  if ($DEBUG || $VERBOSE) {
-
-  }
-
   for my $item (@items) {
     my $usesql = $sql;
     my $value = quotesql($item);
-    $sql =~ s/\?/$value/;
+    $usesql =~ s/\?/$value/;
     if ($DEBUG || $VERBOSE) {
       print "".($DEBUG ? "Would be " : "") .
-        "Executing SQL = $sql\n";
+        "Executing SQL = $usesql\n";
       next if $DEBUG;
     }
-    my $rows_changed = $dbh->do($sql);
+    my $rows_changed = $dbh->do($usesql);
     if (!$rows_changed) {
       my $err = $DBI::errstr;
       $dbh->rollback;
