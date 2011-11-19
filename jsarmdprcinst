@@ -4,7 +4,7 @@
 
 jsarmdprcinst - Remove a recipe instance from CADC data processing
 
-=head1 SYNSOPSIS
+=head1 SYNOPSIS
 
   jsarmdprcinst 14519 14245
   cat recinst.dat | jsarmdprcinst
