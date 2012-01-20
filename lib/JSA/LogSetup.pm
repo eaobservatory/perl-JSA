@@ -248,6 +248,11 @@ sub make_logfile {
       sprintf qq[No base name given to make log file path; using '%s' instead.\n],
         $basename;
   }
+  # A directory has been already specified; nothing sane to do.
+  elsif ( $basename =~ m[/] ) {
+
+    return $basename;
+  }
 
   $dir = $dir || $_log_dir;
 
@@ -268,7 +273,7 @@ sub _make_per_day_logfile {
   # Per 1.08 version, mkpath croak()s, so no need to check for failure again.
   File::Path->import( 1.08 );
 
-  my ( $y, $m, $d ) = map { $date->$_() } ( 'year', 'month', 'day' );
+  my ( $y, $m, $d ) = map { sprintf '%02d', $date->$_() } ( 'year', 'month', 'day' );
 
   # Directory tree is something like /parent/201201/12 for date of Jan 12, 2012.
   my $dir = File::Spec->catfile( $parent_dir,
