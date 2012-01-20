@@ -68,6 +68,9 @@ our @EXPORT_OK =
 my $_log_dir = '/jac_logs/jsa';
 $_log_dir = '/tmp' unless -d $_log_dir;
 
+# In case no basename given for log file.
+my $_log_basename = 'default.log';
+
 my $_log_file_key = 'log4perl.appender.log.filename';
 my $_log_fmt_key  = 'log4perl.appender.log.layout.ConversionPattern';
 
@@ -214,33 +217,68 @@ sub logfile {
 
 =item B<make_logfile>
 
-Returns a file path with date and process id appended to given file
-name prefix (devoid of '/') and optional log directory. (Default log
-directory is used otherwise.)
+Given base name for log file, and optional parent directory (default
+is F</jac_logs/jsa>), returns a file path based on current date UTC
+-10 time zone.
 
-  # Sets log file to '/jac_logs/jsa/enterdata.20100612.2345',
-  # (when current date is Jun 12, 2010 and process id is 2345).
+  # Sets log file to '/jac_logs/jsa/201201/20/enterdata' for date of
+  # Jan 12 2012.
   logfile( make_logfile( 'enterdata' ) );
 
-  # Sets log file to '/tmp/enterdata.20100612.2345',
+  # Keep log file elsewhere; '/tmp/201201/20/enterdata' in this case.
   logfile( make_logfile( 'enterdata', '/tmp' ) );
+
+Specify a true value for the third parameter, along with parent
+directory, to skip date based path.
+
+  # '/tmp/enterdata.20120120' would be the result.
+  logfile( make_logfile( 'enterdata', '/tmp', 1 ) );
 
 =cut
 
 sub make_logfile {
 
-  my ( $prefix, $dir ) = @_;
+  my ( $basename, $dir, $skip_day_dir ) = @_;
 
-  croak 'No prefix given to make a file name.'
-    unless $prefix;
+  unless ( $basename ) {
+
+    $basename = $_log_basename;
+
+    carp
+      sprintf qq[No base name given to make log file path; using '%s' instead.\n],
+        $basename;
+  }
+
+  $dir = $dir || $_log_dir;
 
   require DateTime;
-  return
-    File::Spec->catfile( $dir || $_log_dir,
-                          join '.',
-                            $prefix,
-                            DateTime->now( 'time_zone' => '-1000' )->ymd( '' )
-                        );
+  my $date = DateTime->now( 'time_zone' => '-1000' );
+
+  return _make_per_day_logfile( $date, $dir, $basename )
+    unless $skip_day_dir;
+
+  return File::Spec->catfile( $dir, join '.', $basename, $date->ymd( '' ) )
+}
+
+sub _make_per_day_logfile {
+
+  my ( $date, $parent_dir, $basename ) = @_;
+
+  require File::Path;
+  # Per 1.08 version, mkpath croak()s, so no need to check for failure again.
+  File::Path->import( 1.08 );
+
+  my ( $y, $m, $d ) = map { $date->$_() } ( 'year', 'month', 'day' );
+
+  # Directory tree is something like /parent/201201/12 for date of Jan 12, 2012.
+  my $dir = File::Spec->catfile( $parent_dir,
+                                  join( '', $y, $m ),
+                                  $d
+                                );
+
+  File::Path::mkpath( $dir, 0, 0755 );
+
+  return File::Spec->catfile( $dir, $basename );
 }
 
 
@@ -270,7 +308,7 @@ Anubhav <a.agarwal@jach.hawaii.edu>
 
 =head1 COPYRIGHT
 
-Copyright (C) 2010 Science and Technology Facilities Council.
+Copyright (C) 2010-2012 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify
