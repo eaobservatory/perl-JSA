@@ -78,7 +78,7 @@ my %_config =
   ( 'log4perl.rootLogger' => 'DEBUG, log',
 
     'log4perl.appender.log'        => 'Log::Log4perl::Appender::File',
-    $_log_file_key                 => make_logfile( 'log' ),
+    $_log_file_key                 => undef,
     'log4perl.appender.log.mode'   => 'append',
     'log4perl.appender.log.layout' => 'PatternLayout',
   );
@@ -236,33 +236,52 @@ directory, to skip date based path.
 
 =cut
 
-sub make_logfile {
+{
+  my %made;
 
-  my ( $basename, $dir, $skip_day_dir ) = @_;
+  sub make_logfile {
 
-  unless ( $basename ) {
+    my ( $basename, $dir, $skip_day_dir ) = @_;
 
-    $basename = $_log_basename;
+    $dir = $dir || $_log_dir;
 
-    carp
-      sprintf qq[No base name given to make log file path; using '%s' instead.\n],
-        $basename;
+    $skip_day_dir = $skip_day_dir || 0;
+
+    unless ( $basename ) {
+
+      $basename = $_log_basename;
+
+      carp
+        sprintf qq[No base name given to make log file path; using '%s' instead.\n],
+          $basename;
+    }
+    # A directory has been already specified; nothing sane to do.
+    elsif ( $basename =~ m[/] ) {
+
+      return $basename;
+    }
+
+    # Skip date & directory making functions if possible.
+    my $track = join '.', $basename, $dir, $skip_day_dir;
+    return $made{ $track }
+      if $skip_day_dir
+      && $made{ $track };
+
+    require DateTime;
+    my $date = DateTime->now( 'time_zone' => '-1000' );
+
+    $track = join '.', $track, $date->ymd( '' );
+    return $made{ $track }
+      if $made{ $track };
+
+    my $path =
+      !$skip_day_dir
+      ? _make_per_day_logfile( $date, $dir, $basename )
+      : File::Spec->catfile( $dir, join '.', $basename, $date->ymd( '' ) )
+      ;
+
+    return $made{ $track } = $path;
   }
-  # A directory has been already specified; nothing sane to do.
-  elsif ( $basename =~ m[/] ) {
-
-    return $basename;
-  }
-
-  $dir = $dir || $_log_dir;
-
-  require DateTime;
-  my $date = DateTime->now( 'time_zone' => '-1000' );
-
-  return _make_per_day_logfile( $date, $dir, $basename )
-    unless $skip_day_dir;
-
-  return File::Spec->catfile( $dir, join '.', $basename, $date->ymd( '' ) )
 }
 
 sub _make_per_day_logfile {
