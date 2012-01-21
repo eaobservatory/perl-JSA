@@ -270,6 +270,8 @@ directory, to skip date based path.
     require DateTime;
     my $date = DateTime->now( 'time_zone' => '-1000' );
 
+    $basename = join '.', $basename, $date->ymd( '' );
+
     $track = join '.', $track, $date->ymd( '' );
     return $made{ $track }
       if $made{ $track };
@@ -277,7 +279,7 @@ directory, to skip date based path.
     my $path =
       !$skip_day_dir
       ? _make_per_day_logfile( $date, $dir, $basename )
-      : File::Spec->catfile( $dir, join '.', $basename, $date->ymd( '' ) )
+      : File::Spec->catfile( $dir, $basename )
       ;
 
     return $made{ $track } = $path;
