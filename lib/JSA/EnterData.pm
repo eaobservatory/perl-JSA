@@ -2205,40 +2205,22 @@ sub fill_headers_COMMON {
                                    'second' => 0,
                                    'time_zone' => 0
                                  );
+  } elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
+    # EC05 is a public calibrator monitoring project
+    $release_date = OMP::DateTools->yesterday(1);
 
-  # For time being, set the release date in Jun 2010.
-  } elsif ( JSA::EnterData::SCUBA2->name_is_scuba2( $header->{'INSTRUME'} )
-        || JSA::EnterData::SCUBA2->name_is_scuba2( $header->{'BACKEND'} )
-      ) {
+  } elsif ($obs->projectid =~ /ec/i && $obs->isScience ) {
+    # Do not release EC data.
 
-    # Default currently not to release EC data
-    if ($obs->projectid =~ /ec/i) {
-      $release_date = DateTime->new( 'month' => 1,
-                                     'year' => 2031,
-                                     'day' => 1,
-                                     'hour' => 0,
-                                     'minute' => 0,
-                                     'second' => 0,
-                                     'time_zone' => 0
-                                   );
-    } elsif ( $obs->isScience ) {
-      # Treat this as SRO for now
-      $release_date = DateTime->new( 'month' => 5,
-                                     'year' => 2010,
-                                     'day' => 1,
-                                     'hour' => 0,
-                                     'minute' => 0,
-                                     'second' => 0,
-                                     'time_zone' => 0
-                                   );
-
-    } else {
-      # Release it
-      $release_date = OMP::DateTools->yesterday(1);
-    }
-
-  }
-  elsif ($obs->isScience) {
+    $release_date = DateTime->new( 'month' => 1,
+                                   'year' => 2031,
+                                   'day' => 1,
+                                   'hour' => 0,
+                                   'minute' => 0,
+                                   'second' => 0,
+                                   'time_zone' => 0
+                                 );
+  } elsif ($obs->isScience) {
 
     # semester release
     my $semester = OMP::DateTools->determine_semester( date => $obsdate,
