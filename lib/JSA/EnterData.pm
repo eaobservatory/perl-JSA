@@ -632,6 +632,11 @@ set.  File paths are fetched from database unless otherwise specified.
                                       'date' => $date,
                                       'skip-db-path' => 1,
                                     );
+
+      next
+        unless $group
+        && ref $group;
+
       my @obs =
         $self->_filter_header( $inst,
                               [ $group->obs ],
