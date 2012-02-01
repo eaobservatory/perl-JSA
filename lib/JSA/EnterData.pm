@@ -630,6 +630,7 @@ set.  File paths are fetched from database unless otherwise specified.
       # <no. of subscans objects returned per observation>.
       $group = $self->_get_obs_group( 'name' => $name,
                                       'date' => $date,
+                                      'skip-db-path' => 1,
                                     );
       my @obs =
         $self->_filter_header( $inst,
@@ -1099,7 +1100,7 @@ sub _get_obs_group {
   # Prime file list from database if possible.
   #$self->_get_files_from_db();
 
-  unless ( $self->files_given ) {
+  if ( $args{'skip-db-path'} || ! $self->files_given() ) {
 
     # OMP uses Time::Piece (instead of DateTime).
     require Time::Piece;
