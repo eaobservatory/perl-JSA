@@ -341,7 +341,7 @@ sub date {
       || ( ref $date && ! $date->isa( 'DateTime' ) )
      ) {
 
-    $date = DateTime->now( 'time_zone' => '-1200' ) ;
+    $date = DateTime->now( 'time_zone' => 'UTC' ) ;
   }
   elsif ( ! ref $date ) {
 
