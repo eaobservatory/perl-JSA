@@ -1102,45 +1102,35 @@ sub _get_obs_group {
   require OMP::FileUtils;
   require OMP::Info::Obs;
 
-  # Prime file list from database if possible.
-  #$self->_get_files_from_db();
+  my @file;
 
-  if ( $args{'skip-db-path'} || ! $self->files_given() ) {
+  # OMP uses Time::Piece (instead of DateTime).
+  require Time::Piece;
 
-    # OMP uses Time::Piece (instead of DateTime).
-    require Time::Piece;
+  my $date = $args{'date'};
+  $date = $date->ymd( '' )
+    if defined $date
+    && ref $date
+    && $date->isa( 'DateTime' );
 
-    my $date = $args{'date'};
-    $date = $date->ymd( '' )
-      if defined $date
-      && ref $date
-      && $date->isa( 'DateTime' );
+  $date =
+    defined $date
+    ? Time::Piece->strptime( $date, '%Y%m%d' )
+    : Time::Piece::gmtime()
+    ;
 
-    $date =
-      defined $date
-      ? Time::Piece->strptime( $date, '%Y%m%d' )
-      : Time::Piece::gmtime()
-      ;
+  @file = OMP::FileUtils->files_on_disk( 'date' => $date,
+                                          'instrument' => $args{'name'}
+                                        );
 
-    my @file = OMP::FileUtils->files_on_disk( 'date' => $date,
-                                              'instrument' => $args{'name'}
-                                            );
-
-    # Flatten 2-D array reference.
-    @file = map { ! defined $_ ? () : ref $_ ? @{ $_ } : $_ } @file;
-
-    $self->files( [ @file ] ) if scalar @file;
-  }
-
-  my $files = $self->files;
+  # Flatten 2-D array reference.
+  @file = map { ! defined $_ ? () : ref $_ ? @{ $_ } : $_ } @file;
 
   return
-    unless defined $files
-        && ref $files
-        && scalar @{ $files };
+    unless scalar @file;
 
   my @obs;
-  for my $file (  @{ $files } ) {
+  for my $file (  @file ) {
 
     unless ( -r $file && -s _ ) {
 
