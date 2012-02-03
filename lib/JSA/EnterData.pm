@@ -560,20 +560,34 @@ returns nothing.
 =item B<prepare_and_insert>
 
 Inserts observation in database retrieved from disk (see also
-I<insert_observations> method) for a date (see also I<date> method).
+I<insert_observations> method) for a date (see also I<date> method) or
+given list of files (see I<files> method).
 
 Date can be given to the method, or can be set via I<new()> or
 I<date()> method.  Current date is used if no date has been explicitly
 set.  File paths are fetched from database unless otherwise specified.
 
-  # Insert either for the set or current date, get file paths from
-  # database.
-  $enter->prepare_and_insert;
+  # Insert either for the set or current date; ignores given files if
+  # any; disk is searched.
+  $enter->prepare_and_insert();
 
-  # Insert for Jun 25, 2008.
+  # Insert for Jun 25, 2008; ignores given files if any; disk is
+  # searched.
   $enter->prepare_and_insert( 'date' => '20080625' );
 
-  $enter->prepare_and_insert();
+  # Insert for only given files; ignores date; disk is not searched as
+  # there is no reason to.
+  $enter->prepare_and_insert( 'given-files' => 1 );
+
+  # Insert for a set or current date & gets file paths from database
+  # for the date; ignores given files.
+  $enter->prepare_and_insert( 'skip-db-path' => 0 );
+
+  # Insert for Jun 25 2008 & gets file paths from database for the
+  # date (disk is not searched); ignores given files.
+  $enter->prepare_and_insert( 'date' => '20080625',
+                              'skip-db-path' => 0
+                              );
 
 =cut
 
@@ -585,11 +599,18 @@ set.  File paths are fetched from database unless otherwise specified.
 
     my ( $self, %arg ) = @_;
 
-    my ( $date ) = @arg{qw[ date ]};
+    my $key_db_path  = 'skip-db-path';
+    my $key_use_list = 'given-files';
+
+    my ( $date, $db_path, $use_list ) =
+      @arg{( 'date', $key_db_path, $key_use_list )};
 
     # Format date first before getting it back.
     $self->date( $date ) if defined $date ;
     $date = $self->date;
+
+    $arg{ $key_db_path }  = 1 unless defined $db_path;
+    $arg{ $key_use_list } = 0 unless defined $use_list;
 
     if ( defined $old_date && $date->ymd ne $old_date->ymd ) {
 
@@ -630,7 +651,9 @@ set.  File paths are fetched from database unless otherwise specified.
       # <no. of subscans objects returned per observation>.
       $group = $self->_get_obs_group( 'name' => $name,
                                       'date' => $date,
-                                      'skip-db-path' => 1,
+                                      map
+                                      { ( $_ => $arg{ $_ } ) }
+                                      ( $key_db_path, $key_use_list )
                                     );
 
       next
@@ -1086,6 +1109,114 @@ given files (see I<files> method).
 =cut
 
 sub _get_obs_group {
+
+  my ( $self, %args ) = @_;
+
+  my $log = Log::Log4perl->get_logger( '' );
+
+  my $xfer = $self->_get_xfer_unconnected_dbh();
+
+  my %obs = ( 'nocomments' => 1,
+              'retainhdr'  => 1,
+              'ignorebad'  => 1,
+              'header_search' => 'files'
+            );
+
+  require OMP::FileUtils;
+  require OMP::Info::Obs;
+
+  my @file;
+
+  # OMP uses Time::Piece (instead of DateTime).
+  require Time::Piece;
+
+  $self->date( $args{'date'} || $self->date() );
+  my $date = $self->date();
+
+ unless ( $args{'given-files'} ) {
+
+    @file = OMP::FileUtils->files_on_disk( 'date' => Time::Piece->strptime( $date->ymd( '' ), '%Y%m%d' ),
+                                            'instrument' => $args{'name'}
+                                          );
+ }
+ else {
+
+   @file = $self->files();
+ }
+
+  # Flatten 2-D array reference.
+  @file = map { ! defined $_ ? () : ref $_ ? @{ $_ } : $_ } @file;
+
+  return
+    unless scalar @file;
+
+  my @obs;
+  for my $file (  @file ) {
+
+    unless ( -r $file && -s _ ) {
+
+      my $ignored = 'Unreadble or empty file';
+
+      $xfer->add_ignored( [ $file ], $ignored );
+
+      $log->warn( "$ignored: $file; skipped.\n" );
+      next;
+    }
+
+    $xfer->add_found( [ $file ], '' );
+
+    my $text = '';
+    my $err;
+    try {
+
+      push @obs, OMP::Info::Obs->readfile( $file , %obs );
+    }
+    catch OMP::Error::ObsRead with {
+
+      ( $err ) = @_;
+
+      #throw $err
+      #  unless $err->text() =~ m/^Error reading FITS header from file/;
+      $text = 'Error during file reading when making Obs:';
+    }
+    otherwise {
+
+      ( $err ) = @_;
+
+      $text = 'Unknown Error';
+    };
+
+    if ( $err ) {
+
+      $text .=  ': ' . $err->text();
+
+      $xfer->put_error( $file, $text );
+      $log->error( $text );
+    }
+  }
+
+  return unless scalar @obs;
+
+  my @headers;
+  for my $ob ( @obs ) {
+
+    push @headers,
+      { 'filename' => $ob->{'FILENAME'}->[0],
+        'header' => $ob->hdrhash,
+      }
+  }
+
+  my $merged = OMP::FileUtils->merge_dupes( @headers );
+
+  @obs = OMP::Info::Obs->hdrs_to_obs( 'retainhdr' => $obs{'retainhdr'},
+                                      'fits'      => $merged
+                                      );
+
+  return
+    OMP::Info::ObsGroup->new( 'obs' => [ @obs ] );
+}
+
+sub _get_obs_group_from_all_files {
 
   my ( $self, %args ) = @_;
 
