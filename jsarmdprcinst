@@ -86,6 +86,8 @@ die "No recipe instance ids supplied on command line or on STDIN\n"
 # Paranoia. Do not let anything happen if the input does not look like an integer
 my @bad;
 for my $id (@recipe_instances) {
+  $id =~ s/^\s+//;
+  $id =~ s/\s+$//;
   if ( $id !~ /^\d+$/) {
     push(@bad, $id);
   }
