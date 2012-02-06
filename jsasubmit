@@ -82,6 +82,7 @@ use OMP::Info::Obs;
 use OMP::Info::ObsGroup;
 use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
 use OMP::Constants qw/ :obs /;
+use OMP::ProjServer;
 
 use Data::Dumper;
 use Getopt::Long;
@@ -212,6 +213,12 @@ my %JUNK_OBSIDSS = map { $_ => undef } @JUNK_OBSIDSS;
 my $grp;
 my $atCADC;
 if( $mode eq 'project' ) {
+
+  # Verify the project ID
+  if (!OMP::ProjServer->verifyProject( $project )) {
+    die "Project '$project' does not seem to exist in the database.\n";
+  }
+
   $grp = new OMP::Info::ObsGroup( projectid => $project,
                                   nocomments => 0,
                                   retainhdr => 1 );
