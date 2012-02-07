@@ -436,9 +436,20 @@ sub query_dpstate {
   my $dbh = shift;
   my %filters = @_;
 
+  # We want to restrict our results to recipes that are relevant for us.
+  # This means all recipes using jsawrapdr
+  my @results = runQuery( $dbh,
+                          "SELECT recipe_id from dp_recipe where script_name=\"jsawrapdr\"");
+  my @recipes = map { $_->{recipe_id} } @results;
+  die "Unable to locate and DP recipes from dp_recipe database"
+    unless @recipes;
+
   my $sql = q{
 select R.identity_instance_id, R.tag from dp_recipe_instance R, dp_file_input F
     where R.identity_instance_id = F.identity_instance_id };
+
+  # We want a clause for dp_recipe
+  $sql .= " AND recipe_id IN (". join(",",@recipes). ") ";
 
   if (exists $filters{state} && defined $filters{state}) {
     if (length($filters{state}) == 1) {
