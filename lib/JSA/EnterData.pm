@@ -889,7 +889,7 @@ It is called by I<prepare_and_insert> method.
     if ( 'acsis' eq lc $inst->name() ) {
 
       unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
-          
+
         $self->_print_text( "problem while finding bounds; skipping\n" );
         return ( 'error', 'ACSIS: could not find bounds' );
       }
