@@ -410,7 +410,7 @@ value to indicate if to skip darks.
 
 Currently, the fields being moved are ...
 
-  ATSTART AZSTART
+  ATSTART
   BKLEGTST BPSTART
   FRLEGTST
   HSTSTART HUMSTART
@@ -418,7 +418,7 @@ Currently, the fields being moved are ...
   TAU225ST TAUDATST
   WNDDIRST WNDSPDST WVMDATST WVMTAUST
 
-  ATEND AZEND
+  ATEND
   BKLEGTEN BPEND
   FRLEGTEN
   HSTEND HUMEND
@@ -430,7 +430,7 @@ Currently, the fields being moved are ...
 
   my @start_rest =
     qw[
-        ATSTART AZSTART
+        ATSTART
         BKLEGTST BPSTART
         FRLEGTST
         HSTSTART HUMSTART
@@ -442,7 +442,7 @@ Currently, the fields being moved are ...
 
   my @end_rest =
     qw[
-        ATEND AZEND
+        ATEND
         BKLEGTEN BPEND
         FRLEGTEN
         HSTEND HUMEND
@@ -478,10 +478,14 @@ evalutes to true) to the storage hash reference. It takes an optional
 truth value to select the list of field names.  Default list is ...
 
   AMSTART
+  AZSTART
+  ELSTART
 
 If the optional value is true, then list consists of ...
 
   AMEND
+  AZEND
+  ELEND
 
 
   # For all the fields in default list, copy to C<%save>.
@@ -495,23 +499,27 @@ If the optional value is true, then list consists of ...
   my @extreme_start =
     qw[
         AMSTART
+        AZSTART
+        ELSTART
       ];
 
   my @extreme_end =
     qw[
         AMEND
+        AZEND
+        ELEND
       ];
 
   sub _find_first_field {
 
     my ( $self, $head, $subheaders, $save, $choose_end ) = @_;
-
     return
       unless $subheaders
       && scalar @{ $subheaders };
 
-    my @field = $choose_end ? @extreme_start : @extreme_end;
+    my @field = ! $choose_end ? @extreme_start : @extreme_end;
 
+    my $saved;
     SUBHEADER:
     for my $sub ( @{ $subheaders } ) {
 
@@ -520,12 +528,13 @@ If the optional value is true, then list consists of ...
 
         next FIELD
           unless exists $sub->{ $f }
-          && $sub->{ $f }
+          && defined $sub->{ $f }
           ;
 
         $save->{ $f } =  $sub->{ $f };
-        last FIELD;
+        $saved++;
       }
+      last if $saved;
     }
 
     return
