@@ -350,8 +350,8 @@ takes a truth value to indicate if to skip darks.
         next;
       }
 
-      %start = %h if $start{ $seq[0] } >  $k_start;
-      %end   = %h if $end{ $seq[1] }   <= $k_end;
+      %start = %h if defined $k_start && $start{ $seq[0] } >  $k_start;
+      %end   = %h if defined $k_end   && $end{   $seq[1] } <= $k_end;
     }
 
     return ( { %start }, { %end } );
