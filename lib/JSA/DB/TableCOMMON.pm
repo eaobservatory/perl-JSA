@@ -10,10 +10,10 @@ sub column_names {
 
   return
     qw[
-        align_dx align_dy alt_obs amend amstart atend atstart azend
+        align_dx align_dy alt_obs amend amstart atend atstart azstart azend
         backend bklegten bklegtst bpend bpstart
         date_end date_obs daz dut1
-        etal
+        etal elstart elend
         focus_dz frlegten frlegtst
         hstend hststart humend humstart
         instap instap_x instap_y instrume
@@ -54,6 +54,7 @@ sub range_start_columns {
         amstart atstart azstart
         bklegtst bpstart
         date_obs
+        elstart
         frlegtst
         hststart humstart
         msstart
@@ -70,6 +71,7 @@ sub range_end_columns {
         amend atend azend
         bklegten bpend
         date_end
+        elend
         frlegten
         hstend humend
         msend
