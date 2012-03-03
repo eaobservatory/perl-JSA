@@ -759,6 +759,8 @@ It is called by I<prepare_and_insert> method.
           sub {
             my ( $self, %arg ) = @_;
 
+            return if $self->skip_state_setting();
+
             my $xfer  = $self->_get_xfer_unconnected_dbh();
             $xfer->put_simulation( $arg{'file-id'} );
             return;
@@ -767,6 +769,8 @@ It is called by I<prepare_and_insert> method.
         'error' =>
           sub {
             my ( $self, %arg ) = @_;
+
+            return if $self->skip_state_setting();
 
             my $xfer  = $self->_get_xfer_unconnected_dbh();
             $xfer->put_error( $arg{'file-id'}, $arg{'comment'} );
@@ -1157,13 +1161,15 @@ sub _get_obs_group {
 
       my $ignored = 'Unreadble or empty file';
 
-      $xfer->add_ignored( [ $file ], $ignored );
+      $self->skip_state_setting()
+        or $xfer->add_ignored( [ $file ], $ignored );
 
       $log->warn( "$ignored: $file; skipped.\n" );
       next;
     }
 
-    $xfer->add_found( [ $file ], '' );
+    $self->skip_state_setting()
+      or $xfer->add_found( [ $file ], '' );
 
     my $text = '';
     my $err;
@@ -1190,7 +1196,9 @@ sub _get_obs_group {
 
       $text .=  ': ' . $err->text();
 
-      $xfer->put_error( $file, $text );
+      $self->skip_state_setting()
+        or $xfer->put_error( $file, $text );
+
       $log->error( $text );
     }
   }
@@ -1267,13 +1275,15 @@ sub _get_obs_group_from_all_files {
 
       my $ignored = 'Unreadble or empty file';
 
-      $xfer->add_ignored( [ $file ], $ignored );
+      $self->skip_state_setting()
+        or $xfer->add_ignored( [ $file ], $ignored );
 
       $log->warn( "$ignored: $file; skipped.\n" );
       next;
     }
 
-    $xfer->add_found( [ $file ], '' );
+    $self->skip_state_setting()
+      or $xfer->add_found( [ $file ], '' );
 
     my $text = '';
     my $err;
@@ -1299,7 +1309,9 @@ sub _get_obs_group_from_all_files {
 
       $text .=  ': ' . $err->text();
 
-      $xfer->put_error( $file, $text );
+      $self->skip_state_setting()
+        or $xfer->put_error( $file, $text );
+
       $log->error( $text );
     }
   }
@@ -2883,7 +2895,7 @@ sub _change_FILES {
     return;
   }
 
-  if ( $files && scalar @{ $files } ) {
+  if ( ! $self->skip_state_setting() && $files && scalar @{ $files } ) {
 
     my $xfer = $self->_get_xfer_unconnected_dbh();
     $xfer->put_ingested( $files );
