@@ -1162,7 +1162,7 @@ sub _get_obs_group {
       my $ignored = 'Unreadble or empty file';
 
       $self->skip_state_setting()
-        or $xfer->add_ignored( [ $file ], $ignored );
+        or $xfer->add_ignored( [ _basename( $file ) ], $ignored );
 
       $log->warn( "$ignored: $file; skipped.\n" );
       next;
@@ -1276,7 +1276,7 @@ sub _get_obs_group_from_all_files {
       my $ignored = 'Unreadble or empty file';
 
       $self->skip_state_setting()
-        or $xfer->add_ignored( [ $file ], $ignored );
+        or $xfer->add_ignored( [ _basename( $file ) ], $ignored );
 
       $log->warn( "$ignored: $file; skipped.\n" );
       next;
@@ -2711,8 +2711,7 @@ sub calc_radec {
       'REFLON' => undef,
     );
 
-  require File::Basename;
-  my $prog = File::Basename::fileparse( $command[0], '' );
+  my $prog = _basename( $command[0] );
 
   for my $k ( qw/ FTL FBR FTR FBL /) {
 
@@ -3393,7 +3392,6 @@ sub _compare_dates {
   return $new > $old;
 }
 
-
 sub _find_extreme_value {
 
   my ( %arg ) = @_;
@@ -3414,6 +3412,15 @@ sub _find_extreme_value {
   }
 
   throw JSA::Error "Neither 'start' nor 'end' type was specified";
+}
+
+sub _basename {
+
+  return unless scalar @_;
+
+  require File::Basename;
+  my ( $base ) = File::Basename::fileparse( $_[0] );
+  return $base;
 }
 
 
