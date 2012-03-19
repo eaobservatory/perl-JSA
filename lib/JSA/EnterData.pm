@@ -1197,7 +1197,7 @@ sub _get_obs_group {
       $text .=  ': ' . $err->text();
 
       $self->skip_state_setting()
-        or $xfer->put_error( $file, $text );
+        or $xfer->put_error( [ $file ], $text );
 
       $log->error( $text );
     }
@@ -1310,7 +1310,7 @@ sub _get_obs_group_from_all_files {
       $text .=  ': ' . $err->text();
 
       $self->skip_state_setting()
-        or $xfer->put_error( $file, $text );
+        or $xfer->put_error( [ $file ], $text );
 
       $log->error( $text );
     }
