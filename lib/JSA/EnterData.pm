@@ -1157,19 +1157,21 @@ sub _get_obs_group {
   my @obs;
   for my $file (  @file ) {
 
+    my $base = _basename( $file );
+
     unless ( -r $file && -s _ ) {
 
       my $ignored = 'Unreadble or empty file';
 
       $self->skip_state_setting()
-        or $xfer->add_ignored( [ _basename( $file ) ], $ignored );
+        or $xfer->add_ignored( [ $base ], $ignored );
 
       $log->warn( "$ignored: $file; skipped.\n" );
       next;
     }
 
     $self->skip_state_setting()
-      or $xfer->add_found( [ $file ], '' );
+      or $xfer->add_found( [ $base ], '' );
 
     my $text = '';
     my $err;
@@ -1197,7 +1199,7 @@ sub _get_obs_group {
       $text .=  ': ' . $err->text();
 
       $self->skip_state_setting()
-        or $xfer->put_error( [ $file ], $text );
+        or $xfer->put_error( [ $base ], $text );
 
       $log->error( $text );
     }
@@ -2897,7 +2899,7 @@ sub _change_FILES {
   if ( ! $self->skip_state_setting() && $files && scalar @{ $files } ) {
 
     my $xfer = $self->_get_xfer_unconnected_dbh();
-    $xfer->put_ingested( $files );
+    $xfer->put_ingested( [ map _basename( $_ ), @{ $files } ] );
   }
 
   return;
