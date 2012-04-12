@@ -855,6 +855,19 @@ It is called by I<prepare_and_insert> method.
 
     for my $obs ( @{ $run_obs } ) {
 
+      $self->_delete_header( 'headers' => $obs->hdrhash(),
+                              'name'   => 'INBEAM',
+                              'test'   =>
+                                sub {
+                                  my ( $val ) = @_;
+                                  return
+                                    defined $val
+                                    && ! ref $val
+                                    && $val =~ qr{\bSHUTTER\b}i
+                                    ;
+                                },
+                            );
+
       if ( $inst->can( 'fill_max_subscan' ) ) {
 
         $inst->fill_max_subscan( $obs->hdrhash, $obs );
@@ -3073,6 +3086,38 @@ sub _find_header {
 
   my $subh = 'SUBHEADERS';
   return $self->_find_header( %args, 'headers' => $head->{ $subh } )
+    if exists $head->{ $subh };
+
+  return;
+}
+
+sub _delete_header {
+
+  my ( $self, %args ) = @_;
+
+  my ( $head, $name, $test ) = @args{qw[ headers name test ]};
+
+  return
+    unless $head && ref $head
+        # Expecting a code reference here.
+        && $test && ref $test;
+
+  my $array = ref $head eq 'ARRAY';
+
+  for my $h ( $array ? @{ $head } : $head ) {
+
+    next unless exists $h->{ $name };
+
+    delete $h->{ $name }
+      if $test->( $h->{ $name } );
+  }
+
+  # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
+  # pseudo header with array reference of hash references as value.
+  return if $array;
+
+  my $subh = 'SUBHEADERS';
+  return $self->_delete_header( %args, 'headers' => $head->{ $subh } )
     if exists $head->{ $subh };
 
   return;
