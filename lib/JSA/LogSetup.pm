@@ -276,11 +276,17 @@ directory, to skip date based path.
     return $made{ $track }
       if $made{ $track };
 
-    my $path =
-      !$skip_day_dir
-      ? _make_per_day_logfile( $date, $dir, $basename )
-      : File::Spec->catfile( $dir, $basename )
-      ;
+    my $path;
+    if ( !$skip_day_dir ) {
+
+      $path = _make_per_day_logfile( $date, $dir, $basename )
+    }
+    else {
+
+      _make_group_writable( $dir );
+      $path = File::Spec->catfile( $dir, $basename )
+    }
+    _make_group_writable( $path );
 
     return $made{ $track } = $path;
   }
@@ -302,9 +308,45 @@ sub _make_per_day_logfile {
                                   $d
                                 );
 
-  File::Path::mkpath( $dir, 0, 0755 );
+  # uamsk is take into account for the final permissions.
+  File::Path::mkpath( $dir, 0, 0777 );
+  # Regardless of uamsk, make directory at least user & group writable.
+  _make_group_writable( $dir );
 
   return File::Spec->catfile( $dir, $basename );
+}
+
+sub _make_group_writable {
+
+  my ( @file ) = @_;
+
+  require Fcntl;
+  import Fcntl ':mode';
+
+  my $sys_log_re = _get_sys_log_re();
+
+  # For file (0664).
+  my $default = S_IRUSR() | S_IWUSR() | S_IRGRP() | S_IWGRP() | S_IROTH();
+
+  for my $file ( @file ) {
+
+    next unless $file =~ $sys_log_re;
+
+    my $mode = $default;
+    # Adjust for directory (0775).
+    -d $file and $mode |= S_IXUSR() | S_IXGRP() | S_IXOTH();
+
+    chmod $mode, $file;
+  }
+
+  return;
+}
+
+# Only care about system wide, multi user usable file paths.
+sub _get_sys_log_re {
+
+  my $re = qr[^/(?: jac_log | tmp\b )]x;
+  return $re;
 }
 
 
