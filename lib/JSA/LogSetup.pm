@@ -297,6 +297,9 @@ sub _make_per_day_logfile {
   my ( $date, $parent_dir, $basename ) = @_;
 
   require File::Path;
+  # Get make_path() changes.
+  import File::Path 2.08;
+
   # Per 1.08 version, mkpath croak()s, so no need to check for failure again.
   File::Path->import( 1.08 );
 
@@ -309,7 +312,13 @@ sub _make_per_day_logfile {
                                 );
 
   # uamsk is take into account for the final permissions.
-  File::Path::mkpath( $dir, 0, 0777 );
+  File::Path::make_path( $dir,
+                          { 'verbose' => 0,
+                            'mode'    => 0777,
+                            'owner'   => 'jcmtarch',
+                            'group'   => 'jcmt_data',
+                          }
+                        );
   # Regardless of uamsk, make directory at least user & group writable.
   _make_group_writable( $dir );
 
