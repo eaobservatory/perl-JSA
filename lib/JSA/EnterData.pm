@@ -894,7 +894,7 @@ It is called by I<prepare_and_insert> method.
 
     $self->_print_text( sprintf "\t[%s]... ", join ', ', @file );
 
-    if ( ! $self->process_simulation && $common_hdrs->{SIMULATE} ) {
+    if ( ! $self->process_simulation && $self->is_simulation( $common_hdrs ) ) {
 
       $self->_print_text( "simulation data; skipping\n" );
       return ( 'simulation', '' );
@@ -1284,8 +1284,60 @@ sub skip_obs {
 
   # Tests are the same which control database changes.
   return
-       ( exists $header->{'SIMULATE'} && !! $header->{'SIMULATE'} )
+       $self->is_simulation( $header )
     || ! $self->calc_radec( $inst, $obs, $header );
+}
+
+=item B<is_simulation>
+
+Returns a truth value to indicate if the given headers are of
+"simulation".
+
+An observation is marked as simulation if ...
+
+  SIMULATE header has value of "T", or
+  OBS_TYPE header has value of "RAMP".
+
+  for my $obs ( ... ) {
+
+    ...
+
+    next
+     if $enter->is_simulation( $obs->hdrhash() );
+
+    ...
+  }
+
+=cut
+
+sub is_simulation {
+
+  my ( $self, $header ) = @_;
+
+  my %sim =
+    ( 'SIMULATE' => 't',
+      'OBS_TYPE' => 'ramp'
+    );
+  @sim{ keys %sim } = map { lc $_ } values %sim;
+
+  # "SIMULATE" is more likely to be in the main header.
+  my @order = ( 'SIMULATE', 'OBS_TYPE' );
+
+  for my $name ( @order ) {
+
+    my $val =
+      $self->_find_header( 'headers' => $header,
+                            'name'   => $name,
+                            'test'   => 'defined',
+                            'value'  => 1,
+                          );
+
+    return 1
+      if defined $val
+      && $sim{ $name } eq lc $val;
+  }
+
+  return;
 }
 
 =item B<add_subsys_obs>
@@ -3073,7 +3125,7 @@ sub _find_header {
              ) {
 
     my $val = $test->( $h, $name ) ? $h->{ $name } : undef;
-    if ( $val  ) {
+    if ( defined $val  ) {
 
       return
         exists $args{'value'} ? $val : 1 ;
