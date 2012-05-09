@@ -270,7 +270,10 @@ directory, to skip date based path.
     require DateTime;
     my $date = DateTime->now( 'time_zone' => '-1000' );
 
-    $basename = join '.', $basename, $date->ymd( '' );
+    # Use effective or real user id.
+    my $user = getpwuid( $> ) || getpwuid( $< );
+
+    $basename = join '.', $basename, $date->ymd( '' ), ( $user ? $user : () );
 
     $track = join '.', $track, $date->ymd( '' );
     return $made{ $track }
