@@ -303,9 +303,6 @@ sub _make_per_day_logfile {
   # Get make_path() changes.
   import File::Path 2.08;
 
-  # Per 1.08 version, mkpath croak()s, so no need to check for failure again.
-  File::Path->import( 1.08 );
-
   my ( $y, $m, $d ) = map { sprintf '%02d', $date->$_() } ( 'year', 'month', 'day' );
 
   # Directory tree is something like /parent/201201/12 for date of Jan 12, 2012.
