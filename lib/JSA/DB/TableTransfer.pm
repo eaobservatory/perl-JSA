@@ -320,33 +320,42 @@ Set state to C<transferred> of given array reference of files (base names).
 
       *$set =
         sub {
-           my ( $self, $files, $text ) = @_;
+          my ( $self, $files, $text ) = @_;
 
-           return $self->_change_add_state( 'mode'    => 'change',
+          my %opt;
+          2 < scalar @_ and $opt{'comment'} = $text;
+
+          return $self->_change_add_state(  'mode'    => 'change',
                                             'state'   => $key,
                                             'file'    => $files,
-                                            'comment' => $text,
+                                            %opt,
                                           );
         };
 
       *$add =
         sub {
-           my ( $self, $files, $text ) = @_;
+          my ( $self, $files, $text ) = @_;
 
-           return $self->_change_add_state( 'mode'    => 'add',
+          my %opt;
+          2 < scalar @_ and $opt{'comment'} = $text;
+
+          return $self->_change_add_state( 'mode'    => 'add',
                                             'state'   => $key,
                                             'file'    => $files,
-                                            'comment' => $text,
+                                            %opt,
                                           );
         };
 
       *$put =
         sub {
-           my ( $self, $files, $text ) = @_;
+          my ( $self, $files, $text ) = @_;
 
-           return $self->_put_state(  'state'   => $key,
+          my %opt;
+          2 < scalar @_ and $opt{'comment'} = $text;
+
+          return $self->_put_state(  'state'   => $key,
                                       'file'    => $files,
-                                      'comment' => $text,
+                                      %opt,
                                     );
         };
     }
