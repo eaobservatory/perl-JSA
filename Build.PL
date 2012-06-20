@@ -33,14 +33,14 @@ my $build = Module::Build->new
                    'Anubhav Agarwal <a.agarwal@jach.hawaii.edu>',
                    'Brad Cavanagh <b.cavanagh@jach.hawaii.edu>',
                   ],
-   dist_version => '0.02',
+   dist_version => '0.03',
    script_files => [ qw/
                          dpRetrieve jsawrapdr dpCapture convert_dr_files cadc_drcopy.pl jsasubmit manual_submit
                          jsaerrors
                        / ],
    meta_merge => {
                resources =>  {
-                              repository => "/jac_sw/gitroot/perl-JSA.git",
+                              repository => "git://starlink.jach.hawaii.edu/perl-JSA.git",
                              },
                 },
    requires => {
@@ -57,18 +57,24 @@ my $build = Module::Build->new
                 'Statistics::Descriptive' => 0,
                 'Time::Piece' => 0,
                 'URI' => 0,
-                'DBD::Sybase' => 0,
                 'Pod::Usage' => 0,
                 'Astro::Coords' => 0,
                 'Image::ExifTool' => 0,
                 'JAC::Setup' => 0.01,
                 'Log::Log4perl' => 0,
+                'File::HomeDir' => 0,
                },
+   recommends => {
+                  'DBD::Sybase' => 0,
+                 },
    build_requires => {
                       'Test::More' => 0,
                       'Test::Command' => 0,
                       'JAC::Setup' => 0.02,
                      },
+   configure_requires => {
+                          "Module::Build" => 0.30,
+                         },
   );
 
 $build->create_build_script;
