@@ -10,28 +10,30 @@ sub column_names {
 
   return
     qw[
-        align_dx align_dy alt_obs amend amstart atend atstart azstart azend
+        agentid align_dx align_dy alt_obs amend amstart atend atstart azend
+        azstart
         backend bklegten bklegtst bpend bpstart
-        date_end date_obs daz dut1
-        etal elstart elend
-        focus_dz frlegten frlegtst
+        chop_crd chop_frq chop_pa chop_thr
+        date_end date_obs daz del drgroup dut1
+        elend elstart etal
+        focaxis focstep focus_dz frlegten frlegtst
         hstend hststart humend humstart
-        instap instap_x instap_y instrume
-        jos_min jos_mult
-        last_modified lat_obs locl_crd long_obs
+        inbeam instap instap_x instap_y instrume int_time
+        jigl_cnt jigl_crd jigl_nam jigl_pa jig_scal jos_min jos_mult
+        last_modified lat_obs locl_crd long_obs lstend lststart
         map_hght map_pa map_wdth map_x map_y msbid msbtid
-        num_cyc
-        object obs_type
-        obsdec obsdecbl obsdecbr obsdectl obsdectr obsgeo_x obsgeo_y obsgeo_z
-        obsid obsnum obsra obsrabl obsrabr obsratl obsratr ocscfg origin
-        project
-        recipe release_date
-        sam_mode scan_crd scan_dy scan_pa scan_pat scan_vel standard startidx
-        status steptime sw_mode
+        nfocstep num_cyc
+        object obsdec obsdecbl obsdecbr obsdectl obsdectr obsgeo_x obsgeo_y
+        obsgeo_z obsid obsnum obsra obsrabl obsrabr obsratl obsratr obs_type
+        ocscfg origin
+        pol_conn pol_mode project
+        recipe release_date rmtagent rotafreq
+        sam_mode scan_crd scan_dy scan_pa scan_pat scan_vel seedaten seedatst
+        seeingen seeingst standard startidx status steptime survey sw_mode
         tau225en tau225st taudaten taudatst tausrc telescop
         uaz uel utdate
         wnddiren wnddirst wndspden wndspdst wvmdaten wvmdatst wvmtauen wvmtaust
-      ];
+    ];
 }
 
 sub date_columns {
