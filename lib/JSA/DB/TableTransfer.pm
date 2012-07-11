@@ -553,6 +553,7 @@ sub get_files_not_end_state {
     @_state{qw[ deleted
                 transferred
                 simulation
+                ignored
               ]
             };
 
