@@ -61,8 +61,10 @@ in future.
 
 The state types are ...
 
+  copied_pre_cadc (copied to intermediate directory before moving to CADC)
   copied
-  delete
+  delete  (mark as deletion candidate)
+  deleted
   error
   found
   ignored
@@ -140,11 +142,33 @@ BEGIN {
       #  File has been put in CADC transfer directory.
       'copied' => 'c',
 
+      #  File has been put in intermediate directory.
+      'copied_pre_cadc' => 'p',
+
       #  File present in CADC directory.
       'transferred' => 't',
 
       'final' => 'z',
     );
+
+=item B<get_copied_pre_cadc_files>
+
+Return a array reference of files with C<copied_pre_cadc> state, given a partial
+file name.
+
+  $files = $xfer->get_copied_pre_cadc_files( 20100612 );
+
+=item B<add_copied_pre_cadc>
+
+Add state of C<copied_pre_cadc> of given array reference of files (base names).
+
+  $xfer->add_copied_pre_cadc( [ @files ] );
+
+=item B<set_copied_pre_cadc>
+
+Set state to C<copied_pre_cadc> of given array reference of files (base names).
+
+  $xfer->set_copied_pre_cadc( [ @files ] );
 
 =item B<get_copied_files>
 
