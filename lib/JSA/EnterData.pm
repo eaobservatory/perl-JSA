@@ -886,12 +886,12 @@ It is called by I<prepare_and_insert> method.
 
       if ( $inst->can( 'fill_max_subscan' ) ) {
 
-        $inst->fill_max_subscan( $obs->hdrhash, $obs );
+        $inst->fill_max_subscan( $headers, $obs );
       }
 
       if ( $inst->can( 'transform_header' ) ) {
 
-        my ( $hash , $array ) = $inst->transform_header( $obs->hdrhash );
+        my ( $hash , $array ) = $inst->transform_header( $headers );
         $obs->hdrhash( $hash );
       }
     }
