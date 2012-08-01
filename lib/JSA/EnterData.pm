@@ -853,20 +853,36 @@ It is called by I<prepare_and_insert> method.
 
     @touched{ @file } = ();
 
+    my @adjust = ( 'INBEAM' );
+
+    my ( $shutter_re, $empty_re ) = ( qr{\b SHUTTER \b}ix, qr{^\s*$} );
     for my $obs ( @{ $run_obs } ) {
 
-      $self->_delete_header( 'headers' => $obs->hdrhash(),
-                              'name'   => 'INBEAM',
-                              'test'   =>
-                                sub {
-                                  my ( $val ) = @_;
-                                  return
-                                    defined $val
-                                    && ! ref $val
-                                    && $val =~ qr{\bSHUTTER\b}i
-                                    ;
-                                },
-                            );
+      my $headers = $obs->hdrhash();
+
+      for my $name ( @adjust ) {
+
+        $self->_delete_header( 'headers' => $headers,
+                                'name'   => $name,
+                                'test'   =>
+                                  sub {
+                                    my ( $val ) = @_;
+                                    return
+                                      defined $val
+                                      && ! ref $val
+                                      && ( $val =~ m/$shutter_re/
+                                            ||
+                                          $val =~ m/$empty_re/
+                                        )
+                                      ;
+                                  },
+                              )
+        # No sense in case change if header has been already deleted.
+        or
+        $self->_make_lowercase_header(  'headers' => $headers,
+                                        'name'    => $name,
+                                      );
+      }
 
       if ( $inst->can( 'fill_max_subscan' ) ) {
 
@@ -3160,19 +3176,70 @@ sub _delete_header {
 
     next unless exists $h->{ $name };
 
-    delete $h->{ $name }
-      if $test->( $h->{ $name } );
+    if ( $test->( $h->{ $name } ) ) {
+
+      delete $h->{ $name };
+      $args{'_deleted'}++;
+    }
   }
 
   # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
   # pseudo header with array reference of hash references as value.
-  return if $array;
+  return $args{'_deleted'} if $array;
 
   my $subh = 'SUBHEADERS';
   return $self->_delete_header( %args, 'headers' => $head->{ $subh } )
     if exists $head->{ $subh };
 
-  return;
+  return $args{'_deleted'};
+}
+
+sub _make_lowercase_header {
+
+  my ( $self, %args ) = @_;
+
+  my ( $head, $name ) = @args{qw[ headers name ]};
+
+  return
+    unless $head && ref $head;
+
+  my $is_array = ref $head eq 'ARRAY';
+  for my $h ( $is_array ? @{ $head } : $head ) {
+
+    next unless exists $h->{ $name };
+
+    my $type = ref $h->{ $name };
+    unless ( $type ) {
+
+      $h->{ $name } = uc $h->{ $name };
+      $args{'_case-changed'}++;
+      next;
+    }
+    if ( $type eq 'ARRAY' ) {
+
+      $h->{ $name } = [ map uc $_, @{ $h->{ $name } } ];
+      $args{'_case-changed'}++;
+      next;
+    }
+    if ( $type eq 'HASH' ) {
+
+      for my $k ( keys %{ $h->{ $name } } ) {
+
+        $h->{ $name }{ $k } = lc $h->{ $name }{ $k };
+        $args{'_case-changed'}++;
+      }
+    }
+  }
+
+  # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
+  # pseudo header with array reference of hash references as value.
+  return $args{'_case-changed'} if $is_array;
+
+  my $subh = 'SUBHEADERS';
+  return $self->_make_lowercase_header( %args, 'headers' => $head->{ $subh } )
+    if exists $head->{ $subh };
+
+  return $args{'_case-changed'};
 }
 
 =item B<_is_insert_dup_error>
