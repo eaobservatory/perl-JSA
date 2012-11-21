@@ -16,6 +16,9 @@ use Test::More;
 
 use File::Find;
 
+# Set path for external modules.
+use JAC::Setup 'omp';
+
 our @modules;
 
 # If SKIP_COMPILE_TEST environment variable is set we
