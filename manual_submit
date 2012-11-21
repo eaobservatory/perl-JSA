@@ -17,7 +17,7 @@ files are already at CADC.
 
 =cut
 
-use JAC::Setup qw/ sybase /;
+use JAC::Setup qw/ omp sybase /;
 
 use strict;
 use warnings;
