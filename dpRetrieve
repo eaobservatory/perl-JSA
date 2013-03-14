@@ -165,7 +165,7 @@ if ($lines[0] =~ /^\s*http/) {
   }
 
   # Now convert the file ids to a url at CADC
-  my @urls = map { "http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/getData/?archive=JCMT&file_id=".$_ } @file_ids;
+  my @urls = map { "http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/data/auth/JCMT/".$_ } @file_ids;
 
   # and retrieve the data
   geturls( @urls );
