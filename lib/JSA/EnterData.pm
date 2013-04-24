@@ -2018,6 +2018,8 @@ sub prepare_update_hash {
 
   my $obs_date_re = qr{\bDATE.(?:OBS|END)\b}i;
 
+  my $tau_val = qr{\b(?:WVMTAU|TAU225)(?:ST|EN)\b}i;
+
   my $only_obstime =
     $table eq 'COMMON'
     && $self->update_only_obstime();
@@ -2082,7 +2084,13 @@ sub prepare_update_hash {
 
     if (looks_like_number($new)) {
 
-      if ( $in_range ) {
+      # Overide range check for tau values as there is no relation between start
+      # & end values; these are weather dependent.
+      if ( $key =~ $tau_val && $new != $old ) {
+
+        $differ{$key} = $new;
+      }
+      elsif ( $in_range ) {
 
         $new = _find_extreme_value( %test, 'new>old' => $new > $old );
 
