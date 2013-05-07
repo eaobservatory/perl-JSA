@@ -87,7 +87,7 @@ sub get_bound_check_command {
 
   # Turn off autogrid; only rotate raster maps. Just need bounds.
   return
-    ( '/stardev/bin/smurf/makemap',
+    ( '/star/bin/smurf/makemap',
       "in=^$fh",
       'system=ICRS',
       'out=!',
