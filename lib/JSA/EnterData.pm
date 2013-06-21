@@ -2018,6 +2018,10 @@ sub prepare_update_hash {
 
   my $obs_date_re = qr{\bDATE.(?:OBS|END)\b}i;
 
+  # Allowed to be set undef if key from $field_values is missing, say as a
+  # result of external header munging.
+  my $miss_ok = qr{\b(?:INBEAM)}i;
+
   my $tau_val = qr{\b(?:WVMTAU|TAU225)(?:ST|EN)\b}i;
 
   my $only_obstime =
@@ -2029,7 +2033,7 @@ sub prepare_update_hash {
     next
       # since that will update automatically
       if $key eq 'last_modified'
-      || ! exists $field_values->{$key};
+      || ( $key !~ $miss_ok && ! exists $field_values->{$key} );
 
     my $new = $field_values->{$key};
     my $old = $indb->{$key};
