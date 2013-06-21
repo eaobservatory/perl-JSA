@@ -2182,7 +2182,8 @@ sub update_hash {
           $_,
           ( !$self->debug && $self->load_header_db
               ? q[ ? ]
-              : $differ{$_} # debug version with unquoted values
+              : # debug version with unquoted values
+                ( defined $differ{$_} ? $differ{$_} : 'NULL' )
           );
       }
       @sorted;
