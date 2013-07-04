@@ -3419,13 +3419,12 @@ sub _debug_text {
 
   my ( $self, @text ) = @_;
 
-  defined $text && $self->debug()
+  $self->debug() && scalar @text
     or return;
 
-  print join "\n", @text;
+  print join "\n", map { define $_ ?  $_ : '<undef>'  } @text;
   $text[-1] =~ m{\n$}s and print "\n";
   return;
-
 }
 
 # JSA::DB::TableTransfer object, to be created as needed.
