@@ -1965,6 +1965,8 @@ sub prepare_update_hash {
 
   my $unique_val = $field_values->{$unique_key};
 
+  $self->_debug_text( qq[$unique_key = $unique_val] );
+
   # run a query with this unique value (but on FILES table more than
   # one entry can be returned - we trap that because FILES for the minute
   # should not need updating
@@ -2030,6 +2032,8 @@ sub prepare_update_hash {
 
   for my $key ( sort keys %{$indb} ) {
 
+    $self->_debug_text( qq[testing field: $key] );
+
     next
       # since that will update automatically
       if $key eq 'last_modified'
@@ -2078,7 +2082,7 @@ sub prepare_update_hash {
         $new = _find_extreme_value( %test,
                                     'new>old' => _compare_dates( $new, $old )
                                   );
-        $self->_debug_text( qq[(in range) new = ] . $new );
+        $self->_debug_text( qq[  possible new value for $key = ] . $new );
       }
 
       if ( $new ne $old ) {
