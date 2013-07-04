@@ -2032,7 +2032,8 @@ sub prepare_update_hash {
 
   for my $key ( sort keys %{$indb} ) {
 
-    $self->_debug_text( qq[testing field: $key] );
+    $self->verbosity() > 1
+      and $self->_debug_text( qq[testing field: $key] );
 
     next
       # since that will update automatically
@@ -2043,6 +2044,8 @@ sub prepare_update_hash {
     my $old = $indb->{$key};
 
     next if ! ( defined $old || defined $new );
+
+    $self->verbosity() and $self->_debug_text( qq[continuing with $key] );
 
     my %test =
       ( 'start' => exists $start{ $key },
