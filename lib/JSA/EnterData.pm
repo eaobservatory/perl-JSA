@@ -3422,8 +3422,8 @@ sub _debug_text {
   $self->debug() && scalar @text
     or return;
 
-  print join "\n", map { define $_ ?  $_ : '<undef>'  } @text;
-  $text[-1] =~ m{\n$}s and print "\n";
+  print join "\n", map { defined $_ ?  $_ : '<undef>'  } @text;
+  $text[-1] =~ m{\n$}s or print "\n";
   return;
 }
 
