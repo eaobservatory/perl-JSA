@@ -2057,6 +2057,7 @@ sub prepare_update_hash {
     if ( defined $new && ! defined $old ) {
 
       $differ{$key} = $new;
+      $self->_debug_text( qq[$key = ] . $new );
       next;
     }
 
@@ -2065,6 +2066,7 @@ sub prepare_update_hash {
     if ( ! defined $new && defined $old) {
 
       $differ{$key} = undef;
+      $self->_debug_text( qq[$key = ] . '<undef>' );
       next;
     }
 
@@ -2076,11 +2078,13 @@ sub prepare_update_hash {
         $new = _find_extreme_value( %test,
                                     'new>old' => _compare_dates( $new, $old )
                                   );
+        $self->_debug_text( qq[(in range) new = ] . $new );
       }
 
       if ( $new ne $old ) {
 
         $differ{ $key } = $new;
+        $self->_debug_text( qq[$key = ] . $new );
       }
 
       next;
@@ -2093,12 +2097,17 @@ sub prepare_update_hash {
       if ( $key =~ $tau_val && $new != $old ) {
 
         $differ{$key} = $new;
+        $self->_debug_text( qq[$key = ] . $new );
       }
       elsif ( $in_range ) {
 
         $new = _find_extreme_value( %test, 'new>old' => $new > $old );
 
-        $differ{ $key } = $new if $new != $old;
+        if ( $new != $old ) {
+
+          $differ{ $key } = $new if $new != $old;
+          $self->_debug_text( qq[$key = ] . $new );
+        }
       }
       else {
 
@@ -2109,11 +2118,13 @@ sub prepare_update_hash {
           if ($diff > 0.000001) {
 
             $differ{$key} = $new;
+            $self->_debug_text( qq[$key = ] . $new );
           }
         }
         elsif ( $new != $old ) {
 
           $differ{$key} = $new;
+          $self->_debug_text( qq[$key = ] . $new );
         }
       }
 
@@ -2124,8 +2135,11 @@ sub prepare_update_hash {
     if ( $new ne $old ) {
 
       $differ{ $key } = $new;
+      $self->_debug_text( qq[$key = ] . $new );
     }
   }
+
+  $self->_debug_text( qq[differences to update: ] . keys %differ );
 
   return
     { 'differ' => { %differ },
@@ -3399,6 +3413,19 @@ sub _print_text {
   $log->info( $text );
 
   return;
+}
+
+sub _debug_text {
+
+  my ( $self, @text ) = @_;
+
+  defined $text && $self->debug()
+    or return;
+
+  print join "\n", @text;
+  $text[-1] =~ m{\n$}s and print "\n";
+  return;
+
 }
 
 # JSA::DB::TableTransfer object, to be created as needed.
