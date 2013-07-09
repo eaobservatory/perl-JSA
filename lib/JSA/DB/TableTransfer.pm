@@ -714,6 +714,7 @@ sub _get_files {
   my $log = Log::Log4perl->get_logger( '' );
 
   my ( $state, $date, $instr ) = _extract_filter( %filter );
+  my $jac = $filter{'keep_jac'};
 
   my @select = qw[ file_id comment ];
   push @select, 'location'
@@ -726,6 +727,8 @@ sub _get_files {
 
   my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
   $where{' file_id like ?'} = $fragment if defined $fragment;
+
+  $where{' keep_jac = ? '} = 1 if defined $jac;
 
   $log->info( "Getting files from JAC database with state '${state}'" );
 
