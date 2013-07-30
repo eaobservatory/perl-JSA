@@ -728,7 +728,7 @@ sub _get_files {
   my $fragment = sprintf '%s%%', join '%', grep { $_ } $instr, $date;
   $where{' file_id like ?'} = $fragment if defined $fragment;
 
-  $where{' keep_jac = ? '} = 1 if defined $jac;
+  $where{' keep_jac = ? '} = $jac if defined $jac;
 
   $log->info( "Getting files from JAC database with state '${state}'" );
 
