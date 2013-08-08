@@ -770,6 +770,8 @@ sub _translate_instrument {
   return 's' if $instr =~ m/^scuba-?2\b/i;
   return 'a' if $instr =~ m/^acsis\b/i;
 
+  return lc qq[s${1}] if $instr =~ m/^s?([48][a-d])\b/i;
+
   throw JSA::Error::BadArgs qq[Unknown instrument, '$instr', given.];
 }
 
