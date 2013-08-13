@@ -669,7 +669,7 @@ sub at_cadc {
 
     @prefix = @inst unless scalar @prefix;
 
-    return _check_cadc( map { "${_}${ut}" } @prefix );
+    return _check_cadc( undef, map { "${_}${ut}" } @prefix );
   }
 
   # Assume to be file names.
@@ -680,22 +680,23 @@ sub at_cadc {
       if any { $f =~ /^$_\d{8}/ } @inst;
   }
 
-  return _check_cadc( @file );
+  return _check_cadc( undef, @file );
 }
 
 sub _check_cadc {
 
-  my ( @prefix ) = @_;
+  my ( $wait, @prefix ) = @_;
 
   return unless scalar @prefix;
+
+  # Time to wait for a random, reasonable amount.
+  $wait ||= 20;
 
   my @curl = (qw[ curl --silent --location ]);
   my $cadc_url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=';
 
   # To avoid hammering the server when run multiple times in a row.
   my $sleepy_time = scalar( @prefix ) -1;
-  # Time to wait for a random, reasonable amount.
-  my $wait        = 20;
 
   # Go through each instrument prefix and push the list of files onto
   # our array.
