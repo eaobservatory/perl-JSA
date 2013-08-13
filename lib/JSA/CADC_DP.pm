@@ -119,7 +119,7 @@ Converts a recipe_instance_id to a URL.
 =cut
 
 {
-  my $BASEURL = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
+  my $BASEURL = "http://beta.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
   sub dprecinst_url {
     my $recipe_id = shift;
     return unless defined $recipe_id;

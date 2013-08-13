@@ -28,7 +28,7 @@ use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
                      create_recipe_instance /;
 use JSA::Files qw/ file_to_uri /;
 
-my $BASEURL = "http://test.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
+my $BASEURL = "http://beta.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/dp/recipe/";
 my $MAILHOST = 'mailhost.jach.hawaii.edu';
 my $MAILTO = 'jcmtarch@jach.hawaii.edu';
 my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
