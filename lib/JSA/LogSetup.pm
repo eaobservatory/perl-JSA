@@ -51,10 +51,7 @@ Nothing is exported by default.
 
 use strict; use warnings;
 
-use Carp qw[ croak carp ];
 use Exporter qw[ import ];
-use File::Spec;
-
 our @EXPORT_OK =
   qw[ get_config
       logfile
@@ -64,6 +61,12 @@ our @EXPORT_OK =
       set_default_format
       set_message_format
     ];
+
+use Carp ();
+use DateTime;
+use File::Spec;
+use File::Temp;
+use Net::Domain ();
 
 my $_log_dir = '/jac_logs/jsa';
 $_log_dir = '/tmp' unless -d $_log_dir;
@@ -95,23 +98,23 @@ direct consumption by L<Log::Log4perl>.
 
 Some of the configuration defaults are ...
 
-  level     - debug
+  level      - debug
 
-  directory - /jac_logs/jsa
+  directory  - /jac_logs/jsa (or /tmp if missing)
 
-  file      - /jac_logs/jsa/default.<yyyymmdd>.<process id>
-              (appeneded, not overwritten)
+  file       - /jac_logs/jsa/default.log.<host>.<user>.<yyyy:mm:dd>
+               (appended, not overwritten)
 
-  format    - %H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n, or ...
-                %H : host
-                %p : log level
-                %P : process-id
-                %d : date-time
-                %F : file name
-                %L : line number
-                %M : sub name (if available)
-                %n : newline
-                %m : message
+  log format - %H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n, or ...
+                 %H : host
+                 %p : log level
+                 %P : process-id
+                 %d : date-time
+                 %F : file name
+                 %L : line number
+                 %M : sub name (if available)
+                 %n : newline
+                 %m : message
 
 =cut
 
@@ -217,22 +220,62 @@ sub logfile {
 
 =item B<make_logfile>
 
-Given base name for log file, and optional parent directory (default
-is F</jac_logs/jsa>), returns a file path based on current date UTC
--10 time zone.
+When given basename contains the directory separator, C</>, it is
+returned as is.
+
+Given optional base name for log file, and optional parameters hash,
+returns a file path based on current date (in UTC -10 time zone).
+
+When possible, I<the log directory and log file are made group
+writable>.
 
   # Sets log file to '/jac_logs/jsa/201201/20/enterdata' for date of
   # Jan 12 2012.
   logfile( make_logfile( 'enterdata' ) );
 
   # Keep log file elsewhere; '/tmp/201201/20/enterdata' in this case.
-  logfile( make_logfile( 'enterdata', '/tmp' ) );
+  logfile( make_logfile( 'enterdata',
+                          'dir' => '/tmp'
+                        )
+          );
 
-Specify a true value for the third parameter, along with parent
-directory, to skip date based path.
+Optional hash key-values are ...
 
-  # '/tmp/enterdata.20120120' would be the result.
-  logfile( make_logfile( 'enterdata', '/tmp', 1 ) );
+=over 2
+
+=item I<add-dir> => truth value
+
+Include parent directory name in the basename of the log file. C</> and
+C<space> are replaced by C<=>.
+
+=item I<add-pid> => truth value
+
+Include process ID in the basename.
+
+=item I<add-random> => truth value
+
+Include a random string in the basename.
+
+=item I<add-time> => truth value
+
+Include current time in the basename, along with default inclusion of
+current date.
+
+=item I<dir> => (root) log directory
+
+The directory in which to create a log file. (Default root log
+directory is F</jac_logs/jsa>, or F</tmp> if missing.)
+
+=item I<force-new> => truth value
+
+Generate new name even if a name had already been generated based on
+all other parameters which were the same as this time.
+
+=item I<skip-date-dir> => truth value
+
+Do not create sub directories in format C<yyyymm/dd> by default.
+
+=back
 
 =cut
 
@@ -241,58 +284,92 @@ directory, to skip date based path.
 
   sub make_logfile {
 
-    my ( $basename, $dir, $skip_day_dir ) = @_;
+    my ( $base, %opt ) = @_;
 
-    $dir = $dir || $_log_dir;
-
-    $skip_day_dir = $skip_day_dir || 0;
-
-    unless ( $basename ) {
-
-      $basename = $_log_basename;
-
-      carp
-        sprintf qq[No base name given to make log file path; using '%s' instead.\n],
-          $basename;
-    }
     # A directory has been already specified; nothing sane to do.
-    elsif ( $basename =~ m[/] ) {
+    $base && $base =~ m[/]
+      and return $base;
 
-      return $basename;
+    unless ( $base ) {
+
+      $base = $_log_basename;
+
+      Carp::carp( sprintf qq[No base name given to make log file path; using '%s' instead.\n],
+                    $base
+                );
     }
 
-    # Skip date & directory making functions if possible.
-    my $track = join '.', $basename, $dir, $skip_day_dir;
-    return $made{ $track }
-      if $skip_day_dir
-      && $made{ $track };
+    my $dir = $opt{'dir'} || $_log_dir;
 
-    require DateTime;
+    my $track = join '#', $dir, $base,
+                  map
+                  { join '=', $_ , defined $opt{ $_ } ? $opt{ $_ } : 'undef' }
+                  sort keys %opt;
+
+    return $made{ $track }
+      if $made{ $track } && ! $opt{'force-new'};
+
     my $date = DateTime->now( 'time_zone' => '-1000' );
 
-    # Use effective or real user id.
-    my $user = getpwuid( $> ) || getpwuid( $< );
-
-    $basename = join '.', $basename, $date->ymd( '' ), ( $user ? $user : () );
-
-    $track = join '.', $track, $date->ymd( '' );
-    return $made{ $track }
-      if $made{ $track };
+    $base = join '.', $base, _make_base_parts( $date, $dir, %opt );
 
     my $path;
-    if ( !$skip_day_dir ) {
+    if ( ! $opt{'skip-date-dir'} ) {
 
-      $path = _make_per_day_logfile( $date, $dir, $basename )
+      $path = _make_per_day_logfile( $date, $dir, $base )
     }
     else {
 
       _make_group_writable( $dir );
-      $path = File::Spec->catfile( $dir, $basename )
+      $path = File::Spec->catfile( $dir, $base )
     }
     _make_group_writable( $path );
 
     return $made{ $track } = $path;
   }
+}
+
+sub _make_base_parts {
+
+  my ( $dt, $dir , %opt ) = @_;
+
+  # Use effective or real user id.
+  my $user = $getpwuid( $> ) || getpwuid( $< ) || 'unknown-user';
+
+  my $time =
+    join '-',
+      map { $dt->$_( ':' ) } ( 'ymd', $opt{'add-time'} ? 'hms' : () )
+      ;
+
+  return
+    ( Net::Domain::hostname(),
+      $user,
+      $time,
+      ( $opt{'add-dir'} && $dir ? _path_as_base( $dir )  : () ),
+      ( $opt{'add-pid'}         ? $$               : () ),
+      ( $opt{'add-random'}      ? _random_string() : () )
+    );
+}
+
+sub _random_string {
+
+  my ( $size ) = @_;
+
+  $size ||= 8;
+
+  my @source = ( 'a' .. 'z' , 'A' .. 'Z' , 0 .. 9 );
+  my $out = '';
+  $out .= $source[ rand @source ] while length $out < $size;
+
+  return $out;
+}
+
+sub _path_as_base {
+
+  my ( $in ) = @_;
+
+  $in =~ s{[/ ]+}/=/g;
+  return $in;
 }
 
 sub _make_per_day_logfile {
@@ -311,7 +388,7 @@ sub _make_per_day_logfile {
                                   $d
                                 );
 
-  # uamsk is take into account for the final permissions.
+  # umask is take into account for the final permissions.
   File::Path::make_path( $dir,
                           { 'verbose' => 0,
                             'mode'    => 0777,
@@ -319,7 +396,7 @@ sub _make_per_day_logfile {
                             'group'   => 'jcmt_data',
                           }
                         );
-  # Regardless of uamsk, make directory at least user & group writable.
+  # Regardless of umask, make directory at least user & group writable.
   _make_group_writable( $dir );
 
   return File::Spec->catfile( $dir, $basename );
