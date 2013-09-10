@@ -456,13 +456,13 @@ sub make_cadc_ok_path {
   my ( $class, $ok, $parent ) = @_;
 
   ( my $cadc_ok = $ok ) =~ s/\.ok/\.cadc_ok/
-    or throw JSA::Error::FatalError "Failed to genetate '*.cadc_ok' from '$ok'\n";
+    or throw JSA::Error::FatalError "Failed to generate '*.cadc_ok' from '$ok'\n";
 
   return File::Spec->catfile( $parent, $cadc_ok );
 }
 
 # Returns a observation directory name given a *.ok base name; the parent
-# directory; and the intrument name (to extract observation number from a
+# directory; and the instrument name (to extract observation number from a
 # F<*.ok> file).
 sub make_obsnum_path {
 
@@ -897,7 +897,7 @@ specified for I<date>.
 
 Given a date value, returns nothing if it is a Time::Piece object or
 matches the number of digits in a date specified in 'YYYYMMDD' format.
-Else, throws L<JSA::Error::BadArgs> execption.
+Else, throws L<JSA::Error::BadArgs> exception.
 
   for my $date ( 20080820 2008 ) {
 
@@ -977,7 +977,7 @@ Throws JSA::Error::FatalError if the file cannot be created.
 =item B<make_symlink>
 
 Creates the link in CADC staging area, given observation number
-direcotry path and the base file name in there.
+directory path and the base file name in there.
 
 Throws JSA::Error::FatalError if the symbolic link cannot be created.
 
@@ -1212,7 +1212,7 @@ directory name given by I<cadc_dir> method), given a hash of ...
 
 =item I<file-ids> as key
 
-A array refernece of file ids as present in database as value.
+A array reference of file ids as present in database as value.
 
 =item I<instrument>
 
@@ -1243,7 +1243,7 @@ If missing, then I<obs-date> is used to generate the path.
   $self->upload_make_cadc_ok( 'file-ids'   => \%file_id,
                               'instrument' => $inst,
                               'okfiles'   => $okfiles->{ $inst }->{ $ymd },
-                              'source-dir' => '/insturment/date/path',
+                              'source-dir' => '/instrument/date/path',
                             );
 
 
