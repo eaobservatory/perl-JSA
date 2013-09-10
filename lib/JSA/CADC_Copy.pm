@@ -645,7 +645,9 @@ sub find_start_dates {
 # the UT date is in an incorrect format, this method returns undef. If no files
 # are returned, this method returns an empty hash reference.
 #
-# Accepts also an optional list of instrument prefixes, out of...
+# Accepts also an optional array reference of instrument prefixes with
+# key of "prefix", out
+# of...
 #
 #   a,
 #   s4a,
@@ -656,20 +658,26 @@ sub find_start_dates {
 #   s8b,
 #   s8c,
 #   s8d
+#
+# ... and, wait time in seconds to wait between requests to CADC
+# server with key of "wait".
 sub at_cadc {
 
-  my ( $ut, $wait, @prefix ) = @_;
+  my ( $ut, %opt ) = @_;
 
   return if defined $ut && $ut !~ /^\d{8}$/;
 
   my @inst = qw/ a s4a s4b s4c s4d s8a s8b s8c s8d /;
+
+  my @prefix =
+    ( $opt{'prefix'} && ref $opt{'prefix'} ? @{ $opt{'prefix'} } : () );
 
   # Use instrument prefix and the date.
   if ( $ut ) {
 
     @prefix = @inst unless scalar @prefix;
 
-    return _check_cadc( $wait, map { "${_}${ut}" } @prefix );
+    return _check_cadc( $opt{'wait'}, map { "${_}${ut}" } @prefix );
   }
 
   # Assume to be file names.
@@ -809,7 +817,12 @@ incorrect format, this method returns undef. If no files are returned,
 this method returns an empty hash reference.
 
 Return a list of files uploaded to CADC for a specific UT date.
-Accepts also an optional list of instrument prefixes, out of...
+
+Accepts optional time (in seconds) with key of C<wait> to wait between
+requests to CADC server; and, an optional array reference of
+instrument prefixes as with key of C<prefix>.
+
+The instrument prefixes are ...
 
   a,
   s4a,
@@ -822,10 +835,14 @@ Accepts also an optional list of instrument prefixes, out of...
   s8d
 
 
-If no list is given, all of the above prefixes are used (default wait time is
-used as it is not specified as the second positional parameter).
+If no list is given, all of the above prefixes are used.
 
-  my $at_cadc = at_cadc( $ut, undef, qw[ s4a s8d ] );
+  my $at_cadc = at_cadc( $ut,
+                          'wait'   => 2,
+                          'prefix' => [ qw[ a s4a s8d ] ]
+                        );
+
+  $at_cadc = at_cadc( $ut, 'prefix' => [ qw[ s4a s8d ] ] );
 
 =back
 
