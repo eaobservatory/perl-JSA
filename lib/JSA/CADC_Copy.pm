@@ -658,7 +658,7 @@ sub find_start_dates {
 #   s8d
 sub at_cadc {
 
-  my ( $ut, @prefix ) = @_;
+  my ( $ut, $wait, @prefix ) = @_;
 
   return if defined $ut && $ut !~ /^\d{8}$/;
 
@@ -669,7 +669,7 @@ sub at_cadc {
 
     @prefix = @inst unless scalar @prefix;
 
-    return _check_cadc( undef, map { "${_}${ut}" } @prefix );
+    return _check_cadc( $wait, map { "${_}${ut}" } @prefix );
   }
 
   # Assume to be file names.
@@ -680,7 +680,7 @@ sub at_cadc {
       if any { $f =~ /^$_\d{8}/ } @inst;
   }
 
-  return _check_cadc( undef, @file );
+  return _check_cadc( $wait, @file );
 }
 
 sub _check_cadc {
