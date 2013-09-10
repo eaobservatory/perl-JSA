@@ -822,9 +822,10 @@ Accepts also an optional list of instrument prefixes, out of...
   s8d
 
 
-If no list is given, all of the above prefixes are used.
+If no list is given, all of the above prefixes are used (default wait time is
+used as it is not specified as the second positional parameter).
 
-  my $at_cadc = at_cadc( $ut, qw[ s4a s8d ] );
+  my $at_cadc = at_cadc( $ut, undef, qw[ s4a s8d ] );
 
 =back
 
