@@ -334,7 +334,7 @@ sub _make_base_parts {
   my ( $dt, $dir , %opt ) = @_;
 
   # Use effective or real user id.
-  my $user = $getpwuid( $> ) || getpwuid( $< ) || 'unknown-user';
+  my $user = getpwuid( $> ) || getpwuid( $< ) || 'unknown-user';
 
   my $time =
     join '-',
