@@ -688,7 +688,7 @@ sub at_cadc {
       if any { $f =~ /^$_\d{8}/ } @inst;
   }
 
-  return _check_cadc( $wait, @file );
+  return _check_cadc( $opt{'wait'}, @file );
 }
 
 sub _check_cadc {
