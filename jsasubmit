@@ -255,6 +255,10 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $instrume = uc( $hdr->{'INSTRUME'} );
     my $backend = uc( $hdr->{'BACKEND'} );
 
+    # No reduciton recipe at CADC yet for (FTS|POL)-2.
+    obs_is_fts2_or_pol2( $hdr->{'INBEAM_ORIG'} )
+      and warn "skipped fts2/pol2\n" , next;
+
     # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
     # ACSIS.
     if( ! ( ( $instrume eq 'SCUBA-2' &&
@@ -583,6 +587,23 @@ exit;
     return @MESSAGES;
   }
 
+}
+
+# Tell if an observation is FTS-2 or POL-2 type.
+sub obs_is_fts2_or_pol2 {
+
+  my ( $inbeam ) = @_;
+
+  defined $inbeam or return;
+
+  # Possible values to be found in INBEAM header.
+  my @fts2 = (qw/ fts2 /);
+  my @pol2 = map { qq/pol2_${_}/ } (qw/ ana cal wave /);
+
+  my $re = join '|', @fts2, @pol2;
+     $re = qr{\b(?:$re)\b}i;
+
+  return $inbeam =~ $re;
 }
 
 # Quick routine to retrieve OBSIDSS
