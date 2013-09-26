@@ -1331,10 +1331,10 @@ sub is_simulation {
   my ( $self, $header ) = @_;
 
   my %sim =
-    ( 'SIMULATE' => 't',
-      'OBS_TYPE' => 'ramp'
+    ( # Value changed from 'T' to 1 without notice. Now deal with both.
+      'SIMULATE' => qr/^(?:[t1]|1\.0+)$/i,
+      'OBS_TYPE' => qr/^ramp$/i
     );
-  @sim{ keys %sim } = map { lc $_ } values %sim;
 
   # "SIMULATE" is more likely to be in the main header.
   my @order = ( 'SIMULATE', 'OBS_TYPE' );
@@ -1348,9 +1348,10 @@ sub is_simulation {
                             'value'  => 1,
                           );
 
+    my $test = $sim{ $name };
     return 1
       if defined $val
-      && $sim{ $name } eq lc $val;
+      && $val =~ $test;
   }
 
   return;
