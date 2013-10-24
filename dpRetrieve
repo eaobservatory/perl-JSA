@@ -45,7 +45,7 @@ option and is not used.
 
 Write informational messages to standard error. Not supported by CADC.
 
-=item B<--outputdir>
+=item B<--outdir>
 
 Controls the directory used to write files that have been
 retrieved. Files are located using current working directory (if they
