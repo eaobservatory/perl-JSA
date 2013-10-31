@@ -73,6 +73,7 @@ use Getopt::Long;
 use Pod::Usage;
 use File::Spec;
 use File::HomeDir;
+use File::Temp;
 use Carp;
 use URI;
 use Compress::Zlib;
@@ -325,7 +326,9 @@ sub geturls {
   }
 
   for my $url (@urls) {
-    my $tmpfile = "yes_should_be_random";
+    my $temp_fh = File::Temp->new( 'TEMPLATE' => join '-', '_temp' , $$ , 'XXXXXXXX' );
+    $temp_fh->unlink_on_destroy( 1 );
+    my $tmpfile = $temp_fh->filename();
 
     $debug and print "Fetching $url ...\n";
     my ($stdout, $stderr, $status) = run_command( "curl",
