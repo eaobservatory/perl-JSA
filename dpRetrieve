@@ -149,6 +149,9 @@ if ($lines[0] =~ /^\s*http/) {
     # if we still have a % we assume it is a wildcard for jcmtInfo
     if ($id =~ /\%/) {
 
+      # Escape the wildcard, else jcmtInfo URL returns nothing.
+      $id =~ s/\%/%25/g;
+
       # Need a URL
       my $url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=' . $id;
 
