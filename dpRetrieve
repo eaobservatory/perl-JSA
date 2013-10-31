@@ -151,6 +151,7 @@ if ($lines[0] =~ /^\s*http/) {
       # Need a URL
       my $url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=' . $id;
 
+      $debug and print "Fetching $url ...\n";
       my ($stdout, $stderr, $status) = run_command( "curl",
                                                     "--silent",
                                                     "--location",
@@ -325,6 +326,8 @@ sub geturls {
 
   for my $url (@urls) {
     my $tmpfile = "yes_should_be_random";
+
+    $debug and print "Fetching $url ...\n";
     my ($stdout, $stderr, $status) = run_command( "curl",
                                                   @curl_args,
                                                   "--location",
