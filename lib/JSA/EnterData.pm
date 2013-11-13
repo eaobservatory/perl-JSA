@@ -922,7 +922,7 @@ It is called by I<prepare_and_insert> method.
       my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs )
         or do {
                 my $log = Log::Log4perl->get_logger( '' );
-                $log->logdie( "XXX Could not make JCMT::DataVerify object: $!" );
+                $log->logdie( _dataverify_obj_fail_text( $common_obs ) );
               };
 
       my %invalid = $verify->verify_headers;
@@ -3343,6 +3343,59 @@ sub _print_error_simple_dup {
                     ? $err->text . qq[\n\n]
                     : qq[$err\n\n]
                 );
+}
+
+=item B<_dataverify_obj_fail_text>
+
+Given an observation returns a string to log, to die with when JCMT::DataVerify
+object cannot be created.
+
+  die _dataverify_obj_fail_text( $obs );
+
+Optionaly accepts a string to be printed before observation summary (see
+L<OMP::Info::Obs>). It also accepts an optional integer for that many space of
+indent.
+
+=cut
+
+sub _dataverify_obj_fail_text {
+
+  my ( $obs, $prefix , $indent ) = @_;
+
+  defined $prefix
+    or $prefix = q[Could not make JCMT::DataVerify object;],
+
+  defined $indent or $indent = 2;
+  my $title_space = ( ' ' ) x $indent;
+  my $data_space  = ( $title_space ) x $indent;
+
+  my $files;
+  my @file = sort grep { defined $_ } $obs->filename();
+  if ( scalar @file ) {
+
+    $files = $title_space
+            . q[obs file ]
+            . ( scalar @file > 1
+                ? qq[range:\n] . $data_space . join ( q[ - ], @file[0,-1] )
+                : qq[:\n]      . $data_space . $file[0]
+              );
+  }
+
+  my $summ = $obs->summary( 'text' );
+  if ( defined $summ ) {
+
+    $summ =~ s/^/$data_space/mg;
+    $summ = $title_space . qq[obs summary:\n] . $summ;
+  }
+
+  defined $files || defined $summ
+    or return ;
+
+  return
+    join "\n",
+      $prefix,
+      grep { defined $_ && length $_ } $files, $summ
+      ;
 }
 
 =item B<_verify_dict>
