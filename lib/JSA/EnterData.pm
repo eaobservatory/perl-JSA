@@ -59,6 +59,7 @@ use JSA::Headers qw/ read_jcmtstate read_wcs /;
 use JSA::Datetime qw[ make_datetime ];
 use JSA::DB::TableCOMMON;
 use JSA::EnterData::ACSIS;
+use JSA::EnterData::DAS;
 use JSA::EnterData::SCUBA2;
 use JSA::Error qw[ :try ];
 use JSA::Files qw[ looks_like_rawfile ];
@@ -101,7 +102,8 @@ BEGIN {
       'update-mode'    => 0,
 
       'instruments' =>
-        [ JSA::EnterData::ACSIS->new,
+        [ JSA::EnterData::DAS->new,
+          JSA::EnterData::ACSIS->new,
           JSA::EnterData::SCUBA2->new,
         ],
 
@@ -294,7 +296,8 @@ sub instruments {
 
     throw JSA::Error "Instrument '$inst' is unknown."
       unless any { blessed $_ eq blessed $inst }
-                  ( JSA::EnterData::ACSIS->new,
+                  ( JSA::EnterData::DAS->new,
+                    JSA::EnterData::ACSIS->new,
                     JSA::EnterData::SCUBA2->new
                   ) ;
   }
@@ -718,10 +721,11 @@ each observation for each subscan and subsystem used.  Every insert
 per observation is done in one transaction.
 
 It takes a hash of database handle; an instrument object
-(I<JSA::EnterData::ACSIS> or I<JSA::EnterData::SCUBA2>); hash
-reference of observations (run number as keys, array reference of sub
-headers as values); a hash reference of columns (see I<get_columns>);
-and a hash reference of dictionary (see I<create_dictionary>).
+(I<JSA::EnterData::ACSIS>, I<JSA::EnterData::DAS>, or
+I<JSA::EnterData::SCUBA2>); hash reference of observations (run number
+as keys, array reference of sub headers as values); a hash reference
+of columns (see I<get_columns>); and a hash reference of dictionary
+(see I<create_dictionary>).
 
   $enter->insert_observations( 'dbhandle' => $dbh,
                                 'instrument' => $inst,
@@ -942,12 +946,12 @@ It is called by I<prepare_and_insert> method.
       }
     }
 
-    if ( 'acsis' eq lc $inst->name() ) {
+    if ( _acsis_like( $inst->name() ) ) {
 
       unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
 
         $self->_print_text( "problem while finding bounds; skipping\n" );
-        return ( 'error', 'ACSIS: could not find bounds' );
+        return ( 'error', $inst->name() . ': could not find bounds' );
       }
     }
 
@@ -1052,7 +1056,7 @@ sub _filter_header {
     unless scalar @{ $obs };
 
   return @{ $obs }
-    if $inst->name eq 'ACSIS';
+    if _acsis_like( $inst->name() );
 
   my $remove_ok =
     sub {
@@ -2435,8 +2439,9 @@ sub _fix_dates {
 =item B<fill_headers_FILES>
 
 Fills in the headers for C<FILES> database table, given a
-L<JSA::EnterData::ACSIS> or L<JSA::EnterData::SCUBA2> object, a
-headers hash reference and an L<OMP::Info::Obs> object.
+L<JSA::EnterData::ACSIS>, L<JSA::EnterData::DAS>, or
+L<JSA::EnterData::SCUBA2> object, a headers hash reference and an
+L<OMP::Info::Obs> object.
 
   $enter->fill_headers_FILES( $inst, \%header, $obs );
 
@@ -3575,6 +3580,12 @@ sub _basename {
   require File::Basename;
   my ( $base ) = File::Basename::fileparse( $_[0] );
   return $base;
+}
+
+sub _acsis_like {
+
+  my ( $inst ) = @_;
+  return any { lc $inst->name() eq $_ } qw/ acsis das /;
 }
 
 
