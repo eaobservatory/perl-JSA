@@ -946,7 +946,7 @@ It is called by I<prepare_and_insert> method.
       }
     }
 
-    if ( _acsis_like( $inst->name() ) ) {
+    if ( JSA::EnterData::ACSIS->name_is_similar( $inst->name() ) ) {
 
       unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
 
@@ -1056,7 +1056,7 @@ sub _filter_header {
     unless scalar @{ $obs };
 
   return @{ $obs }
-    if _acsis_like( $inst->name() );
+    if JSA::EnterData::ACSIS->name_is_similar( $inst->name() );
 
   my $remove_ok =
     sub {
@@ -3580,12 +3580,6 @@ sub _basename {
   require File::Basename;
   my ( $base ) = File::Basename::fileparse( $_[0] );
   return $base;
-}
-
-sub _acsis_like {
-
-  my ( $inst ) = @_;
-  return any { lc $inst->name() eq $_ } qw/ acsis das /;
 }
 
 
