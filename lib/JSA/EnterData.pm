@@ -3124,31 +3124,56 @@ sub _combined_prepare_insert_hash {
 
 Returns a list of header values or a truth value, given a hash with
 I<headers> and I<name> as the required keys. Respective hash values
-are a header hash reference and header name to search for.  Default
-behaviour is to return a truth value if the given header exists.
+are a header hash reference and header name to search for.  B<Default>
+behaviour is to B<return a truh value if the given header exists>.
 Returns nothing if the header is missing or specified test fails.
 C<SUBEHEADERS> are also searched along with the main header hash.
 
   print 'OBSEND header exists'
     if $enter->_find_header( 'headers' => $hdrhash,
-                             'name' => 'OBSEND',
-                             'test' => 'exists'
+                              'name' => 'OBSEND',
                             );
 
-Test for the header value being true or defined can be specified by
-providing I<test> key with value of "true" or "defined".
+Optional keys are ...
 
-Instead of receiving a truth value, actual header values can be
-obtained by specifying I<value> key (associated with any value).
+=over 2
+
+=item I<test> "true" | "defined"
+
+To Test for the header value being true or defined by providing
+I<test> key with value of "true" or "defined".
+
+  print 'OBSEND header value is defined'
+    if $enter->_find_header( 'headers' => $hdrhash,
+                              'name' => 'OBSEND',
+                              'test' => 'defined'
+                            );
+
+=item I<value> any value
+
+To receive header value when defined, specify the I<value> key (with
+any value).
 
   use Data::Dumper;
-  print "Defined OBSEND header value if present: ",
+  print "OBSEND header value if present: ",
     Dumper( $enter->_find_header( 'headers' => $hdrhash,
-                                  'name' => 'OBSEND',
-                                  'test' => 'defined',
+                                  'name'  => 'OBSEND',
                                   'value' => undef
                                 )
           );
+
+=item I<value-regex> regex
+
+To actually match header value, specify I<value-regex> key with value
+of a regular expression, in which case I<C<value> is ignored>.
+
+  print "OBS_TYPE is 'skydip'."
+    if $enter->_find_header( 'headers' => $hdrhash,
+                              'name'  => 'OBS_TYPE',
+                              'value-regex' => qr{\b skydip \b}xi
+                            );
+
+=back
 
 =cut
 
@@ -3156,7 +3181,10 @@ sub _find_header {
 
   my ( $self, %args ) = @_;
 
-  my ( $head, $name ) = @args{qw[ headers name ]};
+  my ( $head, $name, $val_re ) = @args{qw[ headers name value-regex ]};
+
+  defined $val_re && ! ref $val_re
+    and $val_re = qr{\b${val_re}\b}x;
 
   my $test =
     sub {
@@ -3182,6 +3210,9 @@ sub _find_header {
 
     my $val = $test->( $h, $name ) ? $h->{ $name } : undef;
     if ( defined $val  ) {
+
+      defined $val_re
+        and return $val =~ $val_re;
 
       return
         exists $args{'value'} ? $val : 1 ;
