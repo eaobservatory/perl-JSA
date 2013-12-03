@@ -946,7 +946,10 @@ It is called by I<prepare_and_insert> method.
       }
     }
 
-    if ( JSA::EnterData::ACSIS->name_is_similar( $inst->name() ) ) {
+    if ( JSA::EnterData::ACSIS->name_is_similar( $inst->name() )
+          &&
+          ! $self->skip_calc_radec( 'headers' => $common_hdrs )
+        ) {
 
       unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
 
@@ -2667,6 +2670,75 @@ sub create_dictionary {
     }
   }
   return %dict;
+}
+
+=item B<skip_calc_radec>
+
+Given a C<OMP::Info::Obs> object header hash reference -- or an
+C<OMP::Info::Obs> object -- as a hash, returns a truth value if
+bounding box calculation should be skipped.
+
+  print "skipped calc_radec()"
+    if $enter->skip_calc_radec( 'headers' => $obs->hdrhash() );
+
+Default skip list is ...
+
+    'OBS_TYPE' => qr{\b skydips? \b}ix
+
+Optionally accepts a skip list with I<skip> as key name, and a hash
+reference as value of header names as keys and header values as
+regular expressions ...
+
+  print "skipped calc_radec()"
+    if $enter->skip_calc_radec( 'headers' => $obs->hdrhash(),
+                                'skip' =>
+                                  { 'OBS_TYPE' => qr{\b(?: skydip | FLAT_?FIELD  )\b}xi
+                                  }
+                              );
+
+=cut
+
+sub skip_calc_radec {
+
+  my ( $self, %arg ) = @_;
+
+  # Skip list.
+  my %list =
+    ( 'OBS_TYPE' => qr{\b skydips? \b}xi,
+      ( exists $arg{'skip'} && defined $arg{'skip'} ? %{ $arg{'skip' } } : () )
+    );
+
+  my $header;
+  if ( exists $arg{'headers'} ) {
+
+    defined $arg{'headers'}
+      or throw JSA::Error::BadArgs( qq[No "headers" value given to check if to find bounding box.] );
+
+    $header = $arg{'headers'};
+  }
+  else {
+
+    exists $arg{'obs'} && defined $arg{'obs'}
+      or  JSA::Error::BadArgs( qq[No "obs" value given to check if to find bounding box.] );
+
+    $header = $arg{'obs'}->hdrhash()
+      or  JSA::Error::BadArgs( qq[Could not get header hash from "$arg{'obs'}"] );
+  }
+
+  for my $name ( sort keys %list ) {
+
+    $self->_find_header(  'headers' => $header,
+                          'name'    => $name,
+                          'value-regex' => $list{ $name }
+                        )
+                        or next;
+
+    $self->_debug_text( qq[Matched "$name" with $list{ $name }; calc_radec() may be skipped.] );
+    return 1;
+  }
+
+  $self->_debug_text( 'calc_radec() may be called.' );
+  return;
 }
 
 =item B<calc_radec>
