@@ -183,6 +183,7 @@ use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
 use JSA::Logging qw/log_message log_warning log_command/;
+use JSA::WrapDR qw/run_pipeline/;
 
 # Add the path for this routine to the full path. This will allow
 # dpCapture and dpRetrieve to be found in emulation. Add to the end of
@@ -530,12 +531,6 @@ if( ! $skipdp ) {
     }
   }
 
-  # We now have to write these files to a text file suitable for
-  # ORAC-DR to read with the -file option
-  $tmpfile = File::Temp->new() or die "Could not create a temporary file";
-  print $tmpfile "$_\n" for @files;
-  close($tmpfile) or die "Error closing temp file handle";
-
 } else {
 
   %post_retrieve = scan_dir();
@@ -544,88 +539,8 @@ if( ! $skipdp ) {
 
 }
 
-# We want normal messages from Starlink subsystem
-$ENV{MSG_FILTER} = "NORM" unless exists $ENV{MSG_FILTER};
-
-# Configure shared environment variables
-$ENV{'ORAC_DATA_IN'} = ( defined $indir ? $indir : $outdir );
-$ENV{ORAC_DATA_OUT} = $outdir;
-
-# ORAC_CAL_ROOT
-if (!exists $ENV{ORAC_CAL_ROOT}) {
-  $ENV{ORAC_CAL_ROOT} = File::Spec->catdir( $ENV{ORAC_DIR}, File::Spec->updir,
-					    "cal");
-}
-
-# ORAC_PERL5LIB is only set if required
-if (!exists $ENV{ORAC_PERL5LIB}) {
-  $ENV{ORAC_PERL5LIB} = File::Spec->catdir( $ENV{ORAC_DIR}, "lib", "perl5" );
-}
-
-my @drcommand;
-if ($useoracdr) {
-  log_message( "Using ORAC-DR\n" );
-
-  # Instrument
-  $ENV{ORAC_INSTRUMENT} = $oracinst;
-
-  # ORAC_DATA_CAL.
-  if( ! exists( $ENV{'ORAC_DATA_CAL'} ) ) {
-    $ENV{'ORAC_DATA_CAL'} = File::Spec->catdir( $ENV{'ORAC_CAL_ROOT'},
-                                                lc( $ENV{'ORAC_INSTRUMENT'} ) );
-  }
-
-  @drcommand = ( $^X,
-               File::Spec->catfile($ENV{ORAC_DIR},"bin","oracdr"),
-               "-nodisplay",
-               "-log","hs",
-               "-verbose",
-               "-recsuffix", "ADV,CADC",
-               "-batch" );
-
-  if( $skipdp ) {
-    push @drcommand, "-ut", "$ut", "-skip", "-from", "1",
-      "-loop", ($oracinst =~ /^scuba$/i ? "inf" : "flag");
-  } else {
-    push @drcommand, "-loop", "file", "-file", "$tmpfile"
-  }
-
-  # Add the DR parameters.
-  push(@drcommand, split /\s+/, $drparameters) if defined $drparameters;
-
-} else {
-  # We are going to need a ^file option in PICARD
-  log_message( "Using PICARD\n" );
-
-  # PICARD needs a recipe name so we need to abort if we do not have one
-  die "Processing reduced data requires the use of the -parameters option\n"
-    unless (defined $drparameters);
-
-  # PICARD only uses a recipe name from drparameters
-  @drcommand = ( $^X,
-               File::Spec->catfile($ENV{ORAC_DIR},"bin","picard"),
-               "-log","hs",
-               "-verbose",
-               ( split /\s+/, $drparameters ),
-               @files
-             );
-
-}
-
-# Run the DR command.
-# We need to decide whether a partial execution of the DR should result in
-# file ingestion.
-log_message( "Running: " . join( " ", @drcommand ) );
-my ( $drstdout, $drstderr, $drstatus ) = run_command( { nothrow => 1 },
-                                                      @drcommand);
-map { s/\e\[(?:\d{1,2};?)+m//g; } @$drstdout;
-map { s/\e\[(?:\d{1,2};?)+m//g; } @$drstderr;
-log_message( "\n*** Last ten lines of STDOUT:\n" );
-my $upper = ( $#$drstdout > 9 ? 10 : $#$drstdout+1 );
-log_message( join "\n", grep { defined } @$drstdout[-$upper..-1] );
-log_message( "\n*** All output from STDERR:\n" );
-log_message( join "\n", @$drstderr );
-die "Non-zero pipeline exit status: $drstatus" if $drstatus;
+run_pipeline($useoracdr, $oracinst, $indir, $outdir,
+             ($skipdp ? "$ut" : \@files), $drparameters);
 
 # Process NDF data products and convert them into FITS
 #  - Need to filter provenance
