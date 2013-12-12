@@ -155,6 +155,8 @@ following optional keys:
           a recipe name.
  - dprecipe: Constant indicating which CADC processing recipe to use to reduce the data.
           Default will be CADC_DPREC_8G.
+ - script: Name of the data reduction wrapper script.  Defaults to
+           "jsawrapdr".
 
 This function returns the recipe instance ID on success, or undef for failure. Returns
 "-0x???" if the recipe could not be inserted because an entry already exists that is in
@@ -172,6 +174,7 @@ sub create_recipe_instance {
   my $recpars = ( defined( $options->{recpars} ) ? $options->{recpars} : undef );
   my $queue = ( defined $options->{queue} ? uc( $options->{queue} ) : undef );
   my $drparams = ( defined $options->{drparams} ? $options->{drparams} : "" );
+  my $script = $options->{'script'} // 'jsawrapdr';
   my $tag = $options->{tag};
 
   # Default to medium priority. Note that this differs to the CADC default of -500.
@@ -215,7 +218,7 @@ sub create_recipe_instance {
   $sql = <<ENDRECIPEID;
 select recipe_id
    from $WRITEDATABASE..dp_recipe
-   where script_name="jsawrapdr" and description like '%$dp_recipe_tag'
+   where script_name="$script" and description like '%$dp_recipe_tag'
 ENDRECIPEID
 
   my $dp_recipe_id = querySingleValue( $dbh, $sql );
@@ -426,7 +429,9 @@ sub remove_recipe_instance {
 =item query_dpstate
 
  @results = query_dpstate( $dbh, files => $files,
-                                 state => $state);
+                                 state => $state,
+                                 script => 'jsawrapdr', # Optional
+                         );
 
 Defaults to querying "E" state without file restriction.
 
@@ -438,8 +443,9 @@ sub query_dpstate {
 
   # We want to restrict our results to recipes that are relevant for us.
   # This means all recipes using jsawrapdr
+  my $script = $filters->{'script'} // 'jsawrapdr';
   my @results = runQuery( $dbh,
-                          "SELECT recipe_id from dp_recipe where script_name=\"jsawrapdr\"");
+                          "SELECT recipe_id from dp_recipe where script_name=\"$script\"");
   my @recipes = map { $_->{recipe_id} } @results;
   die "Unable to locate and DP recipes from dp_recipe database"
     unless @recipes;
