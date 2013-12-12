@@ -506,7 +506,7 @@ if( ! $skipdp ) {
     }
   }
 
-  # Convert FITS files into NDF and update name supplied to DR We
+  # Convert FITS files into NDF and update name supplied to DR. We
   # could do this before we read the FITS headers but it is more
   # efficient to delay conversion in case some other error condition
   # is hit first. Conversion will take a non-trivial amount of time
