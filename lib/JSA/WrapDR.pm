@@ -13,10 +13,10 @@ use File::Spec;
 use File::Temp;
 
 use JSA::Command qw/run_command/;
-use JSA::Logging qw/log_message/;
+use JSA::Logging qw/log_message log_command/;
 
 use parent qw/Exporter/;
-our @EXPORT_OK = qw/run_pipeline/;
+our @EXPORT_OK = qw/run_pipeline capture_products/;
 
 =head1 SUBROUTINES
 
@@ -133,6 +133,29 @@ sub run_pipeline {
   log_message( "\n*** All output from STDERR:\n" );
   log_message( join "\n", @$drstderr );
   die "Non-zero pipeline exit status: $drstatus" if $drstatus;
+}
+
+=item capture_products
+
+Call dpCapture with the correct arguments.
+
+=cut
+
+sub capture_products {
+  my ($id, $persist, $transdir, $archive, $show_output) = @_;
+  my @args;
+  if( $persist ) {
+    push @args, "--persist";
+  }
+  if( defined( $transdir ) ) {
+    push @args, "--transdir", $transdir;
+  }
+  push @args, '--archive=' . $archive;
+
+  log_message( "\n*** calling dpCapture --id=$id " . ( join " ", @args ) . "\n" );
+
+  my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", @args);
+  log_command( "dpCapture", $dpcstdout, $dpcstderr ) if $show_output;
 }
 
 1;

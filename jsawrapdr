@@ -183,7 +183,7 @@ use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
 use JSA::Logging qw/log_message log_warning log_command/;
-use JSA::WrapDR qw/run_pipeline/;
+use JSA::WrapDR qw/run_pipeline capture_products/;
 
 # Add the path for this routine to the full path. This will allow
 # dpCapture and dpRetrieve to be found in emulation. Add to the end of
@@ -575,26 +575,7 @@ if ($cleanup eq 'cadc') {
   }
 }
 
-# Call dpCapture with the correct arguments
-my @args;
-if( $persist ) {
-  push @args, "--persist";
-}
-if( defined( $transdir ) ) {
-  push @args, "--transdir", $transdir;
-}
-# Want dpCapture to copy everything
-if ( $canfar ) {
-  push(@args, "--archive=CANFAR");
-} else {
-  push(@args, "--archive=JCMT");
-}
-
-log_message( "\n*** calling dpCapture --id=$id " . ( join " ", @args ) . "\n" );
-
-
-my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", @args);
-log_command( "dpCapture", $dpcstdout, $dpcstderr ) if $canfar;
+capture_products($id, $persist, $transdir, ($canfar ? 'CANFAR' : 'JCMT'), $canfar);
 
 if ($cleanup ne 'none') {
   # Clean up the output directory.
