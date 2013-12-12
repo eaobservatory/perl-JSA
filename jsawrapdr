@@ -127,7 +127,7 @@ in. Supercedes -outdir.
 =item B<-ut>
 
 Reduce data for a given UT date. Skips call to dpRetrieve. Must be
-used in conjunction with the C<-ut> option.
+used in conjunction with the C<-instrument> option.
 
 =item B<-cleanup=option>
 
