@@ -575,7 +575,7 @@ if ($cleanup eq 'cadc') {
   }
 }
 
-# Call dpRetrieve with the correct arguments
+# Call dpCapture with the correct arguments
 my @args;
 if( $persist ) {
   push @args, "--persist";
