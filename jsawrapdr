@@ -151,7 +151,7 @@ These questions relate mainly to non-CADC usage:
   Should the wrapper check filename convention? Should it check provenance?
 
 - If a FITS file does not match the CADC naming convention should it still
-  be processed by picard? Currently they are skipped.
+  be processed by PICARD? Currently they are skipped.
 
 - If an NDF does have a PRODUCT header but non-standard filename is that okay?
   Note that dpCapture only looks for standard filenames and the ndf2fits
@@ -412,7 +412,7 @@ if( ! $skipdp ) {
 
   log_message("Processing the following files:\n". join("\n",@files)."\n");
 
-  # decide whether we are using ORAC-DR or picard
+  # decide whether we are using ORAC-DR or PICARD
 
   # First thing we have to do is to analyze the files to determine how
   # things should be processed. If we are all FITS files then we must
@@ -457,7 +457,7 @@ if( ! $skipdp ) {
 
   $useoracdr = 0;
   if ($nfits == @files) {
-    # All of them are fits so we must use picard
+    # All of them are fits so we must use PICARD
     log_message("Got $nfits fits - using PICARD\n");
   } elsif ($nsdf == @files) {
     # we have NDFs so we need to open them and look for PRODUCT
@@ -593,14 +593,14 @@ if ($useoracdr) {
   push(@drcommand, split /\s+/, $drparameters) if defined $drparameters;
 
 } else {
-  # We are going to need a ^file option in picard
+  # We are going to need a ^file option in PICARD
   log_message( "Using PICARD\n" );
 
   # PICARD needs a recipe name so we need to abort if we do not have one
   die "Processing reduced data requires the use of the -parameters option\n"
     unless (defined $drparameters);
 
-  # Picard only uses a recipe name from drparameters
+  # PICARD only uses a recipe name from drparameters
   @drcommand = ( $^X,
                File::Spec->catfile($ENV{ORAC_DIR},"bin","picard"),
                "-log","hs",
