@@ -412,7 +412,7 @@ if( ! $skipdp ) {
 
   log_message("Processing the following files:\n". join("\n",@files)."\n");
 
-  # decide whether we are using oracdr or picard
+  # decide whether we are using ORAC-DR or picard
 
   # First thing we have to do is to analyze the files to determine how
   # things should be processed. If we are all FITS files then we must
@@ -448,7 +448,7 @@ if( ! $skipdp ) {
 
   # Decide on ORAC-DR vs PICARD
   # FITS files are not processable by ORAC-DR and are not archived as
-  # such at CADC NDF are processed by orac-dr unless they have PRODUCT
+  # such at CADC NDF are processed by ORAC-DR unless they have PRODUCT
   # headers. No check is made for filename compliance with raw time
   # series ICD.
 
@@ -471,7 +471,7 @@ if( ! $skipdp ) {
     }
   }
 
-  # Analyze product information for non-oracdr case
+  # Analyze product information for non-ORAC-DR case
   if (!$useoracdr) {
     if ($nproduct == @files) {
 
@@ -530,7 +530,7 @@ if( ! $skipdp ) {
   }
 
   # We now have to write these files to a text file suitable for
-  # orac-dr to read with the -file option
+  # ORAC-DR to read with the -file option
   $tmpfile = File::Temp->new() or die "Could not create a temporary file";
   print $tmpfile "$_\n" for @files;
   close($tmpfile) or die "Error closing temp file handle";
