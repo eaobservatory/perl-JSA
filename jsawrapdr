@@ -457,7 +457,7 @@ if( ! $skipdp ) {
 
   $useoracdr = 0;
   if ($nfits == @files) {
-    # All of them are fits so we must use PICARD
+    # All of them are FITS so we must use PICARD
     log_message("Got $nfits fits - using PICARD\n");
   } elsif ($nsdf == @files) {
     # we have NDFs so we need to open them and look for PRODUCT
