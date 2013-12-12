@@ -182,6 +182,7 @@ use JSA::Command qw/ run_command /;
 use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
+use JSA::Logging qw/log_message log_warning log_command/;
 
 # Add the path for this routine to the full path. This will allow
 # dpCapture and dpRetrieve to be found in emulation. Add to the end of
@@ -696,34 +697,6 @@ if ($cleanup ne 'none') {
 }
 
 exit;
-
-#############################################################################################
-
-# Simple logging routines
-
-sub log_message {
-  my $message = shift;
-  chomp($message);
-  print STDERR "$message\n";
-}
-
-sub log_warning {
-  log_message( $_[0] );
-}
-
-sub log_command {
-  my ($cmd, $stdout, $stderr) = @_;
-  if ($stdout) {
-    for my $line (@$stdout) {
-      log_message( "$cmd: $line\n" );
-    }
-  }
-  if ($stderr) {
-    for my $line (@$stderr) {
-      log_message( "$cmd ERROR: $line\n");
-    }
-  }
-}
 
 =head1 NOTES
 
