@@ -328,7 +328,7 @@ $tmpdir = 1 if $in_grid_engine;
 if (defined $inputs) {
   $inputs = File::Spec->catfile( $curdir, $inputs )
     if (!$in_grid_engine &&
-	!File::Spec->file_name_is_absolute($inputs));
+        !File::Spec->file_name_is_absolute($inputs));
 } elsif( ! $skipdp ) {
   die "Must supply a -inputs file";
 }
