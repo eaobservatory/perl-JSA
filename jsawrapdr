@@ -182,7 +182,7 @@ use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
 use JSA::Logging qw/log_message log_warning/;
-use JSA::WrapDR qw/prepare_environment
+use JSA::WrapDR qw/prepare_environment prepare_environment_cadc
                    retrieve_data run_pipeline capture_products
                    clean_directory_final clean_directory_pre_capture/;
 
@@ -293,20 +293,7 @@ if (exists $ENV{TMPDIR}) {
     $in_grid_engine = 1;
     print "Running in CADC Grid Engine environment\n";
 
-    # Running at CADC so have a stab at setting up logging.
-    # Directory should be created by dpRetrieve.
-    if (!exists $ENV{ORAC_LOGDIR}
-       && exists $ENV{CADC_LOG_DIR}) {
-      $ENV{ORAC_LOGDIR} = $ENV{CADC_LOG_DIR};
-    }
-
-    # Check to see if there's a CADC_THREADS environment variable
-    # telling us how many threads to use. If it's not set, we will
-    # assume we can use whatever we want and won't set the env
-    # variable.
-    if (exists $ENV{CADC_THREADS} && defined $ENV{CADC_THREADS}) {
-      $ENV{SMURF_THREADS} = $ENV{CADC_THREADS};
-    }
+    prepare_environment_cadc();
   }
 }
 
