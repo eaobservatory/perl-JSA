@@ -183,7 +183,8 @@ use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
 use JSA::Logging qw/log_message log_warning log_command/;
-use JSA::WrapDR qw/run_pipeline capture_products/;
+use JSA::WrapDR qw/run_pipeline capture_products
+                   clean_directory_final clean_directory_pre_capture/;
 
 # Add the path for this routine to the full path. This will allow
 # dpCapture and dpRetrieve to be found in emulation. Add to the end of
@@ -557,40 +558,15 @@ my %drhdrs = read_headers( @drfiles );
 convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
                               dpdate => DateTime->now->datetime } );
 
-# cleanup for CADC if required
-if ($cleanup eq 'cadc') {
-  # do not want to cleanup files that were present before the
-  # command began
-  my %post_all = scan_dir( qr/.*/ );
+clean_directory_pre_capture($outdir, \%all_existing_files)
+    if $cleanup eq 'cadc';
 
-  for my $file (keys %post_all) {
-    if (! exists $all_existing_files{$file}) {
-      # was not previously here
-      if (! looks_like_cadcfile( $file ) ) {
-	# does not look like a cadc file
-	# do not check status
-	unlink File::Spec->catfile( $outdir, $file );
-      }
-    }
-  }
-}
+capture_products($id, $persist, $transdir,
+                 ($canfar ? 'CANFAR' : 'JCMT'),
+                 $canfar);
 
-capture_products($id, $persist, $transdir, ($canfar ? 'CANFAR' : 'JCMT'), $canfar);
-
-if ($cleanup ne 'none') {
-  # Clean up the output directory.
-  # clean files one at a time making sure we do not remove
-  # a file that was already present
-  opendir (my $DH, $outdir) or die "Could not open the output directory!";
-  for my $f (readdir($DH)) {
-    if (!exists $all_existing_files{$f}) {
-      # use unlink and do not check status
-      # since there is not a lot we can do at this point
-      my $path = File::Spec->catfile($outdir, $f);
-      unlink $path;
-    }
-  }
-}
+clean_directory_final($outdir, \%all_existing_files)
+    unless $cleanup eq 'none';
 
 exit;
 

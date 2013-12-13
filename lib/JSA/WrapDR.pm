@@ -13,10 +13,12 @@ use File::Spec;
 use File::Temp;
 
 use JSA::Command qw/run_command/;
+use JSA::Files qw/looks_like_cadcfile scan_dir/;
 use JSA::Logging qw/log_message log_command/;
 
 use parent qw/Exporter/;
-our @EXPORT_OK = qw/run_pipeline capture_products/;
+our @EXPORT_OK = qw/run_pipeline capture_products
+                    clean_directory_final clean_directory_pre_capture/;
 
 =head1 SUBROUTINES
 
@@ -156,6 +158,53 @@ sub capture_products {
 
   my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", @args);
   log_command( "dpCapture", $dpcstdout, $dpcstderr ) if $show_output;
+}
+
+=item clean_directory_pre_capture
+
+Clean up for CADC if required.
+
+=cut
+
+sub clean_directory_pre_capture {
+  my ($outdir, $existing_files) = @_;
+
+  # Do not want to cleanup files that were present before the
+  # command began
+  my %post_all = scan_dir( qr/.*/ );
+
+  for my $file (keys %post_all) {
+    if (! exists $existing_files->{$file}) {
+      # was not previously here
+      if (! looks_like_cadcfile( $file ) ) {
+        # does not look like a CADC file
+        # do not check status
+        unlink File::Spec->catfile( $outdir, $file );
+      }
+    }
+  }
+}
+
+=item clean_directory_final
+
+Clean up the output directory.
+
+=cut
+
+sub clean_directory_final {
+  my ($outdir, $existing_files) = @_;
+
+  # Clean files one at a time making sure we do not remove
+  # a file that was already present.
+  opendir (my $DH, $outdir) or die "Could not open the output directory!";
+  for my $f (readdir($DH)) {
+    if (!exists $existing_files->{$f}) {
+      # Use unlink and do not check status
+      # since there is not a lot we can do at this point.
+      my $path = File::Spec->catfile($outdir, $f);
+      unlink $path;
+    }
+  }
 }
 
 1;
