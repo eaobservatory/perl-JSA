@@ -17,7 +17,8 @@ use JSA::Files qw/looks_like_cadcfile scan_dir/;
 use JSA::Logging qw/log_message log_command/;
 
 use parent qw/Exporter/;
-our @EXPORT_OK = qw/prepare_environment run_pipeline capture_products
+our @EXPORT_OK = qw/prepare_environment
+                    retrieve_data run_pipeline capture_products
                     clean_directory_final clean_directory_pre_capture/;
 
 =head1 SUBROUTINES
@@ -44,6 +45,23 @@ sub prepare_environment {
   # Set ADAM_USER to a temp directory
   my $adamuser = File::Temp->newdir();
   $ENV{ADAM_USER} = "$adamuser";
+}
+
+=item retrieve_data
+
+Copy the files locally by calling the dpRetrieve command. We hope it is
+in the path.
+
+=cut
+
+sub retrieve_data {
+  my ($id, $inputs, $show_output) = @_;
+
+  my ($dprstdout, $dprstderr, $extat) = run_command("dpRetrieve",
+                                                    "--id=$id",
+                                                    "--inputs=$inputs");
+
+  log_command( "dpRetrieve", $dprstdout, $dprstderr ) if $show_output;
 }
 
 =item run_pipeline

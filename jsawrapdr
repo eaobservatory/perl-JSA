@@ -178,12 +178,12 @@ use Astro::FITS::Header::CFITSIO;
 use Astro::FITS::HdrTrans;
 
 use JSA::Starlink qw/ check_star_env run_star_command /;
-use JSA::Command qw/ run_command /;
 use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
-use JSA::Logging qw/log_message log_warning log_command/;
-use JSA::WrapDR qw/prepare_environment run_pipeline capture_products
+use JSA::Logging qw/log_message log_warning/;
+use JSA::WrapDR qw/prepare_environment
+                   retrieve_data run_pipeline capture_products
                    clean_directory_final clean_directory_pre_capture/;
 
 print "Debugging information:\n*** ARGV:\n";
@@ -381,14 +381,7 @@ if( ! $skipdp ) {
   # make sure we do not delete these
   my %existing_files = scan_dir();
 
-  # First thing we have to do is copy the files locally by calling the
-  # dpRetrieve command. We hope it is in the path.
-
-  my ($dprstdout, $dprstderr, $extat) = run_command("dpRetrieve",
-                                                    "--id=$id",
-                                                    "--inputs=$inputs");
-  log_command( "dpRetrieve", $dprstdout, $dprstderr ) if $canfar;
-
+  retrieve_data($id, $inputs, $canfar);
 
   # Now scan the directory again
   %post_retrieve = scan_dir();
