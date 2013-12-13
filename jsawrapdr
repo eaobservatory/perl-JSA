@@ -378,7 +378,8 @@ my %all_existing_files = scan_dir( qr/.*/ );
 
 if( ! $skipdp ) {
 
-  # make sure we do not delete these
+  # Get a hash of the existing files so that we can see which ones
+  # dpRetrieve has fetched.
   my %existing_files = scan_dir();
 
   retrieve_data($id, $inputs, $canfar);
