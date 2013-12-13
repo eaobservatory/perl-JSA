@@ -17,12 +17,34 @@ use JSA::Files qw/looks_like_cadcfile scan_dir/;
 use JSA::Logging qw/log_message log_command/;
 
 use parent qw/Exporter/;
-our @EXPORT_OK = qw/run_pipeline capture_products
+our @EXPORT_OK = qw/prepare_environment run_pipeline capture_products
                     clean_directory_final clean_directory_pre_capture/;
 
 =head1 SUBROUTINES
 
 =over 4
+
+=item prepare_environment
+
+Add the path for this routine to the full path. This will allow
+dpCapture and dpRetrieve to be found in emulation. Add to the end of
+path so that the real CADC versions will be found.
+
+=cut
+
+sub prepare_environment {
+  my $newpath = $FindBin::RealBin;
+  $newpath .= ":". $FindBin::Bin if $FindBin::Bin ne $FindBin::RealBin;
+  if (exists $ENV{PATH}) {
+    $ENV{PATH} = $ENV{PATH} . ":". $newpath;
+  } else {
+    $ENV{PATH} = $newpath;
+  }
+
+  # Set ADAM_USER to a temp directory
+  my $adamuser = File::Temp->newdir();
+  $ENV{ADAM_USER} = "$adamuser";
+}
 
 =item run_pipeline
 

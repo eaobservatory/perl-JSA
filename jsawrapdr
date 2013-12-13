@@ -183,26 +183,8 @@ use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
 use JSA::Logging qw/log_message log_warning log_command/;
-use JSA::WrapDR qw/run_pipeline capture_products
+use JSA::WrapDR qw/prepare_environment run_pipeline capture_products
                    clean_directory_final clean_directory_pre_capture/;
-
-# Add the path for this routine to the full path. This will allow
-# dpCapture and dpRetrieve to be found in emulation. Add to the end of
-# path so that the real CADC versions will be found
-BEGIN {
-  my $newpath = $FindBin::RealBin;
-  $newpath .= ":". $FindBin::Bin if $FindBin::Bin ne $FindBin::RealBin;
-  if (exists $ENV{PATH}) {
-    $ENV{PATH} = $ENV{PATH} . ":". $newpath;
-  } else {
-    $ENV{PATH} = $newpath;
-  }
-
-  # Set ADAM_USER to a temp directory
-  my $adamuser = File::Temp->newdir();
-  $ENV{ADAM_USER} = "$adamuser";
-
-}
 
 print "Debugging information:\n*** ARGV:\n";
 print Dumper \@ARGV;
@@ -286,6 +268,8 @@ $mode =~ s/^\'//;
 $mode =~ s/\'$//;
 
 $cleanup = "cadc" unless defined $cleanup;
+
+prepare_environment();
 
 # We require that STARLINK_DIR and ORAC_DIR are set
 check_star_env( "ORAC" );
