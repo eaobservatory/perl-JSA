@@ -311,7 +311,8 @@ if (exists $ENV{TMPDIR}) {
 }
 
 print "Environment variables:\n";
-for my $env_variable ( sort qw/ PERL5LIB STARLINK_DIR SMURF_THREADS ORAC_DIR PATH ADAM_USER TMPDIR HDS_SCRATCH / ) {
+for my $env_variable ( sort qw/PERL5LIB STARLINK_DIR SMURF_THREADS ORAC_DIR
+                               PATH ADAM_USER TMPDIR HDS_SCRATCH/ ) {
   print "$env_variable: " . ( defined( $ENV{$env_variable} ) ?
                               $ENV{$env_variable}            :
                               "undef" ) . "\n";
@@ -421,9 +422,11 @@ if( ! $skipdp ) {
   # FITS headers, indexed by filename
   my %FITS = read_headers( @files );
   if (keys %FITS == 0) {
-    die "Could not open any of the supplied files to read headers: ".join(", ",@files);
+    die "Could not open any of the supplied files to read headers: " .
+        join(", ",@files);
   } elsif (keys %FITS != @files) {
-    log_warning("Some files could not be read. Continuing with those that can\n");
+    log_warning("Some files could not be read. " .
+                "Continuing with those that can\n");
     @files = keys %FITS;
   }
 
@@ -458,8 +461,8 @@ if( ! $skipdp ) {
 
       # check product values
       if (keys %products > 1) {
-        log_warning( "Processing different products in a single run may be incorrect. (".
-                     join(",",keys %products).")\n");
+        log_warning( "Processing different products in a single run may be " .
+                     "incorrect. (".  join(",",keys %products).")\n");
       }
     } elsif ($nproduct == 0) {
       die "None of the input files contained PRODUCT FITS headers";
@@ -480,7 +483,8 @@ if( ! $skipdp ) {
       $instruments{$oa}++;
     }
     if (keys %instruments > 1) {
-      die "Can not process files from multiple instruments (".join(",",keys %instruments).")\n";
+      die "Can not process files from multiple instruments (" .
+          join(",",keys %instruments).")\n";
     } else {
       # get the single instrument
       ($oracinst) = keys %instruments;
@@ -500,7 +504,8 @@ if( ! $skipdp ) {
           push(@new, $out );
         }
       } else {
-        log_warning( "File $f does not use the CADC naming convention. Skipping.\n");
+        log_warning("File $f does not use the CADC naming convention. " .
+                    "Skipping.\n");
       }
     }
     if (@new) {
