@@ -180,10 +180,11 @@ use Astro::FITS::HdrTrans;
 use JSA::Starlink qw/ check_star_env run_star_command /;
 use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
-use JSA::Headers qw/ get_header_value get_orac_instrument read_headers /;
+use JSA::Headers qw/ get_header_value read_headers /;
 use JSA::Logging qw/log_message log_warning/;
 use JSA::WrapDR qw/prepare_environment prepare_environment_cadc
-                   retrieve_data run_pipeline capture_products
+                   retrieve_data determine_instrument
+                   run_pipeline capture_products
                    clean_directory_final clean_directory_pre_capture/;
 
 print "Debugging information:\n*** ARGV:\n";
@@ -460,22 +461,8 @@ if( ! $skipdp ) {
     }
   }
 
-  # Now need to determine the ORAC_INSTRUMENT from the supplied headers
   if ($useoracdr) {
-    my %instruments;
-    for my $f (keys %FITS) {
-      my $oa = get_orac_instrument( $FITS{$f} );
-      die "Unable to determine ORAC_INSTRUMENT for file '$f'\n"
-      unless defined $oa;
-      $instruments{$oa}++;
-    }
-    if (keys %instruments > 1) {
-      die "Can not process files from multiple instruments (" .
-          join(",",keys %instruments).")\n";
-    } else {
-      # get the single instrument
-      ($oracinst) = keys %instruments;
-    }
+    $oracinst = determine_instrument(\%FITS);
   }
 
   # Convert FITS files into NDF and update name supplied to DR. We

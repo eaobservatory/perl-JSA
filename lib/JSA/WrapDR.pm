@@ -14,11 +14,13 @@ use File::Temp;
 
 use JSA::Command qw/run_command/;
 use JSA::Files qw/looks_like_cadcfile scan_dir/;
+use JSA::Headers qw/get_orac_instrument/;
 use JSA::Logging qw/log_message log_command/;
 
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/prepare_environment prepare_environment_cadc
-                    retrieve_data run_pipeline capture_products
+                    retrieve_data determine_instrument
+                    run_pipeline capture_products
                     clean_directory_final clean_directory_pre_capture/;
 
 =head1 SUBROUTINES
@@ -84,6 +86,31 @@ sub retrieve_data {
                                                     "--inputs=$inputs");
 
   log_command( "dpRetrieve", $dprstdout, $dprstderr ) if $show_output;
+}
+
+=item determine_instrument
+
+Determine the ORAC_INSTRUMENT from the supplied headers.
+
+=cut
+
+sub determine_instrument {
+  my ($FITS) = @_;
+
+  my %instruments;
+  for my $f (keys %$FITS) {
+    my $oa = get_orac_instrument( $FITS->{$f} );
+    die "Unable to determine ORAC_INSTRUMENT for file '$f'\n"
+    unless defined $oa;
+    $instruments{$oa}++;
+  }
+  if (keys %instruments > 1) {
+    die "Can not process files from multiple instruments (" .
+        join(",",keys %instruments).")\n";
+  }
+  # get the single instrument
+  my ($oracinst) = keys %instruments;
+  return $oracinst;
 }
 
 =item run_pipeline
