@@ -866,6 +866,11 @@ It is called by I<prepare_and_insert> method.
 
       for my $name ( @adjust ) {
 
+        if ( $name eq 'INBEAM' ) {
+
+          $self->save_inbeam( $headers  );
+        }
+
         $self->_delete_header( 'headers' => $headers,
                                 'name'   => $name,
                                 'test'   =>
@@ -1362,6 +1367,27 @@ sub is_simulation {
   }
 
   return;
+}
+
+sub save_inbeam {
+
+  my ( $self, $header ) = @_;
+
+  my $name  = 'INBEAM';
+  my $saved = lc( $name . '_orig' );
+
+  my @val =
+      $self->_find_header( 'headers' => $header,
+                            'name'   => $name,
+                            'value'  => 1,
+                            'cond-name'        => 'SEQ_TYPE',
+                            'cond-value-regex' =>
+                              qr{\b(?: science | pointing | focus )\b}xi
+                          )
+                          or return;;
+
+  $header->{ $saved } = join ' ', @val;
+  return 1;
 }
 
 =item B<add_subsys_obs>
@@ -3255,7 +3281,8 @@ sub _find_header {
 
   my ( $self, %args ) = @_;
 
-  my ( $head, $name, $val_re ) = @args{qw[ headers name value-regex ]};
+  my ( $head, $name, $val_re, $cond_name, $cond_val_re ) =
+    @args{qw[ headers name value-regex cond-name cond-value-regex ]};
 
   defined $val_re && ! ref $val_re
     and $val_re = qr{\b${val_re}\b}x;
@@ -3283,14 +3310,31 @@ sub _find_header {
              ) {
 
     my $val = $test->( $h, $name ) ? $h->{ $name } : undef;
+
+    # Return, or save for later return, only if another header value matches.
+    my $cond_val =
+      defined $cond_name && $test->( $h, $cond_name )
+      ? $h->{ $cond_name }
+      : undef
+      ;
+    if ( defined $cond_val ) { $cond_val =~ $cond_val_re or next; }
+
     if ( defined $val  ) {
 
       defined $val_re
         and return $val =~ $val_re;
 
-      return
-        exists $args{'value'} ? $val : 1 ;
+      exists $args{'value'} or return 1;
+      ! wantarray() and return $val ;
+
+      $args{'store'}->{ $val } = undef;
     }
+  }
+  if ( wantarray() && defined $args{'store'} ) {
+
+    my %seen;
+    return grep !$seen{ $_ }++,
+              map { split ' ', $_ } keys %{ $args{'store'} };
   }
 
   # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
