@@ -18,7 +18,7 @@ sub column_names {
         elend elstart etal
         focaxis focstep focus_dz frlegten frlegtst
         hstend hststart humend humstart
-        inbeam instap instap_x instap_y instrume int_time
+        inbeam inbeam_orig instap instap_x instap_y instrume int_time
         jigl_cnt jigl_crd jigl_nam jigl_pa jig_scal jos_min jos_mult
         last_modified lat_obs locl_crd long_obs lstend lststart
         map_hght map_pa map_wdth map_x map_y msbid msbtid
