@@ -23,6 +23,8 @@ our @EXPORT_OK = qw/prepare_environment prepare_environment_cadc
                     run_pipeline capture_products
                     clean_directory_final clean_directory_pre_capture/;
 
+our $VERSION = '0.03';
+
 =head1 SUBROUTINES
 
 =over 4
