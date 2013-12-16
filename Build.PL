@@ -40,7 +40,7 @@ my $build = Module::Build->new
                        / ],
    meta_merge => {
                resources =>  {
-                              repository => "git://starlink.jach.hawaii.edu/perl-JSA.git",
+                              repository => "git://github.com/jac-h/perl-JSA.git",
                              },
                 },
    requires => {
