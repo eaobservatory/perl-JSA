@@ -1,26 +1,172 @@
 ---
-name: JSA
-version: 0.02
+abstract: 'JCMT Science Archive helper functions'
 author:
   - 'Tim Jenness <t.jenness@jach.hawaii.edu>'
   - 'Anubhav Agarwal <a.agarwal@jach.hawaii.edu>'
   - 'Brad Cavanagh <b.cavanagh@jach.hawaii.edu>'
-abstract: JCMT Science Archive helper functions
-license: gpl
-resources:
-  license: http://opensource.org/licenses/gpl-license.php
-  repository: /jac_sw/gitroot/perl-JSA.git
+build_requires:
+  JAC::Setup: 0.02
+  Test::Command: 0
+  Test::More: 0
+configure_requires:
+  Module::Build: 0.3
+dynamic_config: 1
+generated_by: 'Module::Build version 0.4007, CPAN::Meta::Converter version 2.120630'
+license: open_source
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: JSA
+provides:
+  JSA::CADC_Copy:
+    file: lib/JSA/CADC_Copy.pm
+    version: 0
+  JSA::CADC_DP:
+    file: lib/JSA/CADC_DP.pm
+    version: 0
+  JSA::Command:
+    file: lib/JSA/Command.pm
+    version: 0
+  JSA::Convert:
+    file: lib/JSA/Convert.pm
+    version: 0
+  JSA::DB:
+    file: lib/JSA/DB.pm
+    version: 0
+  JSA::DB::Sybase:
+    file: lib/JSA/DB/Sybase.pm
+    version: 0
+  JSA::DB::TableCOMMON:
+    file: lib/JSA/DB/TableCOMMON.pm
+    version: 0
+  JSA::DB::TableTransfer:
+    file: lib/JSA/DB/TableTransfer.pm
+    version: 0
+  JSA::Datetime:
+    file: lib/JSA/Datetime.pm
+    version: 0
+  JSA::Datetime::Sybase:
+    file: lib/JSA/Datetime/Sybase.pm
+    version: 0
+  JSA::EnterData:
+    file: lib/JSA/EnterData.pm
+    version: 0
+  JSA::EnterData::ACSIS:
+    file: lib/JSA/EnterData/ACSIS.pm
+    version: 0
+  JSA::EnterData::DAS:
+    file: lib/JSA/EnterData/DAS.pm
+    version: 0
+  JSA::EnterData::Instrument:
+    file: lib/JSA/EnterData/Instrument.pm
+    version: 0
+  JSA::EnterData::SCUBA2:
+    file: lib/JSA/EnterData/SCUBA2.pm
+    version: 0
+  JSA::Error:
+    file: lib/JSA/Error.pm
+    version: 11161
+  JSA::Error::BadArgs:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::BadEnv:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::BadExec:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::BadFITSHeader:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::BadFile:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::CADCDB:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::Conversion:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::DBError:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::DataRead:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::DirectoryNotFound:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::FatalError:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::Starlink:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Error::StarlinkCommand:
+    file: lib/JSA/Error.pm
+    version: 0
+  JSA::Files:
+    file: lib/JSA/Files.pm
+    version: 0
+  JSA::Headers:
+    file: lib/JSA/Headers.pm
+    version: 0
+  JSA::Headers::CADC:
+    file: lib/JSA/Headers/CADC.pm
+    version: 0
+  JSA::Headers::Starlink:
+    file: lib/JSA/Headers/Starlink.pm
+    version: 0
+  JSA::LogInitialize:
+    file: lib/JSA/LogInitialize.pm
+    version: 0
+  JSA::LogSetup:
+    file: lib/JSA/LogSetup.pm
+    version: 0
+  JSA::Logging:
+    file: lib/JSA/Logging.pm
+    version: 0
+  JSA::QA:
+    file: lib/JSA/QA.pm
+    version: 1.00
+  JSA::QA::GBS:
+    file: lib/JSA/QA.pm
+    version: 0
+  JSA::QA::NGS:
+    file: lib/JSA/QA.pm
+    version: 0
+  JSA::QA::Result:
+    file: lib/JSA/QA/Result.pm
+    version: 0
+  JSA::QA::SLS:
+    file: lib/JSA/QA.pm
+    version: 0
+  JSA::QA::Telescope:
+    file: lib/JSA/QA.pm
+    version: 0
+  JSA::Starlink:
+    file: lib/JSA/Starlink.pm
+    version: 0
+  JSA::Verbosity:
+    file: lib/JSA/Verbosity.pm
+    version: 0
+  JSA::WrapDR:
+    file: lib/JSA/WrapDR.pm
+    version: 0.03
+recommends:
+  DBD::Sybase: 0
 requires:
   Astro::Coords: 0
   Astro::FITS::HdrTrans: 1
   Astro::FITS::Header: 3
   Config::IniFiles: 0
-  DBD::Sybase: 0
   DateTime: 0
+  File::HomeDir: 0
   File::Remove: 0
   File::Temp: 0.2
   Image::ExifTool: 0
   JAC::Setup: 0.01
+  Log::Log4perl: 0
   NDF: 0
   Pod::Usage: 0
   Proc::SafeExec: 0
@@ -28,95 +174,8 @@ requires:
   Statistics::Descriptive: 0
   Time::Piece: 0
   URI: 0
-  perl: 5.8.0
-build_requires:
-  JAC::Setup: 0.02
-  Test::Command: 0
-  Test::More: 0
-provides:
-  JSA::CADC_Copy:
-    file: lib/JSA/CADC_Copy.pm
-  JSA::CADC_DP:
-    file: lib/JSA/CADC_DP.pm
-  JSA::Command:
-    file: lib/JSA/Command.pm
-  JSA::Convert:
-    file: lib/JSA/Convert.pm
-  JSA::DB:
-    file: lib/JSA/DB.pm
-  JSA::DB::Sybase:
-    file: lib/JSA/DB/Sybase.pm
-  JSA::DB::TableCOMMON:
-    file: lib/JSA/DB/TableCOMMON.pm
-  JSA::DB::TableTransfer:
-    file: lib/JSA/DB/TableTransfer.pm
-  JSA::Datetime:
-    file: lib/JSA/Datetime.pm
-  JSA::Datetime::Sybase:
-    file: lib/JSA/Datetime/Sybase.pm
-  JSA::EnterData:
-    file: lib/JSA/EnterData.pm
-  JSA::EnterData::ACSIS:
-    file: lib/JSA/EnterData/ACSIS.pm
-  JSA::EnterData::Instrument:
-    file: lib/JSA/EnterData/Instrument.pm
-  JSA::EnterData::SCUBA2:
-    file: lib/JSA/EnterData/SCUBA2.pm
-  JSA::Error:
-    file: lib/JSA/Error.pm
-    version: 11161
-  JSA::Error::BadArgs:
-    file: lib/JSA/Error.pm
-  JSA::Error::BadEnv:
-    file: lib/JSA/Error.pm
-  JSA::Error::BadExec:
-    file: lib/JSA/Error.pm
-  JSA::Error::BadFITSHeader:
-    file: lib/JSA/Error.pm
-  JSA::Error::BadFile:
-    file: lib/JSA/Error.pm
-  JSA::Error::CADCDB:
-    file: lib/JSA/Error.pm
-  JSA::Error::Conversion:
-    file: lib/JSA/Error.pm
-  JSA::Error::DBError:
-    file: lib/JSA/Error.pm
-  JSA::Error::DataRead:
-    file: lib/JSA/Error.pm
-  JSA::Error::DirectoryNotFound:
-    file: lib/JSA/Error.pm
-  JSA::Error::FatalError:
-    file: lib/JSA/Error.pm
-  JSA::Error::Starlink:
-    file: lib/JSA/Error.pm
-  JSA::Error::StarlinkCommand:
-    file: lib/JSA/Error.pm
-  JSA::Files:
-    file: lib/JSA/Files.pm
-  JSA::Headers:
-    file: lib/JSA/Headers.pm
-  JSA::Headers::Starlink:
-    file: lib/JSA/Headers/Starlink.pm
-  JSA::LogSetup:
-    file: lib/JSA/LogSetup.pm
-  JSA::QA:
-    file: lib/JSA/QA.pm
-    version: 1.00
-  JSA::QA::GBS:
-    file: lib/JSA/QA.pm
-  JSA::QA::NGS:
-    file: lib/JSA/QA.pm
-  JSA::QA::Result:
-    file: lib/JSA/QA/Result.pm
-  JSA::QA::SLS:
-    file: lib/JSA/QA.pm
-  JSA::QA::Telescope:
-    file: lib/JSA/QA.pm
-  JSA::Starlink:
-    file: lib/JSA/Starlink.pm
-  JSA::Verbosity:
-    file: lib/JSA/Verbosity.pm
-generated_by: Module::Build version 0.3
-meta-spec:
-  url: http://module-build.sourceforge.net/META-spec-v1.2.html
-  version: 1.2
+  perl: v5.8.0
+resources:
+  license: http://opensource.org/licenses/gpl-license.php
+  repository: git://github.com/jac-h/perl-JSA.git
+version: 0.03
