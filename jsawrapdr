@@ -515,7 +515,8 @@ my %drhdrs = read_headers( @drfiles );
 convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
                               dpdate => DateTime->now->datetime } );
 
-clean_directory_pre_capture($outdir, \%all_existing_files)
+clean_directory_pre_capture($outdir, \%all_existing_files,
+                            \&looks_like_cadcfile)
     if $cleanup eq 'cadc';
 
 capture_products($id, $persist, $transdir,

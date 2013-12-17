@@ -13,7 +13,7 @@ use File::Spec;
 use File::Temp;
 
 use JSA::Command qw/run_command/;
-use JSA::Files qw/looks_like_cadcfile scan_dir/;
+use JSA::Files qw/scan_dir/;
 use JSA::Headers qw/get_orac_instrument/;
 use JSA::Logging qw/log_message log_command/;
 
@@ -258,7 +258,7 @@ Clean up for CADC if required.
 =cut
 
 sub clean_directory_pre_capture {
-  my ($outdir, $existing_files) = @_;
+  my ($outdir, $existing_files, $filter) = @_;
 
   # Do not want to cleanup files that were present before the
   # command began
@@ -267,7 +267,7 @@ sub clean_directory_pre_capture {
   for my $file (keys %post_all) {
     if (! exists $existing_files->{$file}) {
       # was not previously here
-      if (! looks_like_cadcfile( $file ) ) {
+      if (! $filter->( $file ) ) {
         # does not look like a CADC file
         # do not check status
         unlink File::Spec->catfile( $outdir, $file );
