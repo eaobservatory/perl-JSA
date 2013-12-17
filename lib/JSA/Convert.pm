@@ -44,7 +44,9 @@ use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    merge_pngs want_to_send_to_cadc /;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf convert_dr_files list_convert_plan /;
+our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf
+                     convert_dr_files list_convert_plan
+                     ndf2fits /;
 
 our $DEBUG = 0;
 
@@ -358,20 +360,15 @@ sub rename_png {
 
 }
 
-=back
-
-=begin PRIVATE__SUBS
-
-=head1 PRIVATE FUNCTIONS
-
-=over 4
-
 =item B<ndf2fits>
 
 Convert NDF to FITS format using NDF2FITS command.
 
   ndf2fits( $infile, $outfile )
     or die "Error converting to fits";
+
+This is a low level subroutine.  JSA software should generally
+call the convert_to_fits wrapper subroutine instead.
 
 =cut
 
@@ -415,6 +412,14 @@ sub ndf2fits {
   run_star_command( @args );
   return 1;
 }
+
+=back
+
+=begin PRIVATE__SUBS
+
+=head1 PRIVATE FUNCTIONS
+
+=over 4
 
 =item B<fits2ndf>
 
