@@ -174,8 +174,6 @@ sub convert_dr_files {
 
         print "Converting file $file\n" if $DEBUG;
 
-        my $assoc = $href->{$file}->value( "ASN_TYPE" );
-
         # Copy the file to the temporary directory, if necessary.
         my $tfile = $file;
         if( defined( $opts->{tempdir} ) ) {
