@@ -114,10 +114,15 @@ sub get_orac_instrument {
   }
 
   my $instrument = $class->to_INSTRUMENT( \%fits );
-  my $backend = $class->to_BACKEND( \%fits );
+  my $backend = $class->can('to_BACKEND') ? $class->to_BACKEND( \%fits )
+                                          : undef;
 
   my $oa;
-  if ($backend eq 'ACSIS' || $backend eq 'DAS' || $backend eq 'AOSC') {
+  unless (defined $backend) {
+    # Without knowing the backend, must just use the instrument name.
+    $oa = $instrument;
+  }
+  elsif ($backend eq 'ACSIS' || $backend eq 'DAS' || $backend eq 'AOSC') {
     $oa = "ACSIS";
   } elsif ($instrument eq 'SCUBA-2') {
     $oa = 'SCUBA2';
