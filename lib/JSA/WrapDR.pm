@@ -11,6 +11,7 @@ use warnings;
 
 use File::Spec;
 use File::Temp;
+use FindBin;
 
 use JSA::Command qw/run_command/;
 use JSA::Files qw/scan_dir/;
