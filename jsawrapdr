@@ -163,8 +163,6 @@ These questions relate mainly to non-CADC usage:
 use strict;
 use warnings;
 
-use FindBin;
-
 use Getopt::Long qw/ GetOptionsFromString /;
 use Pod::Usage;
 use File::Spec;
