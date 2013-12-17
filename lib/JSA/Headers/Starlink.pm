@@ -55,6 +55,7 @@ following allowed keys:
  - mode: Processing mode ("night", "project", "public")
  - dpdate: Date of processing in ISO8601 format
  - dpid  : Recipe instance ID associated with this processing
+ - instream: Alternative INSTREAM header (default JCMT)
 
 This function does not return anything.
 
@@ -65,6 +66,10 @@ sub update_fits_headers {
 
   my $options = shift;
   my $mode = lc( $options->{'mode'} );
+  my $instream = (exists $options->{'instream'} and
+                  defined $options->{'instream'})
+                      ? uc($options->{'instream'})
+                      : 'JCMT';
 
   check_star_env( "KAPPA", "fitsmod" );
 
@@ -72,7 +77,7 @@ sub update_fits_headers {
   # of more. For efficiency we only want to call FITSMOD once
   # so we create a command file
   my $tmpfile = File::Temp->new();
-  print $tmpfile "A INSTREAM JCMT Source of input stream\n";
+  print $tmpfile "A INSTREAM $instream Source of input stream\n";
 
   # Get the FITS headers.
   my $header = read_header( $file );
