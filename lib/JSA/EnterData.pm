@@ -1845,6 +1845,8 @@ sub _fill_in_sql {
 
     %val_format =
       ( 'int'     => '%d',
+        'tinyint' => '%d',
+        'bigint'  => '%d',
         'bit'     => '%d',
         'boolean' => '%d',
         'decimal' => '%0.16f',
