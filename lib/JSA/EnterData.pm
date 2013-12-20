@@ -1835,7 +1835,7 @@ sub _fill_in_sql {
 
   sub _init_num_regex {
 
-    $num_re = qr{\b ( decimal | boolean | float | real | int | bit )}xi
+    $num_re = qr{\b ( decimal | boolean | float | real | (?:tiny|big)? int | bit )}xi
       unless $num_re;
 
     return;
