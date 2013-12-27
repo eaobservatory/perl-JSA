@@ -443,7 +443,7 @@ sub query_dpstate {
 
   # We want to restrict our results to recipes that are relevant for us.
   # This means all recipes using jsawrapdr
-  my $script = $filters->{'script'} // 'jsawrapdr';
+  my $script = $filters{'script'} // 'jsawrapdr';
   my @results = runQuery( $dbh,
                           "SELECT recipe_id from dp_recipe where script_name=\"$script\"");
   my @recipes = map { $_->{recipe_id} } @results;
