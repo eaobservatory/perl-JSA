@@ -256,8 +256,13 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $backend = uc( $hdr->{'BACKEND'} );
 
     # No reduciton recipe at CADC yet for (FTS|POL)-2.
-    obs_is_fts2_or_pol2( $hdr->{'INBEAM_ORIG'} )
-      and warn "skipped fts2/pol2\n" , next;
+    if ( obs_is_fts2_or_pol2( $hdr->{'INBEAM_ORIG'} ) ) {
+
+      log_message( sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction\n",
+                      $obs->obsid()
+                  );
+      next;
+    }
 
     # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
     # ACSIS.
