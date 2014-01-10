@@ -157,6 +157,9 @@ following optional keys:
           Default will be CADC_DPREC_8G.
  - script: Name of the data reduction wrapper script.  Defaults to
            "jsawrapdr".
+ - extra_parameters: A reference to a hash of extra parameters.  (Intended for use
+                     when this subroutine is called from outside the JSA module,
+                     otherwise parameters can be added to this subroutine directly.)
 
 This function returns the recipe instance ID on success, or undef for failure. Returns
 "-0x???" if the recipe could not be inserted because an entry already exists that is in
@@ -176,6 +179,10 @@ sub create_recipe_instance {
   my $drparams = ( defined $options->{drparams} ? $options->{drparams} : "" );
   my $script = $options->{'script'} // 'jsawrapdr';
   my $tag = $options->{tag};
+
+  my $extra_parameters = $options->{'extra_parameters'};
+  die 'create_recipe_instance: extra_parameters is not a hash reference'
+      if (defined $extra_parameters) && ! ('HASH' eq ref $extra_parameters);
 
   # Default to medium priority. Note that this differs to the CADC default of -500.
   my $priority = -1;
@@ -273,7 +280,7 @@ ENDRECIPEID
   $dp_recipe_instance{project} = $queue if defined $queue;
 
   # DR parameters
-  if ( defined $mode || defined $recpars || defined $drparams) {
+  if ( defined $mode || defined $recpars || defined $drparams || defined $extra_parameters ) {
     my @paramlist;
     push(@paramlist, "-mode='$mode'") if defined $mode;
 
@@ -282,6 +289,12 @@ ENDRECIPEID
     push(@droptions, $drparams) if $drparams;
     push(@paramlist, "-drparameters='". join(" ", @droptions) ."'")
       if @droptions;
+
+    if (defined $extra_parameters) {
+        while (my ($ep_key, $ep_val) = each %$extra_parameters) {
+            push @paramlist, "--$ep_key='$ep_val'";
+        }
+    }
 
     $dp_recipe_instance{parameters} = join(" ", @paramlist);
   }
