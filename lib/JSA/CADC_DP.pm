@@ -157,6 +157,10 @@ following optional keys:
           Default will be CADC_DPREC_8G.
  - script: Name of the data reduction wrapper script.  Defaults to
            "jsawrapdr".
+ - dprecipe_tag: A recipe description to search for in the "dp_recipe" table,
+                 for use only from outside of the JSA module for recipes which
+                 don't match one of the JSA recipe descriptions and therefore
+                 can't be identified via the dprecipe option.
  - extra_parameters: A reference to a hash of extra parameters.  (Intended for use
                      when this subroutine is called from outside the JSA module,
                      otherwise parameters can be added to this subroutine directly.)
@@ -205,22 +209,28 @@ sub create_recipe_instance {
   # First, find the recipe_id for jsawrapdr
   ###############################################
 
-  # Default to 8G
-  my $dp_recipe_const = ( defined $options->{dprecipe} ? $options->{dprecipe} :
-                          CADC_DPREC_8G );
+  my $dp_recipe_tag;
+  if (defined $options->{'dprecipe_tag'} and exists $options->{'dprecipe_tag'}) {
+    $dp_recipe_tag = $options->{'dprecipe_tag'};
+  }
+  else {
+    # Default to 8G
+    my $dp_recipe_const = ( defined $options->{dprecipe} ? $options->{dprecipe} :
+                            CADC_DPREC_8G );
 
-  # Need to map the processing constant to something that can be looked for
-  # in the database table
-  my %DPRECMAP = (# Do not use => as the key is the value of the constant
-                  CADC_DPREC_8G, "8G",
-                  CADC_DPREC_16G, "16G",
-                  CADC_DPREC_64G, "64G",
-               );
+    # Need to map the processing constant to something that can be looked for
+    # in the database table
+    my %DPRECMAP = (# Do not use => as the key is the value of the constant
+                    CADC_DPREC_8G, "8G",
+                    CADC_DPREC_16G, "16G",
+                    CADC_DPREC_64G, "64G",
+                 );
 
-  # Work out the corresponding string
-  throw JSA::Error::CADCDB( "DP recipe constant does not match a known value" )
-    unless exists $DPRECMAP{$dp_recipe_const};
-  my $dp_recipe_tag = $DPRECMAP{$dp_recipe_const};
+    # Work out the corresponding string
+    throw JSA::Error::CADCDB( "DP recipe constant does not match a known value" )
+      unless exists $DPRECMAP{$dp_recipe_const};
+    $dp_recipe_tag = $DPRECMAP{$dp_recipe_const};
+  }
 
   $sql = <<ENDRECIPEID;
 select recipe_id
