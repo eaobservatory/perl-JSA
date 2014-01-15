@@ -496,7 +496,8 @@ if( ! $skipdp ) {
 }
 
 run_pipeline($useoracdr, $oracinst, $indir, $outdir,
-             ($skipdp ? "$ut" : \@files), $drparameters);
+             ($skipdp ? "$ut" : \@files), $drparameters,
+             {batch => 1});
 
 # Process NDF data products and convert them into FITS
 #  - Need to filter provenance

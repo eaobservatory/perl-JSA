@@ -130,7 +130,7 @@ dpRetrieve-skipping mode, a string containing the UT date.
 
 sub run_pipeline {
   my ($useoracdr, $oracinst, $indir, $outdir, $files_or_ut,
-      $drparameters) = @_;
+      $drparameters, $options) = @_;
 
   # We want normal messages from Starlink subsystem
   $ENV{MSG_FILTER} = "NORM" unless exists $ENV{MSG_FILTER};
@@ -173,7 +173,9 @@ sub run_pipeline {
                  "-log","hs",
                  "-verbose",
                  "-recsuffix", "ADV,CADC",
-                 "-batch" );
+                 );
+
+    push @drcommand, '-batch' if $options->{'batch'};
 
     # In "skip dpRetrieve" mode there is no list of files, but a UT
     # date instead.
