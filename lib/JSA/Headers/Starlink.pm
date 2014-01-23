@@ -56,6 +56,8 @@ following allowed keys:
  - dpdate: Date of processing in ISO8601 format
  - dpid  : Recipe instance ID associated with this processing
  - instream: Alternative INSTREAM header (default JCMT)
+ - fitsmod_extra: List of extra commands to give to FITSMOD
+                  as if entered with MODE=FILE
 
 This function does not return anything.
 
@@ -102,6 +104,10 @@ sub update_fits_headers {
   }
   if (exists $options->{dpid} && defined $options->{dpid}) {
     print $tmpfile "A DPRCINST ".$options->{dpid}." Data processing recipe instance ID\n";
+  }
+  if (exists $options->{'fitsmod_extra'}
+      and defined $options->{'fitsmod_extra'}) {
+    print $tmpfile $_ . "\n" foreach @{$options->{'fitsmod_extra'}};
   }
 
   close($tmpfile);
