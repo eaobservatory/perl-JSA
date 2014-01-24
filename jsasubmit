@@ -256,10 +256,11 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $backend = uc( $hdr->{'BACKEND'} );
 
     # No reduciton recipe at CADC yet for (FTS|POL)-2.
-    if ( obs_is_fts2_or_pol2( $hdr->{'INBEAM_ORIG'} ) ) {
+    if ( obs_is_fts2_or_pol2_RECIPE( $backend, $obs->drrecipe() ) ) {
 
-      log_message( sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction\n",
-                      $obs->obsid()
+      log_message( sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction %s\n",
+                      $obs->obsid(),
+                      'based on recipe value'
                   );
       next;
     }
@@ -594,21 +595,30 @@ exit;
 
 }
 
-# Tell if an observation is FTS-2 or POL-2 type.
-sub obs_is_fts2_or_pol2 {
+{
+  my %skip_recipe;
 
-  my ( $inbeam ) = @_;
+  # Tell if an observation is FTS-2 or POL-2 type by recipe.
+  sub obs_is_fts2_or_pol2_RECIPE {
 
-  defined $inbeam or return;
+    my ( $backend, $recipe ) = @_;
 
-  # Possible values to be found in INBEAM header.
-  my @fts2 = (qw/ fts2 /);
-  my @pol2 = map { qq/pol2_${_}/ } (qw/ ana cal wave /);
+    defined $recipe && defined $backend && $backend =~ m{^ scuba-?2 $}xi
+      or return;
 
-  my $re = join '|', @fts2, @pol2;
-     $re = qr{\b(?:$re)\b}i;
+    unless ( keys %skip_recipe ) {
 
-  return $inbeam =~ $re;
+      %skip_recipe = map { $_ => undef } qw(  REDUCE_FTS2
+                                              REDUCE_FTS_FOCUS
+                                              REDUCE_FTS_POINTING
+                                              REDUCE_FTS_SCAN
+                                              REDUCE_FTS_ZPD
+                                              REDUCE_POL_STARE
+                                            );
+    }
+
+    return exists $skip_recipe{ uc $recipe };
+  }
 }
 
 # Quick routine to retrieve OBSIDSS
