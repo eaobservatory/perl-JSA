@@ -1996,7 +1996,7 @@ sub prepare_update_hash {
 
   unless ( $unique_key ) {
 
-    $log->logdie( "Major problem with table name: '$table'\n" );
+    $log->logdie( "No unique keys found for table name: '$table'\n" );
   }
 
   my $unique_val = $field_values->{$unique_key};
