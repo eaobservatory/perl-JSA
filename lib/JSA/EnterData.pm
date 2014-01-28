@@ -61,9 +61,11 @@ use JSA::DB::TableCOMMON;
 use JSA::EnterData::ACSIS;
 use JSA::EnterData::DAS;
 use JSA::EnterData::SCUBA2;
+use JSA::EnterData::StarCommand;
+use JSA::EnterData::TileList;
 use JSA::Error qw[ :try ];
 use JSA::Files qw[ looks_like_rawfile ];
-use JSA::Starlink qw[ run_star_command ];
+use JSA::WriteList ();
 use JSA::DB::TableTransfer;
 use JCMT::DataVerify;
 
@@ -85,6 +87,8 @@ BEGIN {
   # Make sure that bad status from SMURF triggers bad exit status
   $ENV{ADAM_EXIT} = 1;
 }
+
+our $SKIP_TILE_LIST = 1;
 
 {
   my %default =
@@ -686,6 +690,7 @@ set.  File paths are fetched from database unless otherwise specified.
 
       $columns->{$name} = $self->get_columns( $inst->table, $dbh );
       $columns->{FILES} = $self->get_columns( 'FILES', $dbh );
+      $columns->{TILES} = $self->get_columns( 'TILES', $dbh );
 
       # Need to create a hash with keys corresponding to the observation number
       # (an array won't be very efficient since observations can be missing and
@@ -860,6 +865,8 @@ It is called by I<prepare_and_insert> method.
     my @adjust = ( 'INBEAM' );
 
     my ( $shutter_re, $empty_re ) = ( qr{\b SHUTTER \b}ix, qr{^\s*$} );
+
+    my %tile;
     for my $obs ( @{ $run_obs } ) {
 
       my $headers = $obs->hdrhash();
@@ -902,6 +909,12 @@ It is called by I<prepare_and_insert> method.
 
         my ( $hash , $array ) = $inst->transform_header( $headers );
         $obs->hdrhash( $hash );
+      }
+
+      my @tmp = $self->get_tiles( $obs );
+      if ( scalar @tmp ) {
+
+        undef $tile{ $obs->obsid() }->{ $_ } for @tmp;
       }
     }
 
@@ -975,6 +988,33 @@ It is called by I<prepare_and_insert> method.
                                   'headers'  => $common_hdrs,
                                 );
 
+    if ( $dbh->err() ) {
+
+      my $text = $dbh->errstr();
+
+      $db->rollback_trans();
+      $self->_print_error_simple_dup( $text );
+
+      return ( 'nothing-to-do' , 'ignored duplicate insert' )
+        if $self->_is_insert_dup_error( $text );
+
+      return ( 'error', $text );
+    }
+
+    my %tile_header;
+    for my $obsid ( keys %tile ) {
+
+      $tile_header{'OBSID'} = $obsid;
+      $tile_header{'TILE'}  = [ keys %{ $tile{ $obsid } } ];
+    }
+
+
+    $error =
+      $self->_modify_db_on_obsend( %pass_arg,
+                                  'dbhandle' => $dbh,
+                                  'table'    => 'TILES',
+                                  'headers'  => { %tile_header }
+                                );
     if ( $dbh->err() ) {
 
       my $text = $dbh->errstr();
@@ -1632,7 +1672,7 @@ sub insert_hash {
   }
 
   my ( @prim_key );
-  if ( $table eq 'FILES' ) {
+  if ( any { $table eq $_ } 'FILES', 'TILES' ) {
 
     my $prim_key = _get_primary_key( $table );
     @prim_key = ref $prim_key ? @{ $prim_key } : $prim_key ;
@@ -2227,6 +2267,7 @@ sub _get_primary_key {
       'COMMON' => 'obsid',
       'FILES'  => [qw{ obsid_subsysnr file_id }],
       'SCUBA2' => 'obsid_subsysnr',
+      'TILES'  => [qw{ obsid tile }],
       'transfer' => 'file_id',
     );
 
@@ -2725,6 +2766,175 @@ sub create_dictionary {
   return %dict;
 }
 
+=item B<get_tiles>
+
+Returns a list of tile numbers given L<OMP::Info:Obs> object.
+
+L<JSA::Error> exception is thrown if there are problems executing
+C<jsatilenum>.
+
+  @num = $enter->get_tiles( $obs );
+
+=cut
+
+sub get_tiles {
+
+  my ( $self, $obs ) = @_;
+
+  $self->skip_tile_list( 'obs' => $obs ) and return;
+
+  my $log = Log::Log4perl->get_logger( '' );
+
+  my $files = [ $obs->filename() ];
+
+  my $temp = File::Temp->new( 'template' => _file_template( 'tile' ) );
+  $temp->unlink_on_destroy( 1 );
+  JSA::WriteList::write_list( $temp->filename(), $files )
+    or return;
+
+  my $err_obs = sprintf q[%s OBSID, %s OBS_TYPE],
+                  $obs->obsid(),
+                  $self->_find_header(  'headers' => $obs->hdrhash(),
+                                        'name'    => 'OBS_TYPE',
+                                        'value'   => 1
+                                      ) ;
+
+  my ( $start, $end ) = map { $files->[$_] } 0, -1;
+  my $err_file = $start ne $end ? qq[$start .. $end] : $start;
+     $err_file = $#$files . qq[ file(s) $err_file];
+
+  $self->_debug_text( qq[Getting tiles for ($err_obs) $err_file] );
+
+  my @command;
+  try {
+
+    @command = JSA::EnterData::TileList->get_file_command( $temp );
+  }
+  catch JSA::Error::BadArgs with {
+
+    my ( $e ) = @_;
+    $log->error( 'Error while getting tile number command: ' . $e->text() );
+  };
+
+  my $starcom = JSA::EnterData::StarCommand->new();
+  $starcom->verbose( $self->debug() ? 3 : $self->verbosity() );
+
+  my $run_err = qq[Error running tilelist for ($err_obs) $err_file\n];
+  my $ok;
+  try {
+
+    $ok = $starcom->try_command(  'command' => [ @command ],
+                                  'error-text' => $run_err
+                                );
+
+  }
+  catch JSA::Error::BadExec with {
+
+    my ( $err ) = @_;
+    $log->warn( q[Exec failed of tilelist: ] . $err->text() );
+    throw JSA::Error::BadExec $err;
+  }
+  finally {
+
+    #JSA::WriteList::clear_list();
+  };
+
+  $ok or return;
+
+  my $key  = 'TILES';
+  my %tile = $starcom->get_value( $key );
+  my @num  = $tile{ $key } // return;
+  return
+    ( grep looks_like_number( $_ ), map { split / +/, $_ } @num );
+}
+
+=item B<skip_obs_calc>
+
+Given a hash of C<headers> key with L<OMP::Info::Obs> object header hash
+reference (or C<obs> key & L<OMP::Info::Obs> object); and C<test> as key & hash
+reference of header name and related values as regular expression, returns a
+truth value if observation should be skipped.
+
+Throws L<JSA::Error::BadArgs> exception when headers (or L<*::Obs> object) are
+missing or C<test> hash reference value is missing.
+
+  print "skipped obs"
+    if $enter->skip_obs_calc( 'headers' => $obs->hdrhash(),
+                              'test' =>
+                                { 'OBS_TYPE' => qr{\b(?: skydip | FLAT_?FIELD  )\b}xi
+                                }
+                            );
+
+=cut
+
+sub skip_obs_calc {
+
+  my ( $self, %arg ) = @_;
+
+  # Skip list.
+  my %test =
+      exists $arg{'test'} && defined $arg{'test'} ? %{ $arg{'test' } } : ();
+
+  scalar keys %test
+    or throw JSA::Error::BadArgs( qq[No "test" hash reference given.] );
+
+  my $header;
+  if ( exists $arg{'headers'} ) {
+
+    defined $arg{'headers'}
+      or throw JSA::Error::BadArgs( qq[No "headers" value given to check if to find bounding box.] );
+
+    $header = $arg{'headers'};
+  }
+  else {
+
+    exists $arg{'obs'} && defined $arg{'obs'}
+      or  JSA::Error::BadArgs( qq[No "obs" value given to check if to find bounding box.] );
+
+    $header = $arg{'obs'}->hdrhash()
+      or  JSA::Error::BadArgs( qq[Could not get header hash from "$arg{'obs'}"] );
+  }
+
+  for my $name ( sort keys %test ) {
+
+    $self->_find_header(  'headers' => $header,
+                          'name'    => $name,
+                          'value-regex' => $test{ $name }
+                        )
+                        or next;
+
+    $self->_debug_text( qq[Matched "$name" with $test{ $name }; obs may be skipped.] );
+    return 1;
+  }
+
+  return;
+}
+
+=iten B<skip_tile_list>
+
+Given a C<OMP::Info::Obs> object header hash reference -- or an
+C<OMP::Info::Obs> object -- as a hash, returns a truth value if
+tile list should not be generated.
+
+  print "skipped tile list"
+    if $enter->skip_tile_list(  'headers' => $obs->hdrhash(),
+                                'test' =>
+                                  { 'OBS_TYPE' => qr{\b(?: skydip | noise )\b}xi
+                                  }
+                              );
+=cut
+
+sub skip_tile_list {
+
+  my ( $self, %arg ) = @_;
+
+  $SKIP_TILE_LIST and return 1;
+
+  my $skip = qr{\b (?: skydips? | noise ) \b}xi;
+
+  return $self->skip_obs_calc( 'test' => { 'OBS_TYPE' => $skip }, %arg );
+}
+
 =item B<skip_calc_radec>
 
 Given a C<OMP::Info::Obs> object header hash reference -- or an
@@ -2744,7 +2954,7 @@ regular expressions ...
 
   print "skipped calc_radec()"
     if $enter->skip_calc_radec( 'headers' => $obs->hdrhash(),
-                                'skip' =>
+                                'test' =>
                                   { 'OBS_TYPE' => qr{\b(?: skydip | FLAT_?FIELD  )\b}xi
                                   }
                               );
@@ -2755,43 +2965,9 @@ sub skip_calc_radec {
 
   my ( $self, %arg ) = @_;
 
-  # Skip list.
-  my %list =
-    ( 'OBS_TYPE' => qr{\b skydips? \b}xi,
-      ( exists $arg{'skip'} && defined $arg{'skip'} ? %{ $arg{'skip' } } : () )
-    );
+  my $skip = qr{\b skydips? \b}xi;
 
-  my $header;
-  if ( exists $arg{'headers'} ) {
-
-    defined $arg{'headers'}
-      or throw JSA::Error::BadArgs( qq[No "headers" value given to check if to find bounding box.] );
-
-    $header = $arg{'headers'};
-  }
-  else {
-
-    exists $arg{'obs'} && defined $arg{'obs'}
-      or  JSA::Error::BadArgs( qq[No "obs" value given to check if to find bounding box.] );
-
-    $header = $arg{'obs'}->hdrhash()
-      or  JSA::Error::BadArgs( qq[Could not get header hash from "$arg{'obs'}"] );
-  }
-
-  for my $name ( sort keys %list ) {
-
-    $self->_find_header(  'headers' => $header,
-                          'name'    => $name,
-                          'value-regex' => $list{ $name }
-                        )
-                        or next;
-
-    $self->_debug_text( qq[Matched "$name" with $list{ $name }; calc_radec() may be skipped.] );
-    return 1;
-  }
-
-  $self->_debug_text( 'calc_radec() may be called.' );
-  return;
+  return $self->skip_obs_calc( 'test' => { 'OBS_TYPE' => $skip }, %arg );
 }
 
 =item B<calc_radec>
@@ -2813,33 +2989,25 @@ sub calc_radec {
   # Filenames for a subsystem
   my @filenames = $obs->filename;
 
+  my $temp = File::Temp->new( 'template' => _file_template( 'radec' ) );
+  $temp->unlink_on_destroy( 1 );
   # Now need to write these files to  temp file
-  my $fh = File::Temp->new;
-  print $fh map { $_ ."\n" } @filenames;
-  close($fh);
+  my $file_list = JSA::WriteList::write_list( $temp->filename(), [ @filenames ] );
 
   # PA (may not be present)
   my $pa = $headerref->{MAP_PA};
   $pa *= -1 if defined $pa;
 
-  my @command = $inst->get_bound_check_command( $fh, $pa );
-  my ( $systat );
-  try {
+  my @command  = $inst->get_bound_check_command( $file_list, $pa );
+  my $err_text = sprintf "Bound calculation error with files starting with %s; see log\n",
+                    $filenames[0];
 
-    ( undef, undef, $systat ) =
-      run_star_command( $command[0], @command[ 1 .. $#command ] );
-  }
-  catch JSA::Error::StarlinkCommand with {
-
-    my ( $err ) = @_;
-    $log->error( $err->text );
-    printf "Bound calculation error with files starting with %s; see log\n",
-      $filenames[0];
-  };
-  # Allow JSA::Error::BadExec error to move up.
-
-  # run_star_command() throws Error when $systat != 0.
-  return if ! defined $systat || $systat != 0;
+  my $starcom = JSA::EnterData::StarCommand->new();
+  $starcom->verbose( $self->debug() ? 3 : $self->verbosity() );
+  $starcom->try_command(  'error-text' => $err_text,
+                          'command'    => \@command
+                        )
+                        or return;
 
   # Get the bounds
   my %result =
@@ -3784,6 +3952,15 @@ sub _basename {
   require File::Basename;
   my ( $base ) = File::Basename::fileparse( $_[0] );
   return $base;
+}
+
+sub _file_template {
+
+  my ( $prefix ) = @_;
+
+  return sprintf '/tmp/_%s-%s',
+            ( $prefix // 'EnterData'),
+            join '', ( 'X' ) x 10 ;
 }
 
 
