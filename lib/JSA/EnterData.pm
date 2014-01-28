@@ -1537,20 +1537,27 @@ sub prepare_insert_hash {
   throw JSA::Error "Empty hash reference was given to insert."
     unless scalar keys %{ $field_values };
 
+  return $self->_handle_multiple_changes( $table, $field_values );
+}
+
+sub _handle_multiple_changes {
+
+  my ( $self, $table, $vals ) = @_;
+
   my $log = Log::Log4perl->get_logger( '' );
 
   # Go through the hash and work out whether we have multiple inserts
   my @have_ref;
   my $nrows = 1;
-  for my $key (keys %$field_values) {
+  for my $key (keys %$vals) {
 
-    my $ref = ref $field_values->{$key}
+    my $ref = ref $vals->{$key}
       or next;
 
     $log->logdie( "Unsupported reference type in insert hash!\n" )
       unless $ref eq 'ARRAY';
 
-    my $row_count = scalar @{ $field_values->{$key} };
+    my $row_count = scalar @{ $vals->{$key} };
     if (@have_ref) {
 
       # count rows
@@ -1567,28 +1574,27 @@ sub prepare_insert_hash {
   }
 
   # Now create an array of insert hashes with array references unrolled
-  my @insert_hashes;
+  my @change;
   if (!@have_ref) {
 
-    @insert_hashes = ( $field_values );
+    @change = ( $vals );
   } else {
 
     # take local copy of the array content so that we do not damage caller hash
-    my %local = map { $_ => [ @{$field_values->{$_}} ] } @have_ref;
+    my %local = map { $_ => [ @{$vals->{$_}} ] } @have_ref;
 
     # loop over the known number of rows
     for my $i (0..($nrows-1)) {
 
-      my %row = %$field_values;
+      my %row = %$vals;
       for my $refkey (@have_ref) {
 
         $row{$refkey} = shift @{$local{$refkey}};
       }
-      push(@insert_hashes, \%row);
+      push( @change, \%row );
     }
   }
-
-  return \@insert_hashes;
+  return [ @change ];
 }
 
 sub insert_hash {
@@ -1998,10 +2004,9 @@ sub prepare_update_hash {
 
     $log->logdie( "No unique keys found for table name: '$table'\n" );
   }
+  my @unique_key = ref $unique_key ? @{ $unique_key } : $unique_key ;
 
-  my $unique_val = $field_values->{$unique_key};
-
-  $self->_debug_text( qq[$unique_key = $unique_val] );
+  my $rows = $self->_handle_multiple_changes( $table, $field_values );
 
   # run a query with this unique value (but on FILES table more than
   # one entry can be returned - we trap that because FILES for the minute
@@ -2030,165 +2035,179 @@ sub prepare_update_hash {
                 ;
   }
 
-  $sql .= " from $table where $unique_key = '$unique_val'";
+  $sql .=
+    " from $table where "
+    . join ' AND ', map { qq[ $_ = ? ] } @unique_key;
 
-  my $ref = $dbh->selectall_arrayref( $sql, { Columns=>{} })
-    or $log->logdie( "Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n" );
+  my @update_hash;
+  for my $row ( @{ $rows } ) {
 
-  $log->logdie( "Only retrieved partial dataset: ", $dbh->errstr, "\n" )
-    if $dbh->err;
+    my @unique_val =
+      map $row->{ $_ }, @unique_key;
 
-  # how many rows
-  my $count = scalar @{ $ref };
+    $self->_debug_text( \@unique_key , \@unique_val );
 
-  throw JSA::Error::DBError
-    "Can only update if the row exists previously! Obsid $unique_val missing.\n"
-      if $count == 0;
+    my $ref = $dbh->selectall_arrayref( $sql, { Columns=>{} }, @unique_val )
+      or $log->logdie( "Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n" );
 
-  $log->logdie( "Should not be possible to have more than one row. Got $count\n" )
-    if $count > 1;
+    $log->logdie( "Only retrieved partial dataset: ", $dbh->errstr, "\n" )
+      if $dbh->err;
 
-  my $indb = $ref->[0];
+    # how many rows
+    my $count = scalar @{ $ref };
 
-  my %differ;
-  my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
-  my $am_pm_end = qr/\d\d[APM]$/;
+    0 == $count
+      and throw JSA::Error::DBError
+            "Can only update if the row exists previously!\n";
 
-  my $obs_date_re = qr{\bDATE.(?:OBS|END)\b}i;
+    $log->logdie( "Should not be possible to have more than one row. Got $count\n" )
+      if $count > 1;
 
-  # Allowed to be set undef if key from $field_values is missing, say as a
-  # result of external header munging.
-  my $miss_ok = qr{\b(?:INBEAM)}i;
+    my $indb = $ref->[0];
 
-  my $tau_val = qr{\b(?:WVMTAU|TAU225)(?:ST|EN)\b}i;
+    my %differ;
+    my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
+    my $am_pm_end = qr/\d\d[APM]$/;
 
-  my $only_obstime =
-    $table eq 'COMMON'
-    && $self->update_only_obstime();
+    my $obs_date_re = qr{\bDATE.(?:OBS|END)\b}i;
 
-  for my $key ( sort keys %{$indb} ) {
+    # Allowed to be set undef if key from $field_values is missing, say as a
+    # result of external header munging.
+    my $miss_ok = qr{\b(?:INBEAM)}i;
 
-    $self->verbosity() > 1
-      and $self->_debug_text( qq[testing field: $key] );
+    my $tau_val = qr{\b(?:WVMTAU|TAU225)(?:ST|EN)\b}i;
 
-    next
-      # since that will update automatically
-      if $key eq 'last_modified'
-      || ( $key !~ $miss_ok && ! exists $field_values->{$key} );
+    my $only_obstime =
+      $table eq 'COMMON'
+      && $self->update_only_obstime();
 
-    my $new = $field_values->{$key};
-    my $old = $indb->{$key};
+    for my $key ( sort keys %{$indb} ) {
 
-    next if ! ( defined $old || defined $new );
+      $self->verbosity() > 1
+        and $self->_debug_text( qq[testing field: $key] );
 
-    $self->verbosity() and $self->_debug_text( qq[continuing with $key] );
+      next
+        # since that will update automatically
+        if $key eq 'last_modified'
+        || ( $key !~ $miss_ok && ! exists $field_values->{$key} );
 
-    my %test =
-      ( 'start' => exists $start{ $key },
-        'end'   => exists $end{ $key },
-        'old'   => $old,
-        'new'   => $new,
-      );
-    my $in_range = any { $test{ $_ } } (qw[ start end ]);
+      my $new = $field_values->{$key};
+      my $old = $indb->{$key};
 
-    next
-      if $only_obstime
-      && $key !~ $obs_date_re
-      ;
+      next if ! ( defined $old || defined $new );
 
-    # Not defined currently - inserting new value.
-    if ( defined $new && ! defined $old ) {
+      $self->verbosity() and $self->_debug_text( qq[continuing with $key] );
 
-      $differ{$key} = $new;
-      $self->_debug_text( qq[$key = ] . $new );
-      next;
-    }
+      my %test =
+        ( 'start' => exists $start{ $key },
+          'end'   => exists $end{ $key },
+          'old'   => $old,
+          'new'   => $new,
+        );
+      my $in_range = any { $test{ $_ } } (qw[ start end ]);
 
-    # Defined in DB but undef in new version - not expecting this but assume
-    # this means a null.
-    if ( ! defined $new && defined $old) {
+      next
+        if $only_obstime
+        && $key !~ $obs_date_re
+        ;
 
-      $differ{$key} = undef;
-      $self->_debug_text( qq[$key = ] . '<undef>' );
-      next;
-    }
-
-    # Dates.
-    if ( $new =~ $ymd_start && ( $old =~ $ymd_start || $old =~ $am_pm_end ) ) {
-
-      if ( $in_range ) {
-
-        $new = _find_extreme_value( %test,
-                                    'new>old' => _compare_dates( $new, $old )
-                                  );
-        $self->_debug_text( qq[  possible new value for $key = ] . $new );
-      }
-
-      if ( $new ne $old ) {
-
-        $differ{ $key } = $new;
-        $self->_debug_text( qq[$key = ] . $new );
-      }
-
-      next;
-    }
-
-    if (looks_like_number($new)) {
-
-      # Overide range check for tau values as there is no relation between start
-      # & end values; these are weather dependent.
-      if ( $key =~ $tau_val && $new != $old ) {
+      # Not defined currently - inserting new value.
+      if ( defined $new && ! defined $old ) {
 
         $differ{$key} = $new;
         $self->_debug_text( qq[$key = ] . $new );
+        next;
       }
-      elsif ( $in_range ) {
 
-        $new = _find_extreme_value( %test, 'new>old' => $new > $old );
+      # Defined in DB but undef in new version - not expecting this but assume
+      # this means a null.
+      if ( ! defined $new && defined $old) {
 
-        if ( $new != $old ) {
+        $differ{$key} = undef;
+        $self->_debug_text( qq[$key = ] . '<undef>' );
+        next;
+      }
 
-          $differ{ $key } = $new if $new != $old;
+      # Dates.
+      if ( $new =~ $ymd_start && ( $old =~ $ymd_start || $old =~ $am_pm_end ) ) {
+
+        if ( $in_range ) {
+
+          $new = _find_extreme_value( %test,
+                                      'new>old' => _compare_dates( $new, $old )
+                                    );
+          $self->_debug_text( qq[  possible new value for $key = ] . $new );
+        }
+
+        if ( $new ne $old ) {
+
+          $differ{ $key } = $new;
           $self->_debug_text( qq[$key = ] . $new );
         }
+
+        next;
       }
-      else {
 
-        if ($new =~ /\./) {
+      if (looks_like_number($new)) {
 
-          # floating point
-          my $diff = abs($old - $new);
-          if ($diff > 0.000001) {
+        # Overide range check for tau values as there is no relation between start
+        # & end values; these are weather dependent.
+        if ( $key =~ $tau_val && $new != $old ) {
+
+          $differ{$key} = $new;
+          $self->_debug_text( qq[$key = ] . $new );
+        }
+        elsif ( $in_range ) {
+
+          $new = _find_extreme_value( %test, 'new>old' => $new > $old );
+
+          if ( $new != $old ) {
+
+            $differ{ $key } = $new if $new != $old;
+            $self->_debug_text( qq[$key = ] . $new );
+          }
+        }
+        else {
+
+          if ($new =~ /\./) {
+
+            # floating point
+            my $diff = abs($old - $new);
+            if ($diff > 0.000001) {
+
+              $differ{$key} = $new;
+              $self->_debug_text( qq[$key = ] . $new );
+            }
+          }
+          elsif ( $new != $old ) {
 
             $differ{$key} = $new;
             $self->_debug_text( qq[$key = ] . $new );
           }
         }
-        elsif ( $new != $old ) {
 
-          $differ{$key} = $new;
-          $self->_debug_text( qq[$key = ] . $new );
-        }
+        next;
       }
 
-      next;
+      # String.
+      if ( $new ne $old ) {
+
+        $differ{ $key } = $new;
+        $self->_debug_text( qq[$key = ] . $new );
+      }
     }
 
-    # String.
-    if ( $new ne $old ) {
+    $self->_debug_text( qq[differences to update: ] . keys %differ );
 
-      $differ{ $key } = $new;
-      $self->_debug_text( qq[$key = ] . $new );
-    }
+    push @update_hash,
+            { 'differ' => { %differ },
+              'unique_val' => [ @unique_val ],
+              'unique_key' => [ @unique_key ]
+            };
+
   }
 
-  $self->_debug_text( qq[differences to update: ] . keys %differ );
-
-  return
-    { 'differ' => { %differ },
-      'unique_val' => $unique_val,
-      'unique_key' => $unique_key,
-    };
+  return [ @update_hash ];
 }
 
 =item B<_get_primary_key>
@@ -2225,11 +2244,12 @@ sub update_hash {
 
   my $log = Log::Log4perl->get_logger( '' );
 
-  my %differ = %{ $change->{'differ'} };
+  my @change     = @{ $change };
+  my @sorted     = sort keys %{ $change[0]->{'differ'} };
 
-  return 1 unless keys %differ;
+  return 1 unless scalar @sorted;
 
-  my @sorted = sort keys %differ;
+  my @unique_key = @{ $change[0]->{'unique_key'} };
 
   # Now have to do an UPDATE
   my $changes =
@@ -2240,16 +2260,17 @@ sub update_hash {
           ( !$self->debug && $self->load_header_db
               ? q[ ? ]
               : # debug version with unquoted values
-                ( defined $differ{$_} ? $differ{$_} : 'NULL' )
+                ( 'DEBUG: need to be reimplemented.' )
           );
       }
       @sorted;
 
-  my $sql = sprintf "UPDATE %s SET %s WHERE %s = '%s'",
+  my $sql = sprintf "UPDATE %s SET %s WHERE %s",
             $table,
             $changes,
-            $change->{'unique_key'},
-            $change->{'unique_val'};
+            join ' AND ',
+              map { qq[ $_ = ? ] } @unique_key
+              ;
 
   if ( $self->debug ) {
 
@@ -2262,13 +2283,17 @@ sub update_hash {
     my $sth = $dbh->prepare($sql)
       or $log->logdie( "Could not prepare sql statement for UPDATE\n", $dbh->errstr, "\n" );
 
-    my @bind = map { $differ{$_} } @sorted;
+    for my $row ( @change ) {
 
-    my $status = $sth->execute( @bind );
-    throw JSA::Error::DBError 'UPDATE error: ' . $dbh->errstr() . "\n... with { $sql, @bind }"
-      if $dbh->err();
+      my @bind = map { $row->{'differ'}{$_} } @sorted;
+      push @bind, @{ $row->{'unique_val'} };
 
-    return $status;
+      my $status = $sth->execute( @bind );
+      throw JSA::Error::DBError 'UPDATE error: ' . $dbh->errstr() . "\n... with { $sql, @bind }"
+        if $dbh->err();
+
+      return $status;
+    }
   }
 
   return 1;
