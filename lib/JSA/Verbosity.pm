@@ -23,6 +23,8 @@ JSA::Verbose - Sets verbosity level.
 This module provides one place to use & set verbosity level, and print
 messages based on certain threshold.
 
+=over 2
+
 =cut
 
 use strict; use warnings;

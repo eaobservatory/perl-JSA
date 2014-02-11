@@ -566,6 +566,8 @@ Accepts the following arguments as hash value of ...
 
 See also I<update()> and I<insert()> methods.
 
+=back
+
 =cut
 
 sub update_or_insert {
@@ -641,8 +643,6 @@ sub update_or_insert {
 }
 
 =head2 INTERNAL METHODS
-
-=back
 
 =over 2
 
