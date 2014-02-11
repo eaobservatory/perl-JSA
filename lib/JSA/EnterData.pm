@@ -3637,7 +3637,37 @@ sub _debug_text {
   $self->debug() && scalar @text
     or return;
 
-  print join "\n", map { defined $_ ?  $_ : '<undef>'  } @text;
+  my %show_ref =
+    ( 'SCALAR' => sub { ${ $_[0] } },
+      'ARRAY'  => sub { join ', ' , @{ $_[0] } },
+      'HASH'   => sub { join '; ', map { join ': ', $_, $_[0]->{ $_} } keys %{ $_[0] } }
+    );
+  my @data;
+  for my $t ( @text ) {
+
+    unless ( defined $t ) {
+
+      push @data, '<undef>';
+      next;
+    }
+    if ( Scalar::Util::blessed( $t ) ) {
+
+      require Data::Dumper;
+      push @data, Data::Dumper->Dump( $t );
+      next;
+    }
+    if ( ref $t eq 'SCALAR'
+          || ref $t eq 'ARRAY'
+          || ref $t eq 'HASH'
+        ) {
+
+      push @data, $show_ref{ ref $t }->( $t );
+      next;
+    }
+    push @data, $t;
+  }
+
+  print join "\n", @data;
   $text[-1] =~ m{\n$}s or print "\n";
   return;
 }
