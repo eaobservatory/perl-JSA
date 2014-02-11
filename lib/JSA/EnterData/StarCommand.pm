@@ -141,6 +141,9 @@ sub try_command
 
     $err_text
       and print $err_text, $err->text(), "\n";
+
+    $err->text() =~ /No such file or directory/
+      and die;
   };
   # Allow JSA::Error::BadExec error to move up.
 
