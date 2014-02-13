@@ -135,15 +135,17 @@ sub try_command
 
     my ( $err ) = @_;
 
+    $err_text = join "\n",
+                  ( $err_text // () ),
+                  qq[Error executing "$cmd_run" ...],
+                  $err->text(),
+                  ;
+
     my $fx = $self->verbose() ? 'error_warn' : 'error';
-
-    $log->$fx( qq[Error executing "$cmd_run" ...\n] . $err->text );
-
-    $err_text
-      and print $err_text, $err->text(), "\n";
+    $log->$fx( $err_text );
 
     $err->text() =~ /No such file or directory/
-      and die;
+      and throw JSA::Error::FatalError $err;
   };
   # Allow JSA::Error::BadExec error to move up.
 
