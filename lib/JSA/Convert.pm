@@ -35,6 +35,7 @@ use Starlink::Versions qw/ starversion_lt starversion_string/;
 
 use JSA::Error qw/ :try /;
 use JSA::Headers qw/ update_fits_product read_header cadc_ack /;
+use JSA::Headers::CADC qw/ correct_asn_id /;
 use JSA::Headers::Starlink qw/ update_fits_headers add_fits_comments /;
 use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
@@ -328,6 +329,30 @@ sub list_convert_plan {
 Rename a PNG as created by ORAC-DR to the filename convention for CADC
 ingest. Returns the name of the copied PNG.
 
+ $pngout = rename_png( $pngin, \%options );
+
+Where the options hash can include:
+
+ - mode: Processing mode ("obs", "night", "project", "public").
+
+The JSA naming convention for preview images is
+
+ JCMT_<asn_id>_<product_id>_preview_SIZE.png
+
+where <asn_id> is the observation identifier in frame products
+and is the association identifier for group products. The
+product ID is a combination of the product type and
+subsystem number.
+
+Note that the ASN_ID value stored in the header is the
+base value and should be modified depending on the
+processing mode (night, project, public). See
+C<JSA::Headers::CADC::correct_asn_id> for more
+information.
+
+All this informtation is read from the header of the
+input PNG.
+
 =cut
 
 sub rename_png {
@@ -336,11 +361,17 @@ sub rename_png {
 
   my $mode = $opts->{'mode'};
 
+  # Sanity check
+  JSA::Error::BadArgs->throw( "Supplied PNG: '$infile' does not exist")
+      unless -e $infile;
+
   # Read the EXIF header to find out what type of ASN_TYPE we have.
   my $exif = new Image::ExifTool;
   $exif->ExtractInfo( $infile );
   my @keywords = $exif->GetValue('Keywords');
   my %keywords = map { split '=', $_ } @keywords;
+
+  # Observation or group mode
   my $assoc = $keywords{'jsa:asn_type'};
 
   if( defined( $assoc ) && $assoc eq 'night' ) {
@@ -348,11 +379,36 @@ sub rename_png {
   }
 
   my $outfile;
+  my $asn_id;
   if( defined( $assoc ) ) {
-    $outfile = drfilename_to_cadc( $infile, ASN_TYPE => $assoc );
+    # Use the association ID unless obs
+    if ($assoc =~ /^obs/i) {
+      $asn_id = $keywords{"jsa:obsid"};
+    } else {
+      # Convert the ASN_ID to unique form
+      # First need to convert jsa: headers to a hash
+      # like a FITS header
+      my %hdr;
+      for my $k (keys %keywords) {
+        if ($k =~ /^jsa:(.*)$/) {
+          $hdr{uc($1)} = $keywords{$k};
+        }
+      }
+      $asn_id = correct_asn_id( $assoc, \%hdr );
+    }
   } else {
-    $outfile = drfilename_to_cadc( $infile );
+    # Assume OBS product
+    $asn_id = $keywords{"jsa:obsid"};
   }
+
+  my $productID = $keywords{'jsa:productID'};
+
+  JSA::Error::BadFITSHeader->throw("jsa:productID header is missing from PNG file $infile")
+      unless defined $productID;
+
+  my $size = $exif->GetValue( "ImageHeight" );
+
+  $outfile = join("_", "JCMT", $asn_id, $productID, "preview", $size );
 
   copy( $infile, $outfile );
 
