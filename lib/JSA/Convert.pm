@@ -30,6 +30,7 @@ use File::Copy;
 use File::Spec;
 use Image::ExifTool qw/ :Public /;
 use Proc::SafeExec;
+use File::Basename qw/ fileparse /;
 use Starlink::Config qw/ :override /;
 use Starlink::Versions qw/ starversion_lt starversion_string/;
 
@@ -365,6 +366,12 @@ sub rename_png {
   JSA::Error::BadArgs->throw( "Supplied PNG: '$infile' does not exist")
       unless -e $infile;
 
+  # Check the suffix
+  my @file_parsed = fileparse($infile, qw/ .png .jpg .jpeg /);
+  my $suffix = $file_parsed[2];
+  JSA::Error::BadArgs->throw( "Input file ($infile) must be a PNG file" )
+      unless $suffix =~ /\.png/i;
+
   # Read the EXIF header to find out what type of ASN_TYPE we have.
   my $exif = new Image::ExifTool;
   $exif->ExtractInfo( $infile );
@@ -408,7 +415,7 @@ sub rename_png {
 
   my $size = $exif->GetValue( "ImageHeight" );
 
-  $outfile = join("_", "JCMT", $asn_id, $productID, "preview", $size );
+  $outfile = join("_", "JCMT", $asn_id, $productID, "preview", $size ). $suffix;
 
   copy( $infile, $outfile );
 
