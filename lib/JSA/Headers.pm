@@ -177,7 +177,7 @@ Can be FITS or NDF.
 sub read_header {
   my $f = shift;
   my $hdr;
-  if ($f =~ /\.f.*$/) {
+  if ($f =~ /\.f.*$/i) {
     $hdr = eval { Astro::FITS::Header::CFITSIO->new( File => $f )};
   } elsif( $f =~ /\.sdf$/ ) {
     $hdr = eval { Astro::FITS::Header::NDF->new( File => $f )};
