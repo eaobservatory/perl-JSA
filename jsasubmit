@@ -266,11 +266,14 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
 
     # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
-    # ACSIS.
-    if( ! ( ( $instrume eq 'SCUBA-2' &&
-              ( $obstype eq 'SCIENCE' ||
-                $obstype eq 'POINTING' ) ) ||
-            ( $backend eq 'ACSIS' && $obstype eq 'SCIENCE' ) ) ) {
+    # ACSIS and the DAS.
+    unless (
+                ( $instrume eq 'SCUBA-2' &&
+                      ( $obstype eq 'SCIENCE' ||
+                        $obstype eq 'POINTING' ) ) ||
+                ( $backend eq 'ACSIS' && $obstype eq 'SCIENCE' ) ||
+                ( $backend eq 'DAS'   && $obstype eq 'SCIENCE' )
+           ) {
       next;
     }
 
