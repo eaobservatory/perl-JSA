@@ -2930,7 +2930,7 @@ sub skip_tile_list {
 
   $SKIP_TILE_LIST and return 1;
 
-  my $skip = qr{\b (?: skydips? | noise ) \b}xi;
+  my $skip = qr{\b (?: skydips? | flatfield | setup | noise | ramp ) \b}xi;
 
   return $self->skip_obs_calc( 'test' => { 'OBS_TYPE' => $skip }, %arg );
 }
