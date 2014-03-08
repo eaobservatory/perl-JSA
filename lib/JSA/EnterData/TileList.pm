@@ -38,7 +38,7 @@ use Log::Log4perl ;
 
 use JSA::Error qw[ :try ];
 
-our $Tile_List = '/star/bin/smurf/tilelist';
+our $Tile_List = '/star/bin/smurf/jsatilelist';
 
 =item B<new> (constructor)
 
