@@ -2821,6 +2821,8 @@ sub get_tiles {
   my $ok;
   try {
 
+    $log->info( 'Start: tile list command' );
+
     $ok = $starcom->try_command(  'command' => [ @command ],
                                   'error-text' => $run_err
                                 );
@@ -2833,6 +2835,8 @@ sub get_tiles {
     throw JSA::Error::BadExec $err;
   }
   finally {
+
+    $log->info( 'End: tile list command' );
 
     #JSA::WriteList::clear_list();
   };
