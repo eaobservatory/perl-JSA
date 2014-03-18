@@ -976,6 +976,7 @@ It is called by I<prepare_and_insert> method.
       }
     }
 
+    # COMMON table.
     #$dbh->begin_work if $self->load_header_db;
     $db->begin_trans() if $self->load_header_db;
 
@@ -1001,6 +1002,7 @@ It is called by I<prepare_and_insert> method.
       return ( 'error', $text );
     }
 
+    # TILES table.
     my %tile_header;
     for my $obsid ( keys %tile ) {
 
@@ -1028,6 +1030,7 @@ It is called by I<prepare_and_insert> method.
       return ( 'error', $text );
     }
 
+    # FILES, ACSIS, SCUBA2 tables.
     unless ( $self->update_only_obstime() ) {
 
       $self->add_subsys_obs( %pass_arg,
