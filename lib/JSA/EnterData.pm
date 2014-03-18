@@ -711,7 +711,6 @@ set.  File paths are fetched from database unless otherwise specified.
                                               'obs' => $observations,
                                             );
 
-
       push @files_added, @{ $added }
         if $added && scalar @{ $added };
     }
@@ -884,8 +883,7 @@ It is called by I<prepare_and_insert> method.
                                   sub {
                                     my ( $val ) = @_;
                                     return
-                                      defined $val
-                                      && ! ref $val
+                                      defined $val && ! ref $val
                                       && ( $val =~ m/$shutter_re/
                                             ||
                                           $val =~ m/$empty_re/
@@ -1010,7 +1008,6 @@ It is called by I<prepare_and_insert> method.
       $tile_header{'TILE'}  = [ keys %{ $tile{ $obsid } } ];
     }
 
-
     $error =
       $self->_modify_db_on_obsend( %pass_arg,
                                   'dbhandle' => $dbh,
@@ -1033,7 +1030,7 @@ It is called by I<prepare_and_insert> method.
     # FILES, ACSIS, SCUBA2 tables.
     unless ( $self->update_only_obstime() ) {
 
-      $self->add_subsys_obs( %pass_arg,
+      $self->add_subsys_obs(  %pass_arg,
                               'db'  => $db,
                               'obs' => $run_obs,
                             )
@@ -1080,7 +1077,6 @@ sub skip_state_setting {
   $self->{ $store } = !! $_[0];
   return;
 }
-
 
 =item B<update_only_obstime>
 
@@ -1304,7 +1300,7 @@ sub _get_obs_group {
 
   @obs = OMP::Info::Obs->hdrs_to_obs( 'retainhdr' => $obs{'retainhdr'},
                                       'fits'      => $merged
-                                      );
+                                    );
 
   return
     OMP::Info::ObsGroup->new( 'obs' => [ @obs ] );
@@ -1397,7 +1393,7 @@ sub is_simulation {
   for my $name ( @order ) {
 
     my $val =
-      $self->_find_header( 'headers' => $header,
+      $self->_find_header(  'headers' => $header,
                             'name'   => $name,
                             'test'   => 'defined',
                             'value'  => 1,
@@ -1531,7 +1527,7 @@ sub add_subsys_obs {
       }
 
       $error =
-        $self->_modify_db_on_obsend( %pass_args,
+        $self->_modify_db_on_obsend(  %pass_args,
                                       'dbhandle' => $dbh,
                                       'table'   => $inst->table,
                                       'headers' => $subh,
@@ -1834,7 +1830,6 @@ duplicate row by checking if the primary key already does not exist.
                                     'columns' => [ @column_names ],
                                     'primary' => $key,
                                   );
-
 
 The string returned has a DBI placeholder only for primary key value.
 (In DBD::Sybase, possibly within Sybase ASE 15 itself, placeholders
@@ -3910,7 +3905,6 @@ sub _get_xfer_unconnected_dbh {
 
   return $self->_get_xfer( $db->dbhandle(), $name );
 }
-
 
 sub _compare_dates {
 
