@@ -3833,9 +3833,13 @@ sub _debug_text {
     or return;
 
   my %show_ref =
-    ( 'SCALAR' => sub { ${ $_[0] } },
-      'ARRAY'  => sub { join ', ' , @{ $_[0] } },
-      'HASH'   => sub { join '; ', map { join ': ', $_, $_[0]->{ $_} } keys %{ $_[0] } }
+    ( 'SCALAR' => sub { ${ $_[0] } // '<undef>' },
+      'ARRAY'  => sub { join ', ' , map $_ // '<undef>' , @{ $_[0] } },
+      'HASH'   => sub { join '; ',
+                          map
+                          join( ': ', $_ // '<undef>' , $_[0]->{ $_} // '<undef>' ),
+                          keys %{ $_[0] }
+                      }
     );
   my @data;
   for my $t ( @text ) {
