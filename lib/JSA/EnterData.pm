@@ -2996,7 +2996,7 @@ sub calc_radec {
   my $pa = $headerref->{MAP_PA};
   $pa *= -1 if defined $pa;
 
-  my @command  = $inst->get_bound_check_command( $file_list, $pa );
+  my @command  = $inst->get_bound_check_command( $temp, $pa );
   my $err_text = sprintf "Bound calculation error with files starting with %s; see log\n",
                     $filenames[0];
 
