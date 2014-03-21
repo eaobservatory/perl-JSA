@@ -414,6 +414,8 @@ sub looks_like_cadcfile {
     return 1; # SCUBA-2
   } elsif ($filename =~ /^jcmts\d{8}_\d{5}_(lon|sho|p20|p13|p11|mix)_\w+_[a-z]{3}_\d{3}(_\d{2,4})?\.(fits|png)/) {
     return 1; # SCUBA
+  } elsif ($filename =~ /^JCMT_.*_preview_\d+\.png$/) {
+    return 1; # CAOM-2 style preview filename: <collection>_<observationID>_<productID>_preview_(64|256|1024)
   }
   print "Failed looks_like_cadcfile\n" if $DEBUG;
   return 0;
