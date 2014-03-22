@@ -258,7 +258,7 @@ sub merge_pngs {
       # Set up and run the command. At this point if there's an error
       # just don't do anything, but if it succeeds, push the name of
       # the resulting file onto our array for return later.
-      my $command = "$montage $rimg $rsp -tile 2x1 -geometry ${size}x${size}+0+0 $reduced";
+      my $command = "$montage $rsp $rimg -tile 2x1 -geometry ${size}x${size}+0+0 $reduced";
       my $returnval = system( $command );
       if( ! $returnval ) {
         push @reduced, $reduced;
