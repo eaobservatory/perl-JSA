@@ -24,6 +24,7 @@ use warnings;
 use File::Spec;
 use warnings::register;
 
+use Image::ExifTool;
 use File::SearchPath qw/ searchpath /;
 use Astro::FITS::HdrTrans qw/ translate_from_FITS /;
 use JSA::Error;
@@ -243,8 +244,15 @@ sub merge_pngs {
     foreach my $rsp ( @rsps ) {
 
       # Get the size.
-      $rsp =~ /_(\d{2,4})\.png$/;
-      my $size = $1;
+      my $size;
+      if ( $rsp =~ /_(\d{2,4})\.png$/ ) {
+        $size = $1;
+      } else {
+        # Use the EXIF data -- this should never happen though
+        my $exif = new Image::ExifTool;
+        $exif->ExtractInfo( $rsp );
+        $size = $exif->GetValue( "ImageHeight" );
+      }
 
       # Form the appropriate rimg and reduced names from this rimg.
       ( my $reduced = $rsp ) =~ s/_rsp_/_reduced_/;
