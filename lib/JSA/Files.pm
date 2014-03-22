@@ -24,6 +24,7 @@ use warnings;
 use File::Spec;
 use warnings::register;
 
+use File::Copy qw/ copy /;
 use Image::ExifTool;
 use File::SearchPath qw/ searchpath /;
 use Astro::FITS::HdrTrans qw/ translate_from_FITS /;
@@ -208,8 +209,8 @@ sub can_send_to_cadc_guess {
 
 =item B<merge_pngs>
 
-Given a list of acceptable PNGs, merge them so that the rimg is on the
-left and the rsp is on the right. The resulting PNGs will be named
+Given a list of acceptable PNGs, merge them so that the rsp is on the
+left and the rimg is on the right. The resulting PNGs will be named
 _reduced_ in place of the _rimg_ and _rsp_ in the original file
 names. If the _rimg_ PNG is missing for a given _rsp_ PNG, then the
 output _reduced_ PNG will have a transparent square where the _rimg_
@@ -224,15 +225,26 @@ be empty.
 Requires ImageMagick, specifically the 'montage' command, which will
 be looked for in the path.
 
+In addition to merging _rimg with _rsp, the original _rimg and _rsp
+files are deleted. Furthermore any unattached _rimg files are
+renamed to be "_reduced".
+
 =cut
 
 sub merge_pngs {
   my @inputs = @_;
 
+  # Product label to use for reduced data
+  my $label = "reduced";
+
   # Split off the rimgs and the rsps, storing the rimgs in a hash for
   # ease of search.
   my %rimgs = map { $_ => undef } grep { /_rimg_/ } @inputs;
   my @rsps = grep { /_rsp_/ } @inputs;
+
+  # This will contain list of inputs to be deleted at end
+  # because we have handled them
+  my @toremove;
 
   # Array to hold a list of merged PNGs.
   my @reduced;
@@ -240,38 +252,80 @@ sub merge_pngs {
   # Check for montage. We include "/usr/bin/" and "/usr/local/bin" explicitly
   my $montage = searchpath( "montage", $ENV{PATH} . ":/usr/bin:/usr/local/bin" );
 
-  if( defined $montage && -e $montage ) {
-    foreach my $rsp ( @rsps ) {
+  my $usemontage = (defined $montage && -e $montage);
 
-      # Get the size.
-      my $size;
-      if ( $rsp =~ /_(\d{2,4})\.png$/ ) {
-        $size = $1;
-      } else {
-        # Use the EXIF data -- this should never happen though
-        my $exif = new Image::ExifTool;
-        $exif->ExtractInfo( $rsp );
-        $size = $exif->GetValue( "ImageHeight" );
-      }
+  # Process all the _rsp images and find associated _rimg
+  foreach my $rsp ( @rsps ) {
+    my $usenull;
 
-      # Form the appropriate rimg and reduced names from this rimg.
-      ( my $reduced = $rsp ) =~ s/_rsp_/_reduced_/;
-      ( my $rimg = $rsp ) =~ s/_rsp_/_rimg_/;
+    # Get the size.
+    my $size;
+    if ( $rsp =~ /_(\d{2,4})\.png$/ ) {
+      $size = $1;
+    } else {
+      # Use the EXIF data -- this should never happen though
+      my $exif = new Image::ExifTool;
+      $exif->ExtractInfo( $rsp );
+      $size = $exif->GetValue( "ImageHeight" );
+    }
 
-      # Check to see if the rimg exists. If it doesn't, use the
-      # special "null:" keyword for montage.
-      if( ! exists( $rimgs{$rimg} ) ) {
-        $rimg = "null:";
-      }
+    # Form the appropriate rimg and reduced names from this rimg.
+    ( my $reduced = $rsp ) =~ s/_rsp_/_${label}_/;
+    ( my $rimg = $rsp ) =~ s/_rsp_/_rimg_/;
 
-      # Set up and run the command. At this point if there's an error
-      # just don't do anything, but if it succeeds, push the name of
-      # the resulting file onto our array for return later.
+    # Have we got a rimg?
+    my $have_rimg = 1;
+
+    # Check to see if the rimg exists. If it doesn't, use the
+    # special "null:" keyword for montage.
+    if( ! exists( $rimgs{$rimg} ) ) {
+      $rimg = "null:";
+      $have_rimg = 0;
+    }
+
+    # Set up and run the command. At this point if there's an error
+    # just don't do anything, but if it succeeds, push the name of
+    # the resulting file onto our array for return later.
+    if ($usemontage) {
       my $command = "$montage $rsp $rimg -tile 2x1 -background lightgray -geometry ${size}x${size}+0+0 $reduced";
       my $returnval = system( $command );
       if( ! $returnval ) {
-        push @reduced, $reduced;
+        # We have dealt with the _rimg (if we had one)
+        if ($have_rimg) {
+          push @toremove, $rimg;
+          delete $rimgs{$rimg};
+        }
+      } else {
+        croak "Error running montage";
       }
+    } else {
+      # No montage so just copy the _rsp to reduced
+      copy( $rsp, $reduced );
+    }
+
+    # indicate that we have dealt with the _rsp
+    push @toremove, $rsp;
+
+    # We have written a merged file
+    push @reduced, $reduced;
+  }
+
+  # Now for all the entries left in %rimgs we need to rename them to reduced
+  for my $rimg (keys %rimgs) {
+   # Form the appropriate rimg and reduced names from this rimg.
+    ( my $reduced = $rimg ) =~ s/_rimg_/_${label}_/;
+    copy($rimg, $reduced);
+    push(@toremove, $rimg);
+    push(@reduced, $reduced);
+  }
+
+  # For all the files that we have renamed to _reduced we delete
+  # them if they look like temporary CADC preview images. We should
+  # probably use a standardised pattern match but we are assuming
+  # that JSA::Convert::rename_png() has been called.
+  for my $png (@toremove) {
+    if ($png =~ /_preview_\d{2,4}\.png$/) {
+      unlink $png;
     }
   }
 
