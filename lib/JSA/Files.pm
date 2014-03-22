@@ -24,6 +24,7 @@ use warnings;
 use File::Spec;
 use warnings::register;
 
+use File::SearchPath qw/ searchpath /;
 use Astro::FITS::HdrTrans qw/ translate_from_FITS /;
 use JSA::Error;
 
@@ -220,7 +221,7 @@ were successfully merged for whatever reason, the returned array will
 be empty.
 
 Requires ImageMagick, specifically the 'montage' command, which will
-be looked for in /usr/bin/montage.
+be looked for in the path.
 
 =cut
 
@@ -235,10 +236,10 @@ sub merge_pngs {
   # Array to hold a list of merged PNGs.
   my @reduced;
 
-  # Check for montage.
-  my $montage = "/usr/bin/montage";
+  # Check for montage. We include "/usr/bin/" and "/usr/local/bin" explicitly
+  my $montage = searchpath( "montage", $ENV{PATH} . ":/usr/bin:/usr/local/bin" );
 
-  if( -e $montage ) {
+  if( defined $montage && -e $montage ) {
     foreach my $rsp ( @rsps ) {
 
       # Get the size.
