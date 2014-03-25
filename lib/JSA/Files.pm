@@ -229,6 +229,9 @@ In addition to merging _rimg with _rsp, the original _rimg and _rsp
 files are deleted. Furthermore any unattached _rimg files are
 renamed to be "_reduced".
 
+If any of the images has a "hpx" product component in the name
+the output merged image will be "_healpix_" rather than "_reduced_".
+
 =cut
 
 sub merge_pngs {
@@ -239,8 +242,8 @@ sub merge_pngs {
 
   # Split off the rimgs and the rsps, storing the rimgs in a hash for
   # ease of search.
-  my %rimgs = map { $_ => undef } grep { /_rimg_/ } @inputs;
-  my @rsps = grep { /_rsp_/ } @inputs;
+  my %rimgs = map { $_ => undef } grep { /_(hpx)?rimg_/ } @inputs;
+  my @rsps = grep { /_(hpx)?rsp_/ } @inputs;
 
   # This will contain list of inputs to be deleted at end
   # because we have handled them
@@ -269,19 +272,41 @@ sub merge_pngs {
       $size = $exif->GetValue( "ImageHeight" );
     }
 
-    # Form the appropriate rimg and reduced names from this rimg.
-    ( my $reduced = $rsp ) =~ s/_rsp_/_${label}_/;
-    ( my $rimg = $rsp ) =~ s/_rsp_/_rimg_/;
+    # Look for _hpxrimg_ before looking for a normal _rimg_
+    ( my $hpxrimg = $rsp ) =~ s/_(hpx)?rsp_/_hpxrimg_/;
+    ( my $tanrimg = $rsp ) =~ s/_(hpx)?rsp_/_rimg_/;
+
+    my @tryrimg;
+    push( @tryrimg, $hpxrimg, $tanrimg );
 
     # Have we got a rimg?
-    my $have_rimg = 1;
+    my $have_rimg = 0;
 
-    # Check to see if the rimg exists. If it doesn't, use the
+    my $rimg;
+    for my $test (@tryrimg) {
+      if (exists $rimgs{$test}) {
+        $rimg = $test;
+        $have_rimg = 1;
+        last;
+      }
+    }
+
+    # If rimg not found, use the
     # special "null:" keyword for montage.
-    if( ! exists( $rimgs{$rimg} ) ) {
+    if ( ! defined $rimg ) {
       $rimg = "null:";
       $have_rimg = 0;
     }
+
+    # Determine which product label to use. Use healpix if either
+    # the rsp or the rimg have a hpx prefix.
+    my $prodlabel = $label;
+    if ($rsp =~ /_hpx/ || $rimg =~ /_hpx/) {
+      $prodlabel = "healpix";
+    }
+
+    # Form the reduced name from this rsp.
+    ( my $reduced = $rsp ) =~ s/_(hpx)?rsp_/_${prodlabel}_/;
 
     # Set up and run the command. At this point if there's an error
     # just don't do anything, but if it succeeds, push the name of
@@ -312,8 +337,9 @@ sub merge_pngs {
 
   # Now for all the entries left in %rimgs we need to rename them to reduced
   for my $rimg (keys %rimgs) {
-   # Form the appropriate rimg and reduced names from this rimg.
-    ( my $reduced = $rimg ) =~ s/_rimg_/_${label}_/;
+    # Form the appropriate rimg and reduced names from this rimg.
+    my $prodlabel = ( $rimg =~ /_hpxrimg/ ? "healpix" : $label);
+    ( my $reduced = $rimg ) =~ s/_(hpx)?rimg_/_${prodlabel}_/;
     copy($rimg, $reduced);
     push(@toremove, $rimg);
     push(@reduced, $reduced);
