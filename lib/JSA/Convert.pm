@@ -257,6 +257,7 @@ sub convert_dr_files {
       print "Converting file $file\n" if $DEBUG;
 
       my $outfile = rename_png( $file, { "mode" => $mode } );
+      write_dpinfo_png( $outfile, $dpdate, $dpid );
       push @pngs, $outfile;
 
     } else {
@@ -421,6 +422,42 @@ sub rename_png {
 
   return $outfile;
 
+}
+
+=item B<write_dpinfo_png>
+
+Write data processing information to the PNG EXIF
+header.
+
+  write_dpinfo_png( $png, $dpdate, $dpid );
+
+No action if the data processing date or ID are undef.
+
+=cut
+
+sub write_dpinfo_png {
+  my $png = shift;
+  my $dpdate = shift;
+  my $dpid = shift;
+  return if (!defined $dpdate && !defined $dpid);
+
+  my $exif = Image::ExifTool->new();
+
+  # We have to read all the info in first
+  $exif->ExtractInfo( $png );
+  my @keywords = $exif->GetValue( 'Keywords' );
+
+  # and write it out
+  for my $k (@keywords) {
+    $exif->SetNewValue( Keywords => $k );
+  }
+
+  # and the new stuff
+  $exif->SetNewValue( Keywords => "jsa:dpdate=$dpdate" )
+    if defined $dpdate;
+  $exif->SetNewValue( Keywords => "jsa:dprcinst=$dpid" )
+    if defined $dpid;
+  $exif->WriteInfo( $png );
 }
 
 =item B<ndf2fits>
