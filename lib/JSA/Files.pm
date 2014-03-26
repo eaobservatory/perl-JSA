@@ -320,6 +320,22 @@ sub merge_pngs {
           push @toremove, $rimg;
           delete $rimgs{$rimg};
         }
+
+        # Montage does not copy any EXIF headers over to the output
+        # so we have to do that manually
+        my $exif = Image::ExifTool->new();
+        $exif->ExtractInfo( $rsp );
+        my @keywords = $exif->GetValue('Keywords');
+
+        # Now write out what we have, skipping the RA and Dec keys
+        # since they will be wrong for a merged image
+        my $outexif = Image::ExifTool->new();
+        for my $k (@keywords) {
+          next if $k =~ /astro:(RA|Dec)/;
+          $outexif->SetNewValue( Keywords => $k );
+        }
+        $outexif->WriteInfo( $reduced );
+
       } else {
         croak "Error running montage";
       }
