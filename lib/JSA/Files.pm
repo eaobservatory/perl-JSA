@@ -762,7 +762,7 @@ sub drfilename_to_cadc {
   }
 
   # The product count is only formatted if defined
-  my $p = ( defined $prodcount ? "%03d" : "" );
+  my $p = ( defined $prodcount ? $product eq 'healpix' ? '%06d' : "%03d" : "" );
 
   # Note that we format subsystem as %02d because this will work
   # for SCUBA-2 850/450 without breaking ACSIS 2digit.
