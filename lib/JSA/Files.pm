@@ -477,6 +477,15 @@ sub looks_like_drfile {
     return 1;
   } elsif ($filename =~ /^g?s\d{8}_\d{1,5}_\d{3}_\w+\.sdf$/) {
     # SCUBA-2
+    # Don't include files with a trailing plain number segment which can
+    # appear in the provenance because Starlink applications create them,
+    # because including them causes dissect_drfile to fail when the
+    # provenance is being processed.  You can sometimes get away with it
+    # if the Starlink application happened to write a 2--4 digit number
+    # because then it looks like a thumbnail resolution as far as
+    # dissect_drfile is concerned, but that's not helpful because we're
+    # looking for SDF files rather than thumbnails.
+    return 0 if $filename =~ /_\d+\.sdf$/;
     return 1;
   } elsif ($filename =~ /^\d{8}_\d{4}_(resw|flat)\.sdf$/ ||
            $filename =~ /^\d{1,8}_\d{4}_(sho|lon|p13|p20|p11)_\w+\.sdf$/ ||
