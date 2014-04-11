@@ -58,7 +58,7 @@ while ( my ($k,$v) = each(%PRODUCT_TYPES) ) {
 
 # Products and associations to look for.
 our @ASSOCS = qw/ obs night project public /;
-our @PRODUCTS = qw/ reduced rimg rsp /;
+our @PRODUCTS = qw/ healpix reduced rimg rsp /;
 our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
 
 # Set up a hash.
