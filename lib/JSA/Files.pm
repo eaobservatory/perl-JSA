@@ -652,8 +652,14 @@ sub dissect_cadcfile {
     $type = $6;
     $version = $7;
 
-    # split product into product and number
-    if ($product =~ /([a-z]+)(\d{3})/) {
+    # Split product into product and number.  Handle healpix specially
+    # because the "normal" pattern just grabs the first 3 digits and
+    # drops the second half of the JSA tile number.
+    if ($product =~ /(healpix)(\d{6})/) {
+      $product = $1;
+      $prodcount = $2;
+    }
+    elsif ($product =~ /([a-z]+)(\d{3})/) {
       $product = $1;
       $prodcount = $2;
     }
@@ -850,7 +856,7 @@ sub cadc_to_drfilename {
 
   } else {
     # product formatting
-    my $p = ( defined $parts[5] ? "%03d" : "" );
+    my $p = ( defined $parts[5] ? $parts[4] eq 'healpix' ? '%06d' : "%03d" : "" );
 
     # zero padding depends on whether we are an obs or not
     my $obsfmt = '%05d';
