@@ -273,8 +273,8 @@ sub merge_pngs {
     }
 
     # Look for _hpxrimg_ before looking for a normal _rimg_
-    ( my $hpxrimg = $rsp ) =~ s/_(?:hpx)?rsp([-_])/_hpxrimg\1/;
-    ( my $tanrimg = $rsp ) =~ s/_(?:hpx)?rsp([-_])/_rimg\1/;
+    ( my $hpxrimg = $rsp ) =~ s/_(?:hpx)?rsp([-_])/_hpxrimg$1/;
+    ( my $tanrimg = $rsp ) =~ s/_(?:hpx)?rsp([-_])/_rimg$1/;
 
     my @tryrimg;
     push( @tryrimg, $hpxrimg, $tanrimg );
@@ -306,7 +306,7 @@ sub merge_pngs {
     }
 
     # Form the reduced name from this rsp.
-    ( my $reduced = $rsp ) =~ s/_(?:hpx)?rsp([-_])/_${prodlabel}\1/;
+    ( my $reduced = $rsp ) =~ s/_(?:hpx)?rsp([-_])/_${prodlabel}$1/;
 
     # Set up and run the command. At this point if there's an error
     # just don't do anything, but if it succeeds, push the name of
@@ -355,7 +355,7 @@ sub merge_pngs {
   for my $rimg (keys %rimgs) {
     # Form the appropriate rimg and reduced names from this rimg.
     my $prodlabel = ( $rimg =~ /_hpxrimg/ ? "healpix" : $label);
-    ( my $reduced = $rimg ) =~ s/_(?:hpx)?rimg([-_])/_${prodlabel}\1/;
+    ( my $reduced = $rimg ) =~ s/_(?:hpx)?rimg([-_])/_${prodlabel}$1/;
     copy($rimg, $reduced);
     push(@toremove, $rimg);
     push(@reduced, $reduced);
