@@ -667,6 +667,7 @@ Where the parts are defined as
   prodcount
   type
   version
+  asn_id
 
 The .fits suffix is not included in the returned list but should be present
 in the supplied filename.
@@ -679,12 +680,13 @@ sub dissect_cadcfile {
   $cadcfile = _strip_path( $cadcfile );
 
   my ($prefix, $utdate, $obsnum, $subsys, $product, $prodcount,
-      $type, $version);
+      $type, $version, $asn_id);
   if ($cadcfile =~ /^jcmt([hs])(\d{8})_(\d{5})_(\d{2,3}|lon|sho|p20|p13|p11|mix)_(\w+)_([a-z]{3})_(\d{3})\.fits/) {
     $prefix = $1;
     $utdate = $2;
     $obsnum = $3;
     $subsys = $4;
+    $asn_id = undef;
     $product= $5;
     $type = $6;
     $version = $7;
@@ -701,17 +703,40 @@ sub dissect_cadcfile {
       $prodcount = $2;
     }
 
-    # Clean up strings
-    $obsnum =~ s/^0+//;
-    $subsys =~ s/^0+//;
-    $prodcount =~ s/^0+// if defined $prodcount;
-    $version =~ s/^0+//;
+  } elsif ($cadcfile =~ /^jcmt(s)([48]50um)_([a-z]+)(\d{6})_(pub)_(\d{3})\.fits$/) {
+    $prefix = $1;
+    $utdate = undef;
+    $obsnum = undef;
+    $subsys = undef;
+    $asn_id = $2;
+    $product = $3;
+    $prodcount = $4;
+    $type = $5;
+    $version = $6;
 
-    return ($prefix,$utdate,$obsnum,$subsys,$product,$prodcount,$type,$version);
+  } elsif ($cadcfile =~ /^jcmt(h)(\d{6}MHz-(?:250|1000)MHz-[ULS]SB)_([a-z]+)(\d{6})_(pub)_(\d{3})\.fits$/) {
+    $prefix = $1;
+    $utdate = undef;
+    $obsnum = undef;
+    $subsys = undef;
+    $asn_id = $2;
+    $product = $3;
+    $prodcount = $4;
+    $type = $5;
+    $version = $6;
+
   } else {
     JSA::Error::FatalError->throw("CADC file '$cadcfile' looked okay but failed pattern match");
-  } 
-  return ();
+  }
+
+  # Clean up strings
+  $obsnum =~ s/^0+//;
+  $subsys =~ s/^0+//;
+  $prodcount =~ s/^0+// if defined $prodcount;
+  $version =~ s/^0+//;
+
+  return ($prefix,$utdate,$obsnum,$subsys,$product,$prodcount,$type,$version,
+          $asn_id);
 }
 
 =item B<drfilename_to_cadc>
@@ -852,7 +877,8 @@ Convert a CADC formatted filename to the original DR filename.
   $drname = cadc_to_drfilename( $cadcname );
 
 Note that the 'h'->'a' replacement in prefix is dependent on
-the content of the YYYYMMMDD ut date.
+the content of the YYYYMMMDD ut date or the presence of an
+association ID filename part.
 
 Undef is returned if the file does not look like a CADC filename .
 
@@ -873,7 +899,7 @@ sub cadc_to_drfilename {
   return unless looks_like_cadcfile( $cadcfile );
 
   # Sort out acsis prefix
-  if ($parts[0] eq 'h' && $parts[1] > 20060801) {
+  if ($parts[0] eq 'h' && ($parts[1] > 20060801 || defined $parts[8])) {
     $parts[0] = 'a';
   }
 
@@ -908,16 +934,22 @@ sub cadc_to_drfilename {
     # product formatting
     my $p = ( defined $parts[5] ? $parts[4] eq 'healpix' ? '%06d' : "%03d" : "" );
 
-    # zero padding depends on whether we are an obs or not
-    my $obsfmt = '%05d';
-    my $ssysfmt = '%02d';
-    if (!$isobs) {
-      $obsfmt = '%d';
-      $ssysfmt = '%d';
-    }
+    unless (defined $parts[8]) {
+      # zero padding depends on whether we are an obs or not
+      my $obsfmt = '%05d';
+      my $ssysfmt = '%02d';
+      if (!$isobs) {
+        $obsfmt = '%d';
+        $ssysfmt = '%d';
+      }
 
-    $new = sprintf( '%s%08d_'.$obsfmt.'_'.$ssysfmt.'_%s'.$p.'.sdf',
-                    @parts[0..4],(defined $parts[5] ? $parts[5] : () ) );
+      $new = sprintf( '%s%08d_'.$obsfmt.'_'.$ssysfmt.'_%s'.$p.'.sdf',
+                      @parts[0..4],(defined $parts[5] ? $parts[5] : () ) );
+    }
+    else {
+       $new = sprintf( '%s%s_%s'.$p.'.sdf',
+                      @parts[0, 8, 4], (defined $parts[5] ? $parts[5] : () ) );
+    }
 
     # account for group
     $new = "g".$new unless $isobs;
