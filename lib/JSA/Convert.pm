@@ -409,24 +409,10 @@ sub rename_png {
     $asn_id = $keywords{"jsa:obsid"};
   }
 
-  my $productID;
+  my $productID = $keywords{'jsa:productID'};
 
-  unless ($mode eq 'public') {
-    $productID = $keywords{'jsa:productID'};
-
-    JSA::Error::BadFITSHeader->throw("jsa:productID header is missing from PNG file $infile")
-        unless defined $productID;
-  }
-  else {
-    # For JSA public tiles the subsystem / wavelength part of the product
-    # ID is irrelevant because all the information we want is in the
-    # association ID.  Therefore just use the product instead
-    # of the product ID.
-    $productID = $keywords{'jsa:product'};
-
-    JSA::Error::BadFITSHeader->throw("jsa:product header is missing from PNG file $infile")
-        unless defined $productID;
-  }
+  JSA::Error::BadFITSHeader->throw("jsa:productID header is missing from PNG file $infile")
+      unless defined $productID;
 
   my $size = $exif->GetValue( "ImageHeight" );
 
