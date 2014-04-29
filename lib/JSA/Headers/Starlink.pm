@@ -94,6 +94,9 @@ sub update_fits_headers {
       # an association (group coadd).
       print $tmpfile "A ASN_TYPE project \$C\n";
     }
+    elsif ($mode eq 'public') {
+      print $tmpfile "A ASN_TYPE public \$C\n";
+    }
 
     # Write the ASN_ID header back into the FITS header.
     print $tmpfile "A ASN_ID $asn_id \$C\n";

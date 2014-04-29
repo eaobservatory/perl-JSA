@@ -41,10 +41,11 @@ Returns undef if there is no ASN_ID header.
   $asn_id = correct_asn_id( $mode, $hdr, $usesurvey );
 
 Processing mode can be one of ("obs", "night", "project", "public").
-Nothing is prepended for "obs" or "public" processing. The UT date is prepended
-in "night" mode and the SURVEY or project id is prepended in
+Nothing is prepended for "obs" processing. The UT date is prepended
+in "night" mode, the SURVEY or project id is prepended in
 project mode (although the survey is only used if the optional third
-argument is true.
+argument is true and the tile number is prepended in "public"
+mode.
 
 $hdr can be either an Astro::FITS::Header object or a reference to a hash.
 
@@ -68,9 +69,11 @@ sub correct_asn_id {
   # only if ASN_ID is defined.
   if( defined( $asn_id ) ) {
 
-    # Remove anything before the "-" that would indicate that this ASN_ID
-    # has been modified previously
-    $asn_id =~ s/.*\-//;
+    # Remove anything before the first "-" that would indicate that this ASN_ID
+    # has been modified previously.  But take care of ASN_IDs which actually
+    # include hyphens.
+    $asn_id =~ s/^[^-]*\-//
+        unless $asn_id =~ /^\d{6}MHz/;
 
     my $prefix;
     if( $mode eq 'night' ) {
@@ -82,6 +85,8 @@ sub correct_asn_id {
       } else {
         $prefix = $header{PROJECT};
       }
+    } elsif ($mode eq 'public') {
+      $prefix = sprintf('%06d', $header{'TILENUM'});
     }
     $asn_id = $prefix . '-' . $asn_id if defined $prefix;
   }
