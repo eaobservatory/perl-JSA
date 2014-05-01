@@ -482,6 +482,10 @@ if( ! $skipdp ) {
     }
     if (@new) {
       @files = @new;
+
+      # Scan the directory again, so that it includes the converted files
+      # and we don't mistake them for new pipeline products.
+      %post_retrieve = scan_dir();
     } else {
       die "No files left to process after conversion to NDF";
     }
