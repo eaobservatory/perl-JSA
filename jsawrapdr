@@ -357,6 +357,7 @@ my $useoracdr = 0;
 my $oracinst;
 my $tmpfile = '';
 my @files;
+my @files_retrieved = ();
 my %post_retrieve;
 
 # We need to scan for all files in the directory since dpCapture
@@ -377,6 +378,10 @@ if( ! $skipdp ) {
   # compare the old list with the new and return a list of files that
   # should be processed
   @files = compare_file_lists( \%existing_files, \%post_retrieve );
+
+  # Keep a copy of the list of files which were retrieved so that they
+  # can be cleaned up before running dpCapture.
+  @files_retrieved = @files;
 
   log_message("Processing the following files:\n". join("\n",@files)."\n");
 
@@ -518,9 +523,17 @@ my %drhdrs = read_headers( @drfiles );
 convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
                               dpdate => DateTime->now->datetime } );
 
-clean_directory_pre_capture($outdir, \%all_existing_files,
-                            \&looks_like_cadcfile)
-    if $cleanup eq 'cadc';
+if ($cleanup eq 'cadc') {
+  clean_directory_pre_capture($outdir, \%all_existing_files,
+                              \&looks_like_cadcfile);
+
+  # If working in a temporary directory (e.g. at CADC), make sure
+  # all the retrieved files have been deleted.  If we are working
+  # on processed data with PICARD then we don't want to send back
+  # the original files.
+  unlink grep {-e $_} map {File::Spec->catfile($outdir, $_)} @files_retrieved
+      if $tmpdir;
+}
 
 capture_products($id, $persist, $transdir,
                  ($canfar ? 'CANFAR' : 'JCMT'),
