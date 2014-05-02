@@ -853,27 +853,22 @@ errors.  On error, rolls back a transaction.  Returns nothing.
     unless ( $dbh->err() ) {
 
       $log->trace( 'Commiting transaction' );
-
       if ( $trans == 1  && ! $autoc ) {
 
         $dbh->commit()
           or throw JSA::Error 'Cannot commit transaction: ' . $dbh->errstr();
       }
-
       --$trans;
       return;
     }
 
     $log->error( 'Rolling back transaction: ', $dbh->errstr() );
-
     if ( $trans && ! $autoc ) {
 
       $trans = 0;
-
       $dbh->rollback()
         or throw JSA::Error 'Cannot rollback transaction: ' . $dbh->errstr();
     }
-
     return;
   }
 }
