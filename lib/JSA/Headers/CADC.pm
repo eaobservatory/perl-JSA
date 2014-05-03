@@ -69,11 +69,16 @@ sub correct_asn_id {
   # only if ASN_ID is defined.
   if( defined( $asn_id ) ) {
 
-    # Remove anything before the first "-" that would indicate that this ASN_ID
+    # Remove components before "-" that would indicate that this ASN_ID
     # has been modified previously.  But take care of ASN_IDs which actually
-    # include hyphens.
-    $asn_id =~ s/^[^-]*\-//
-        unless $asn_id =~ /^\d{6}MHz/;
+    # include hyphens.  ASN_IDs known to do this are:
+    #   * ACSIS "pub" products, e.g. 345796MHz-1000MHz-SSB
+    # ASN_IDs not containing hyphens are:
+    #   * Regular ASN_IDs consisting of md5sums
+    #   * SCUBA-2 "pub" products, e.g. 450um
+    while ($asn_id !~ /^\d{6}MHz/) {
+      last unless $asn_id =~ s/^[^-]*\-//;
+    }
 
     my $prefix;
     if( $mode eq 'night' ) {
@@ -86,7 +91,27 @@ sub correct_asn_id {
         $prefix = $header{PROJECT};
       }
     } elsif ($mode eq 'public') {
-      $prefix = sprintf('%06d', $header{'TILENUM'});
+      # Make sure we have a JSA HEALPix tile number available.
+      my $tilenum = $header{'TILENUM'};
+      die 'TILENUM header not defined for public product'
+        unless defined $tilenum;
+
+      # Instrument-specific behavior for "public" ASN_IDs.
+      if ($header{'INSTRUME'} eq 'SCUBA-2') {
+        # SCUBA-2 is a special case in that we actually want to throw
+        # away the existing ASN_ID (which only contains filter wavelength)
+        # so that the data from the two filters ends up in the same
+        # "CompositeObservation" at CADC.  Therefore just return
+        # the new string: instrument plus tile number.
+        return sprintf('%s-%06d', 'SCUBA2', $tilenum);
+      }
+      elsif ($header{'INSTRUME'} eq 'HARP' and $header{'BACKEND'} eq 'ACSIS') {
+        $prefix = sprintf('%s-%06d', 'HARP-ACSIS', $tilenum);
+      }
+      else {
+        die 'No public ASN_ID prefix defined for instrument ' .
+            $header{'INSTRUME'} . ' and backend ' . $header{'BACKEND'};
+      }
     }
     $asn_id = $prefix . '-' . $asn_id if defined $prefix;
   }
