@@ -33,9 +33,7 @@ use Starlink::Config qw/ :override /;
 
 use JSA::Command qw/ run_command /;
 use JSA::Error qw/ :try /;
-use JSA::Files qw/ looks_like_drfile looks_like_cadcfile drfilename_to_cadc dissect_drfile
-                   construct_rawfile looks_like_rawfile can_send_to_cadc can_send_to_cadc_guess /;
-use JSA::Headers qw/ read_header read_wcs /;
+use JSA::Headers qw/ read_wcs /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ check_star_env
@@ -201,13 +199,46 @@ invalid parents but try to retain as much provenance information as
 possible by removing only those entries required to give us a valid
 parent.
 
+This subroutine makes use of a number of callbacks which implement
+the logic required to select and convert provenance entries.
+
+=over 4
+
+=item \&is_dr_file($file)
+
+Determine if the file is a DR product.
+
+e.g. C<JSA::Files::looks_like_drfile>.
+
+=item \&is_archive_file($file)
+
+Determine if the file already has a CADC name.
+
+e.g. C<JSA::Files::looks_like_cadcfile>.
+
+=item \&check_file($path)
+
+Determine whether a file should be included or not.
+
+=item \&convert_filename($path, $basedir, $haspar)
+
+Convert a filename to the corresponding CADC filename for
+storage in the provenance.
+
+=back
+
 =cut
 
 sub prov_update_parent_path {
   my $file = shift;
 
+  my $is_dr_file = shift;
+  my $is_archive_file = shift;
+  my $check_file = shift;
+  my $convert_filename = shift;
+
   # first see if this is a valid NDF
-  looks_like_drfile($file)
+  $is_dr_file->($file)
     or JSA::Error::BadFile->throw( "File '$file' does not look like it came from the DR");
 
   print "Updating parent provenance path for file $file\n" if $DEBUG;
@@ -239,7 +270,8 @@ sub prov_update_parent_path {
     for my $i (@parind) {
       next if( $checked{$i} );
       print "Checking parent $i\n" if $DEBUG;
-      my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $status );
+      my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $check_file,
+                                              $status );
       last if $status != &NDF::SAI__OK;
       push(@validated, @$ok);
       push(@rejected, @$rej);
@@ -272,65 +304,12 @@ sub prov_update_parent_path {
 
       # proceed if status is good and the path does not already
       # look correct
-      if ($status == &NDF::SAI__OK && !looks_like_cadcfile($path)) {
+      if ($status == &NDF::SAI__OK && !$is_archive_file->($path)) {
 
         # The path stored in the file lacks the .sdf
         $path .= ".sdf" unless $path =~ /\.sdf$/;
 
-        # Check to see if this file exists. If it doesn't, we'll check in the same directory as the original file.
-        if ( ! -e $path ) {
-           my $parent_filename = fileparse( $path );
-           $path = File::Spec->catfile( $basedir, $parent_filename );
-        }
-
-        # We need the header
-        my $hdr = read_header( $path );
-
-        # We need to know if there is a product. There are two ways of doing this.
-        # 1. Look at the filename.
-        # 2. Read the PRODUCT header
-        # Reconstructing the filename will be tricky without a header but see how far we can get
-        $path =~ s/_0001_raw001/_raw001/;
-        my $product;
-        if (defined $hdr) {
-          $product = $hdr->value("PRODUCT");
-        } else {
-          my @parts = dissect_drfile( $path );
-          # raw is special so is not a real product
-          if (defined $parts[5] && $parts[5] ne 'raw') {
-            $product = $parts[5];
-          }
-        }
-
-        # if there is no product it is a raw file so will not be
-        # a FITS CADC filename.
-        my $newpath;
-        if (!$product || !$haspar) {
-          # do nothing if this looks raw
-          if (!looks_like_rawfile($path)) {
-            # Recreate the raw file name
-            if (defined $hdr) {
-              $newpath = construct_rawfile( $hdr );
-            } else {
-              # This hack does not work for multi-subsystem hybrids
-              # since we lose the subscan number
-              $newpath = $path;
-              if ($newpath =~ /_[a-z]+(\d+)/) {
-                my $newnum = sprintf( "%04d", $1);
-                $newpath =~ s/_[a-z]+\d+/_$newnum/;
-              }
-            }
-          }
-        } else {
-          # We need the ASN_TYPE from this parent to correctly make the file name
-          my $asntype = (defined $hdr ? $hdr->value("ASN_TYPE") : undef);
-
-          # if we do not have a value we need to hope it's an
-          # "obs" product
-          $newpath = drfilename_to_cadc( $path,
-                                         (defined $asntype ?
-                                          (ASN_TYPE => $asntype) : ()));
-        }
+        my $newpath = $convert_filename->($path, $basedir, $haspar);
 
         if (defined $newpath) {
           # update the path in the keymap
@@ -466,11 +445,12 @@ sub _get_prov_parents {
 
 =item B<_check_parent_product>
 
-Get the product for this parent and compare it with the allowed list.
+Get the product for this parent and check whether it is allowed.
 If it does not match the allowed product name, the parent of that item
 is checked until a match is found.
 
-  ($ok, $rej) = _check_parent_product( $prov, $index, $file, $status );
+  ($ok, $rej) = _check_parent_product( $prov, $index, $file,
+                                       \&check_file, $status );
 
 Returns the results as references to arrays. The first is an array of indices
 that have valid products. The second is an array of indices that were checked and
@@ -478,6 +458,9 @@ rejected.
 
 If the current parent index is okay it will be the only value stored in the first
 array and the second array will be empty.
+
+The subroutine reference C<\&check_file($path)> is used to check
+files to see whether they are allowed or not.
 
 =cut
 
@@ -490,6 +473,7 @@ sub _check_parent_product {
   my $prov = shift;
   my $index = shift;
   my $file = shift;
+  my $check_file = shift;
 
   # Note that we do not use a lexical for status since we want to
   # emulate the interface used for the NDF module
@@ -521,48 +505,16 @@ sub _check_parent_product {
 
     if( basename( $file ) eq basename( $path ) ) {
       print "Looks like original file ($file == $path)\n" if $DEBUG;
-    } elsif (looks_like_cadcfile($path)) {
-      # assume that if the provenance already includes CADC form
-      # that this file is okay
-      print "Looks like CADCFILE\n" if $DEBUG;
-      @isok = ($index);
-
-    } elsif (looks_like_drfile($path)) {
-      # Reading the header may take a lot longer than parsing the
-      # filename but for now we do that since that is required
-      # if we do not wish to reimplement the logic in can_send_to_cadc.
-      print "Looks like DR ($path)\n" if $DEBUG;
-
-      # in some cases intermediate files have been deleted even
-      # though they match the dr file name test. We use a quick
-      # test to see if they are close to being relevant and if they
-      # are relevant we do an additional test with the header
-      if (can_send_to_cadc_guess( $path ) ) {
-
-        print "Can possibly send $path\n" if $DEBUG;
-
-        # Open up the header, send it to can_send_to_cadc() to find
-        # out if this file is a suitable one to send to CADC.
-        my $hdr = read_header( $path );
-        if (!defined $hdr) {
-          if ($_[0] == &NDF::SAI__OK()) {
-            $_[0] = &NDF::SAI__ERROR();
-            err_rep( " ", "Unable to read FITS header from $path", $_[0] );
-            return ();
-          }
-        }
-
-        if ( can_send_to_cadc( $hdr ) ) {
-          # we are good
-          print "Product match\n" if $DEBUG;
-          @isok = ($index);
+    } else {
+      my $want_file = eval {$check_file->($path)};
+      unless (defined $want_file) {
+        if ($_[0] == &NDF::SAI__OK()) {
+          $_[0] = &NDF::SAI__ERROR();
+          err_rep( " ", $@, $_[0] );
+          return ();
         }
       }
-    } elsif ( looks_like_rawfile( $path ) ) {
-      print "Looks like raw\n" if $DEBUG;
-      @isok = ($index);
-    } else {
-      print "$path not CADC, DR or raw file\n" if $DEBUG;
+      @isok = ($index) if $want_file;
     }
 
     # if we have got here with an empty index list we need to look in the parent
@@ -572,7 +524,8 @@ sub _check_parent_product {
         push(@rejected, $index);
         for my $i (@parents) {
           print "Checking parent $i\n" if $DEBUG;
-          my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $_[0] );
+          my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $check_file,
+                                                  $_[0] );
           return () unless $_[0] == &NDF::SAI__OK();
           push(@isok, @$ok);
           push(@rejected, @$rej);

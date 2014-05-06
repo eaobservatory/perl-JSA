@@ -42,7 +42,9 @@ use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    looks_like_drfile looks_like_cadcfile
+                   looks_like_rawfile can_send_to_cadc_guess
                    can_send_to_cadc looks_like_drthumb
+                   dissect_drfile construct_rawfile
                    merge_pngs want_to_send_to_cadc /;
 
 use Exporter 'import';
@@ -194,7 +196,11 @@ sub convert_dr_files {
         # is exportable so first fix up provenance
         my $skip = 0;
         try {
-          prov_update_parent_path( $tfile );
+          prov_update_parent_path( $tfile,
+                                   \&looks_like_drfile,
+                                   \&looks_like_cadcfile,
+                                   \&_prov_check_file,
+                                   \&_prov_convert_filename );
         } catch JSA::Error with {
           # Just skip this file for now.
           my $E = shift;
@@ -550,6 +556,130 @@ sub fits2ndf {
   # consider catching the BadExec error
   run_star_command( @args );
   return 1;
+}
+
+=item B<_prov_check_file>
+
+Determine whether a file is one which we would like to keep in
+the provenance or not.
+
+=cut
+
+sub _prov_check_file {
+  my $path = shift;
+
+  if (looks_like_cadcfile($path)) {
+    # assume that if the provenance already includes CADC form
+    # that this file is okay
+    print "Looks like CADCFILE\n" if $DEBUG;
+    return 1;
+
+  } elsif (looks_like_drfile($path)) {
+    # Reading the header may take a lot longer than parsing the
+    # filename but for now we do that since that is required
+    # if we do not wish to reimplement the logic in can_send_to_cadc.
+    print "Looks like DR ($path)\n" if $DEBUG;
+
+    # in some cases intermediate files have been deleted even
+    # though they match the dr file name test. We use a quick
+    # test to see if they are close to being relevant and if they
+    # are relevant we do an additional test with the header
+    if (can_send_to_cadc_guess( $path ) ) {
+
+      print "Can possibly send $path\n" if $DEBUG;
+
+      # Open up the header, send it to can_send_to_cadc() to find
+      # out if this file is a suitable one to send to CADC.
+      my $hdr = read_header( $path );
+      die "Unable to read FITS header from $path"
+        unless (defined $hdr);
+
+      if ( can_send_to_cadc( $hdr ) ) {
+        # we are good
+        print "Product match\n" if $DEBUG;
+        return 1;
+      }
+    }
+  } elsif ( looks_like_rawfile( $path ) ) {
+    print "Looks like raw\n" if $DEBUG;
+    return 1;
+  }
+
+  print "$path not CADC, DR or raw file\n" if $DEBUG;
+  return 0;
+}
+
+=item B<_prov_convert_filename>
+
+Convert the name of a file in the provenance system into the
+corresponding CADC filename which we would like to be the
+new provenance entry.
+
+=cut
+
+sub _prov_convert_filename {
+  my $path = shift;
+  my $basedir = shift;
+  my $haspar = shift;
+
+  # Check to see if this file exists. If it doesn't, we'll check in the
+  # same directory as the original file.
+  if ( ! -e $path ) {
+     my $parent_filename = fileparse( $path );
+     $path = File::Spec->catfile( $basedir, $parent_filename );
+  }
+
+  # We need the header
+  my $hdr = read_header( $path );
+
+  # We need to know if there is a product. There are two ways of doing this.
+  # 1. Look at the filename.
+  # 2. Read the PRODUCT header
+  # Reconstructing the filename will be tricky without a header but see how
+  # far we can get
+  $path =~ s/_0001_raw001/_raw001/;
+  my $product;
+  if (defined $hdr) {
+    $product = $hdr->value("PRODUCT");
+  } else {
+    my @parts = dissect_drfile( $path );
+    # raw is special so is not a real product
+    if (defined $parts[5] && $parts[5] ne 'raw') {
+      $product = $parts[5];
+    }
+  }
+
+  # if there is no product it is a raw file so will not be
+  # a FITS CADC filename.
+  my $newpath;
+  if (!$product || !$haspar) {
+    # do nothing if this looks raw
+    if (!looks_like_rawfile($path)) {
+      # Recreate the raw file name
+      if (defined $hdr) {
+        $newpath = construct_rawfile( $hdr );
+      } else {
+        # This hack does not work for multi-subsystem hybrids
+        # since we lose the subscan number
+        $newpath = $path;
+        if ($newpath =~ /_[a-z]+(\d+)/) {
+          my $newnum = sprintf( "%04d", $1);
+          $newpath =~ s/_[a-z]+\d+/_$newnum/;
+        }
+      }
+    }
+  } else {
+    # We need the ASN_TYPE from this parent to correctly make the file name
+    my $asntype = (defined $hdr ? $hdr->value("ASN_TYPE") : undef);
+
+    # if we do not have a value we need to hope it's an
+    # "obs" product
+    $newpath = drfilename_to_cadc( $path,
+                                   (defined $asntype ?
+                                    (ASN_TYPE => $asntype) : ()));
+  }
+
+  return $newpath;
 }
 
 =back
