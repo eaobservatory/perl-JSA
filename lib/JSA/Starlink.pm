@@ -182,7 +182,9 @@ sub run_star_command {
 Rename the provenance entries in the supplied file to match the CADC
 filenaming convention rather than the CADC naming scheme.
 
-  prov_update_parent_path( $file );
+  prov_update_parent_path( $file, \&is_dr_file, \&is_archive_file,
+                           \&check_file, \&convert_filename,
+                           $strict_check );
 
 Note that this command only works if the parent file actually exists,
 since in many cases the ASN_TYPE header is required to determine the
@@ -206,7 +208,8 @@ the logic required to select and convert provenance entries.
 
 =item \&is_dr_file($file)
 
-Determine if the file is a DR product.
+Determine if the file is a DR product.  Only used at the start of the
+subroutine to reject files which are not DR products.
 
 e.g. C<JSA::Files::looks_like_drfile>.
 
@@ -227,6 +230,9 @@ storage in the provenance.
 
 =back
 
+If the C<$strict_check> argument isn't given then provenance
+entries which don't have any valid parents are retained.
+
 =cut
 
 sub prov_update_parent_path {
@@ -236,6 +242,7 @@ sub prov_update_parent_path {
   my $is_archive_file = shift;
   my $check_file = shift;
   my $convert_filename = shift;
+  my $strict_check = shift;
 
   # first see if this is a valid NDF
   $is_dr_file->($file)
@@ -271,7 +278,7 @@ sub prov_update_parent_path {
       next if( $checked{$i} );
       print "Checking parent $i\n" if $DEBUG;
       my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $check_file,
-                                              $status );
+                                              $strict_check, $status );
       last if $status != &NDF::SAI__OK;
       push(@validated, @$ok);
       push(@rejected, @$rej);
@@ -450,7 +457,7 @@ If it does not match the allowed product name, the parent of that item
 is checked until a match is found.
 
   ($ok, $rej) = _check_parent_product( $prov, $index, $file,
-                                       \&check_file, $status );
+                                       \&check_file, $strict_check, $status );
 
 Returns the results as references to arrays. The first is an array of indices
 that have valid products. The second is an array of indices that were checked and
@@ -474,6 +481,7 @@ sub _check_parent_product {
   my $index = shift;
   my $file = shift;
   my $check_file = shift;
+  my $strict_check = shift;
 
   # Note that we do not use a lexical for status since we want to
   # emulate the interface used for the NDF module
@@ -525,11 +533,16 @@ sub _check_parent_product {
         for my $i (@parents) {
           print "Checking parent $i\n" if $DEBUG;
           my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $check_file,
-                                                  $_[0] );
+                                                  $strict_check, $_[0] );
           return () unless $_[0] == &NDF::SAI__OK();
           push(@isok, @$ok);
           push(@rejected, @$rej);
         }
+      } elsif ($strict_check) {
+        # In strict-check mode, if no valid parents were found, reject this
+        # provenance entry.
+        print "No parents for $index -- rejected by strict check\n" if $DEBUG;
+        push @rejected, $index;
       } else {
         # if there are no more parents we have to assume that this is a valid
         # parent.

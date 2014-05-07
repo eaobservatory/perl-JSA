@@ -200,7 +200,8 @@ sub convert_dr_files {
                                    \&looks_like_drfile,
                                    \&looks_like_cadcfile,
                                    \&_prov_check_file,
-                                   \&_prov_convert_filename );
+                                   \&_prov_convert_filename,
+                                   0 );
         } catch JSA::Error with {
           # Just skip this file for now.
           my $E = shift;
