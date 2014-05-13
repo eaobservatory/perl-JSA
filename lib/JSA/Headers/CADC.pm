@@ -103,7 +103,7 @@ sub correct_asn_id {
         # so that the data from the two filters ends up in the same
         # "CompositeObservation" at CADC.  Therefore just return
         # the new string: instrument plus tile number.
-        return sprintf('%s-%06d', 'SCUBA2', $tilenum);
+        return sprintf('%s-%06d', 'SCUBA-2', $tilenum);
       }
       elsif ($header{'INSTRUME'} eq 'HARP' and $header{'BACKEND'} eq 'ACSIS') {
         $prefix = sprintf('%s-%06d', 'HARP-ACSIS', $tilenum);
