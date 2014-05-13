@@ -5,7 +5,7 @@ use strict; use warnings;
 our $VERSION = '0.01';
 
 use Exporter 'import';
-@EXPORT_OK = qw( get_asn_id );
+our @EXPORT_OK = qw( get_asn_id );
 
 use Log::Log4perl;
 
