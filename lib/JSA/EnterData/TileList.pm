@@ -2,7 +2,7 @@ package JSA::EnterData::TileList;
 
 use strict; use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =pod
 
@@ -44,11 +44,20 @@ our $Tile_List = '/star/bin/smurf/jsatilelist';
 
 Returns a L<JSA::EnterData::TileList> object.
 
+  $tilenum = JSA::EnterData::TileList->new();
+
+Takes an optional argument of truth value if to use F</stardev> instead of
+F</star>.
+
+  $tilenum_in_hilo = JSA::EnterData::TileList->new( 'dev' );
+
 =cut
 
 sub new {
 
-  my ( $class ) = @_;
+  my ( $class, $dev ) = @_;
+
+  $dev and $Tile_List =~ s{^(/star)/}[${1}dev/];
 
   my $obj = '';
   return $obj = bless \$obj, $class;
@@ -58,7 +67,7 @@ sub new {
 
 =item B<get_file_command>
 
-Given a file list path, returns a list of <jsatilelist> command and arguments to
+Given a file list path, returns a list of F<jsatilelist> command and arguments to
 be run.
 
   @command = $tilenum->get_file_command( '/file/list' );
@@ -67,7 +76,7 @@ be run.
 
 sub get_file_command {
 
-  my ( $class, $list ) = @_;
+  my ( $class, $list, $dev ) = @_;
 
   defined $list && -r $list
     or throw JSA::Error::BadArgs 'No readable file list given.';
@@ -83,56 +92,56 @@ sub get_file_command {
 
 =item B<get_radec_command>
 
-Given a instrument name and a list of array references of RA-DEC pais, returns a
-list of <jsatilelist> command and arguments to be run.
+Given a instrument name and 4 corners as RA & Dec array references, returns a
+list of F<jsatilelist> command and arguments to be run.
 
-  @command = $tilenum->get_radec_command( 'RxWD', ([ ra1, dec1 ], [ ra2, dec2 ]) );
+  @command = $tilenum->get_radec_command( 'RxWD',
+                                          [ $obsratl, $obsratr,
+                                            $obsrabr, $obsrabl
+                                          ],
+                                          [ $obsdectl, $obsdectr,
+                                            $obsdecbr, $obsdecbl
+                                          ]
+                                        );
+
+Known instruments are ...
+
+  HARP
+  RxA
+  RxWB
+  RxWD
+  SCUBA-2(450)
+  SCUBA-2(850)
 
 =cut
+
 {
   my $inst_ok;
-
-  # Instrument name is not just 'ACSIS' or 'SCUBA2'; it needs to be one of ..
-  #
-  #   HARP
-  #   RxA
-  #   RxWB
-  #   RxWD
-  #   SCUBA-2(450)
-  #   SCUBA-2(850)
-  #
-  # Accepts the ra, dec pairs as a list of array references for each vertex.
   sub get_radec_command {
 
-    my ( $class, $inst, @radec ) = @_;
+    my ( $class, $inst, $ra, $dec ) = @_;
 
-    # XXX TO BE REMOVED.
-    Carp::carp( "Possibly need to be updated to for input specification of ra, dec vertices." );
-
-    scalar @radec or return;
+    my @ra  = @{ $ra };
+    my @dec = @{ $dec };
 
     unless ( defined $inst_ok ) {
 
       $inst_ok = qr{^(?:$_)$}i
-                    for join '|', qw[ HARP RxA RxWB RxWD
-                                      SCUBA-2(450) SCUBA-2(850)
-                                    ];
+                    for join '|', map quotemeta( $_ ),
+                                        qw[ HARP RxA RxWB RxWD
+                                            SCUBA-2(450) SCUBA-2(850)
+                                          ];
     }
+
     $inst =~ $inst_ok
       or throw JSA::Error::BadArgs "Unknown instrument name, $inst, given." ;
 
-    my ( @ra, @dec );
-    for my $pair ( @radec ) {
-
-      push @ra,  $pair->[0];
-      push @dec, $pair->[1];
-    }
     return
       ( $Tile_List,
         qq[in=!],
         qq[instrument=$inst],
-        q[vertex_ra=']  . join( ' ', @ra )  . q['],
-        q[vertex_dec='] . join( ' ', @dec ) . q[']
+        q/vertex_ra=[/  . join( ',', @ra )  . q/]/,
+        q/vertex_dec=[/ . join( ',', @dec ) . q/]/
       );
   }
 }
@@ -146,7 +155,7 @@ list of <jsatilelist> command and arguments to be run.
 
 =head1 COPYRIGHT, LICENSE
 
-Copyright (C) 2013 Science and Technology Facilities Council.
+Copyright (C) 2013-2014 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify
