@@ -346,7 +346,7 @@ Where the options hash can include:
 
 The JSA naming convention for preview images is
 
- JCMT_<asn_id>_<product_id>_preview_SIZE.png
+ jcmt_<asn_id>_<product_id>_preview_SIZE.png
 
 where <asn_id> is the observation identifier in frame products
 and is the association identifier for group products. The
@@ -423,7 +423,9 @@ sub rename_png {
 
   my $size = $exif->GetValue( "ImageHeight" );
 
-  $outfile = join("_", "JCMT", $asn_id, $productID, "preview", $size ). $suffix;
+  # CADC requested during the teleconference of 2014/05/13 that all file names
+  # be lower case.
+  $outfile = lc(join("_", "jcmt", $asn_id, $productID, "preview", $size) . $suffix);
 
   copy( $infile, $outfile );
 

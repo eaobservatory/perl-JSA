@@ -534,11 +534,11 @@ sub looks_like_cadcfile {
     return 1; # SCUBA-2
   } elsif ($filename =~ /^jcmts\d{8}_\d{5}_(lon|sho|p20|p13|p11|mix)_\w+_[a-z]{3}_\d{3}(_\d{2,4})?\.(fits|png)/) {
     return 1; # SCUBA
-  } elsif ($filename =~ /^JCMT_.*_preview_\d+\.png$/) {
+  } elsif ($filename =~ /^jcmt_.*_preview_\d+\.png$/) {
     return 1; # CAOM-2 style preview filename: <collection>_<observationID>_<productID>_preview_(64|256|1024)
   } elsif ($filename =~/^jcmts[48]50um_[a-z]+\d{6}_pub_\d{3}\.fits$/) {
     return 1; # SCUBA-2 co-added JSA tile
-  } elsif ($filename =~/^jcmth\d{6}MHz-(?:250|1000)MHz-[ULS]SB_[a-z]+\d{6}_pub_\d{3}\.fits$/) {
+  } elsif ($filename =~/^jcmth\d{6}mhz-(?:250|1000)mhz-[uls]sb_[a-z]+\d{6}_pub_\d{3}\.fits$/) {
     return 1; # ACSIS co-added JSA tile
   }
   print "Failed looks_like_cadcfile\n" if $DEBUG;
@@ -714,7 +714,7 @@ sub dissect_cadcfile {
     $type = $5;
     $version = $6;
 
-  } elsif ($cadcfile =~ /^jcmt(h)(\d{6}MHz-(?:250|1000)MHz-[ULS]SB)_([a-z]+)(\d{6})_(pub)_(\d{3})\.fits$/) {
+  } elsif ($cadcfile =~ /^jcmt(h)(\d{6}mhz-(?:250|1000)mhz-[uls]sb)_([a-z]+)(\d{6})_(pub)_(\d{3})\.fits$/) {
     $prefix = $1;
     $utdate = undef;
     $obsnum = undef;
@@ -862,6 +862,10 @@ sub drfilename_to_cadc {
                     $type, $args{'VERSION'}, (defined $resolution ? $resolution : ()),
                     ($suffix eq 'png' ? 'png' : 'fits'));
   }
+
+  # CADC requested during the teleconference of 2014/05/13 that all file names
+  # be lower case.
+  $new = lc($new);
 
   # prepend directory if needed
   if ($dir) {

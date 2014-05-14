@@ -76,7 +76,7 @@ sub correct_asn_id {
     # ASN_IDs not containing hyphens are:
     #   * Regular ASN_IDs consisting of md5sums
     #   * SCUBA-2 "pub" products, e.g. 450um
-    while ($asn_id !~ /^\d{6}MHz/) {
+    while ($asn_id !~ /^\d{6}MHz/i) {
       last unless $asn_id =~ s/^[^-]*\-//;
     }
 

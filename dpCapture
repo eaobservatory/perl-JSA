@@ -125,7 +125,7 @@ if (defined $archive && $archive =~ /canfar/i) {
   }
 } else {
   # Standard CADC compliant capture
-  $regexp = qr/^(?:jcmt.*\.fits|JCMT.*\.png)$/;
+  $regexp = qr/^(?:jcmt.*\.fits|jcmt.*\.png)$/;
 }
 
 # Sort out output directory
