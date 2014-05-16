@@ -50,7 +50,7 @@ use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
 use Exporter 'import';
 our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf
                      convert_dr_files list_convert_plan
-                     ndf2fits /;
+                     ndf2fits write_dpinfo_png /;
 
 our $DEBUG = 0;
 
