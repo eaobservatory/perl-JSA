@@ -77,6 +77,7 @@ use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
 use JSA::Headers::CADC qw/ correct_asn_id /;
 
+use OMP::ArcQuery;
 use OMP::ArchiveDB;
 use OMP::Info::Obs;
 use OMP::Info::ObsGroup;
@@ -94,6 +95,9 @@ my $TELESCOPE = 'JCMT';
 my $MAILHOST = 'mailhost.jach.hawaii.edu';
 my $MAILTO = 'jcmtarch@jach.hawaii.edu';
 my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
+
+# Use new JCMT database for DAS data in ACSIS format.
+$OMP::ArcQuery::GSD_FROM_JCMT_INSTEAD = 1;
 
 # Don't fall back to files.
 $OMP::ArchiveDB::FallbackToFiles = 0;
