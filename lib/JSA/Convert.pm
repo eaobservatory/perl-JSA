@@ -423,9 +423,7 @@ sub rename_png {
 
   my $size = $exif->GetValue( "ImageHeight" );
 
-  # CADC requested during the teleconference of 2014/05/13 that all file names
-  # be lower case.
-  $outfile = lc(join("_", "jcmt", $asn_id, $productID, "preview", $size) . $suffix);
+  $outfile = _cadc_preview_file_name($asn_id, $productID, $size, $suffix);
 
   copy( $infile, $outfile );
 
@@ -560,6 +558,25 @@ sub fits2ndf {
   run_star_command( @args );
   return 1;
 }
+
+=item B<_cadc_preview_file_name>
+
+Create CAOM-2 style preview file name.
+
+    my $outfile = _cadc_preview_file_name($obs_id, $prod_id, $size, '.png');
+
+=cut
+
+sub _cadc_preview_file_name {
+  my ($obs_id, $product_id, $size, $suffix) = @_;
+
+  # CADC requested during the teleconference of 2014/05/13 that all file names
+  # be lower case.
+  return lc(
+      join('_', 'jcmt', $obs_id, $product_id, 'preview', $size)
+      . $suffix);
+}
+
 
 =item B<_prov_check_file>
 
