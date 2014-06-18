@@ -179,7 +179,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $instrume = uc( $hdr->{'INSTRUME'} );
     my $backend = uc( $hdr->{'BACKEND'} );
 
-    # No reduciton recipe at CADC yet for (FTS|POL)-2.
+    # No reduction recipe at CADC yet for (FTS|POL)-2.
     if ( obs_is_fts2_or_pol2_RECIPE( $backend, $obs->drrecipe() ) ) {
 
       log_message( sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction %s\n",
