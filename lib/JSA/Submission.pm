@@ -6,17 +6,38 @@ JSA::Submission - Common routines for DP job submission scripts.
 
 =cut
 
+use OMP::ArcQuery;
+use OMP::ArchiveDB;
+
 use warnings;
 use strict;
 
 use parent qw/Exporter/;
-our @EXPORT_OK = qw//;
+our @EXPORT_OK = qw/prepare_archive_db/;
 
 =head1 SUBROUTINES
 
 =over 4
 
+=item prepare_archive_db
+
+Configure the archive database for querying.
+
 =cut
+
+sub prepare_archive_db {
+  # Use new JCMT database for DAS data in ACSIS format.
+  $OMP::ArcQuery::GSD_FROM_JCMT_INSTEAD = 1;
+
+  # Don't fall back to files.
+  $OMP::ArchiveDB::FallbackToFiles = 0;
+
+  # Use DB for any date.
+  $OMP::ArchiveDB::AnyDate = 1;
+
+  # Fix search criteria to avoid being reset just before querying for data.
+  OMP::ArchiveDB->use_existing_criteria( 1 );
+}
 
 =back
 

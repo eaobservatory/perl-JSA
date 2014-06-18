@@ -76,10 +76,8 @@ use JSA::Error qw/ :try /;
 use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
 use JSA::Headers::CADC qw/ correct_asn_id /;
-use JSA::Submission;
+use JSA::Submission qw/prepare_archive_db/;
 
-use OMP::ArcQuery;
-use OMP::ArchiveDB;
 use OMP::Info::Obs;
 use OMP::Info::ObsGroup;
 use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
@@ -97,17 +95,7 @@ my $MAILHOST = 'mailhost.jach.hawaii.edu';
 my $MAILTO = 'jcmtarch@jach.hawaii.edu';
 my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
 
-# Use new JCMT database for DAS data in ACSIS format.
-$OMP::ArcQuery::GSD_FROM_JCMT_INSTEAD = 1;
-
-# Don't fall back to files.
-$OMP::ArchiveDB::FallbackToFiles = 0;
-
-# Use DB for any date.
-$OMP::ArchiveDB::AnyDate = 1;
-
-# Fix search criteria to avoid being reset just before querying for data.
-OMP::ArchiveDB->use_existing_criteria( 1 );
+prepare_archive_db();
 
 # Handle command-line options.
 my ( $help, $man, $mode, $project, $ut, $version, $priority, $noemail, $debug, $queue );
