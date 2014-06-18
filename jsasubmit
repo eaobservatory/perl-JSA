@@ -87,8 +87,6 @@ use Data::Dumper;
 use Getopt::Long;
 use Pod::Usage;
 
-my $TELESCOPE = 'JCMT';
-
 prepare_archive_db();
 
 # Handle command-line options.
@@ -149,7 +147,7 @@ if( $mode eq 'project' ) {
                                   nocomments => 0,
                                   retainhdr => 1 );
 } else {
-  $grp = new OMP::Info::ObsGroup( telescope => $TELESCOPE,
+  $grp = new OMP::Info::ObsGroup( telescope => 'JCMT',
                                   date => $ut,
                                   nocomments => 0,
                                   retainhdr => 1 );
