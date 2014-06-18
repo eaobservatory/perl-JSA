@@ -1,0 +1,534 @@
+#!/usr/bin/env starperl
+
+=head1 NAME
+
+jsahpxobs - submit observations for HPX tile generation
+
+=head1 SYNOPSIS
+
+  jsahpxobs -ut 20080705
+
+=head1 DESCRIPTION
+
+Submits processing jobs to the JSA specifically to generate healpix
+tiles for individual observations.
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<-debug>
+
+Enable debug messages and do not actually submit a processing job. Also
+disables emailing.
+
+=item B<-help>
+
+Print help information.
+
+=item B<-man>
+
+Print full manual.
+
+=item B<-noemail>
+
+By default a mail message is sent with the job details. If this option is given
+the message will be printed to standard output instead.
+
+=item B<-priority>
+
+Used to override the default priority for all jobs. Must be an integer between
+-1023 and 1024. The default will be 1.
+
+=item B<-project>
+
+Name of a project to be processed. Should not be used with the "-ut" option. Files
+are not verified to be present at CADC in this mode.
+
+=item B<-queue>
+
+Can be used to override the queue that should be used for the data processing
+at CADC. Can be left unset. Useful values are "JAC_REPROC" for low priority
+reprocessing.
+
+=item B<-ut>
+
+Specify the UT date to be processed. Should not be used with the "-project" option.
+Files to be processed are verified to be at CADC before a job will be submitted.
+
+=item B<-version>
+
+Print version information.
+
+=back
+
+=cut
+
+
+use JAC::Setup qw/ omp oracdr sybase /;
+
+use strict;
+use warnings;
+
+use JSA::CADC_Copy;
+use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
+                     create_recipe_instance dprecinst_url /;
+use JSA::Error qw/ :try /;
+use JSA::Files qw/ file_to_uri /;
+use JSA::Headers qw/ get_orac_instrument /;
+use JSA::Headers::CADC qw/ correct_asn_id /;
+
+use OMP::ArchiveDB;
+use OMP::Info::Obs;
+use OMP::Info::ObsGroup;
+use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
+use OMP::Constants qw/ :obs /;
+use OMP::ProjServer;
+
+use Data::Dumper;
+use Getopt::Long;
+use Net::SMTP;
+use Pod::Usage;
+use File::Basename;
+
+my $TELESCOPE = 'JCMT';
+my $MAILHOST = 'mailhost.jach.hawaii.edu';
+my $MAILTO = 'jcmtarch@jach.hawaii.edu';
+my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
+
+# Don't fall back to files.
+$OMP::ArchiveDB::FallbackToFiles = 0;
+
+# Use DB for any date.
+$OMP::ArchiveDB::AnyDate = 1;
+
+# Fix search criteria to avoid being reset just before querying for data.
+OMP::ArchiveDB->use_existing_criteria( 1 );
+
+# Handle command-line options.
+my ( $help, $man, $mode, $project, $ut, $version, $priority, $noemail, $debug, $queue );
+my $status = GetOptions( "help"      => \$help,
+                         "man"       => \$man,
+                         "project=s" => \$project,
+                         "ut=s"      => \$ut,
+                         "priority=i"=> \$priority,
+                         "version"   => \$version,
+                         "debug"     => \$debug,
+                         "noemail"   => \$noemail,
+                         "queue=s"     => \$queue,
+                       );
+
+pod2usage( 1 ) if $help;
+pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+
+if( $version ) {
+  print "Submit a HPX observation job to the CADC GridEngine for JSA processing.\n";
+  print " Source code revision: 0.01\n";
+  exit;
+}
+
+$debug = 0;
+$noemail = 0;
+
+# Make sure the UT parameter is defined.
+if( ! defined $ut && ! defined $project ) {
+  die "Must include either -ut or -project parameter";
+} elsif (defined $ut && defined $project ) {
+  die "Can not include both -ut and -project parameters";
+}
+
+my $pristring = 'with default priority';
+if (defined $priority) {
+  $pristring = "with priority $priority";
+}
+
+if( defined( $project ) ) {
+  $mode = "project";
+  $project = uc( $project );
+  log_message( "Running jsasubmit for project $project $pristring.\n");
+} else {
+  log_message( "Running jsasubmit for UT date $ut $pristring.\n");
+  $mode = "night";
+}
+
+# All observations are submitted regardless of status except for JUNK.
+# A standard recipe is used.
+
+# These subsystems should never be processed. Not even in night mode.
+my @JUNK_OBSIDSS = (qw/
+                        scuba2_34_20100111T083310_450
+                        scuba2_6_20091203T050120_450
+                        scuba2_28_20091205T064832_450
+                        scuba2_23_20100111T063043_450
+                        scuba2_49_20100111T111043_450
+                        scuba2_18_20100112T043655_450
+                        scuba2_29_20100223T052321_450
+                        scuba2_78_20100225T120802_850
+                        scuba2_105_20100310T151153_450
+                        scuba2_106_20100310T152601_450
+                        scuba2_68_20100306T153932_450
+                        scuba2_66_20100306T151319_450
+                        scuba2_9_20100304T040112_450
+                      /);
+my %JUNK_OBSIDSS = map { $_ => undef } @JUNK_OBSIDSS;
+
+my $grp;
+if( $mode eq 'project' ) {
+
+  # Verify the project ID
+  if (!OMP::ProjServer->verifyProject( $project )) {
+    die "Project '$project' does not seem to exist in the database.\n";
+  }
+
+  $grp = new OMP::Info::ObsGroup( projectid => $project,
+                                  nocomments => 0,
+                                  retainhdr => 1 );
+} else {
+  $grp = new OMP::Info::ObsGroup( telescope => $TELESCOPE,
+                                  date => $ut,
+                                  nocomments => 0,
+                                  retainhdr => 1 );
+}
+
+if( scalar( @{$grp->obs} ) == 0 ) {
+  log_message( "No observations were retrieved from the database.\n");
+} else {
+  log_message( scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n");
+
+  # Hash to hold list of groups and information about them.
+  # Keys will be the group association id string
+  # Value will be a hash reference containing keys
+  #   files => []  array of files for this group
+  #   drparams => DR parameters
+  #   mode => mode to use for processing
+  #   dprecipe => DP recipe to use for this group
+  my %groups;
+
+  # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
+  my %frameclassloaded;
+
+  foreach my $obs ( $grp->obs ) {
+
+    my $hdr = $obs->hdrhash;
+
+    my $obstype = uc( $hdr->{'OBS_TYPE'} );
+    my $instrume = uc( $hdr->{'INSTRUME'} );
+    my $backend = uc( $hdr->{'BACKEND'} );
+
+    # No reduciton recipe at CADC yet for (FTS|POL)-2.
+    if ( obs_is_fts2_or_pol2_RECIPE( $backend, $obs->drrecipe() ) ) {
+
+      log_message( sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction %s\n",
+                      $obs->obsid(),
+                      'based on recipe value'
+                  );
+      next;
+    }
+
+    # Currently does not work with anything other than SCUBA-2
+    if ($instrume ne 'SCUBA-2') {
+      log_message( "Instrument $instrume currently not supported for HPX obs processing\n");
+      next;
+    }
+
+    # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
+    # ACSIS and the DAS.
+    unless (
+                ( $instrume eq 'SCUBA-2' &&
+                      ( $obstype eq 'SCIENCE' ||
+                        $obstype eq 'POINTING' ) ) ||
+                ( $backend eq 'ACSIS' && $obstype eq 'SCIENCE' ) ||
+                ( $backend eq 'DAS'   && $obstype eq 'SCIENCE' )
+           ) {
+      next;
+    }
+
+    # Skip moving sources
+    if (!defined $hdr->{"OBSRA"}) {
+      log_message("Observation is from a moving source so skipping for HPX obs processing\n");
+      next;
+    }
+
+
+    # if the data are truly JUNK we do not want to ask CADC to process the data at
+    # all since the chances are excellent that the pipeline will fail
+    if ( $obs->status == OMP__OBS_JUNK ) {
+      log_message("Observation is junk and so will not be processed at all\n");
+      next;
+    }
+
+    # Current default values for this observation in group handling and
+    # recipe submission
+    my %current;
+
+    # Make an estimate of the resources required to process the observation
+    # The rule is something like:
+    #  ACSIS
+    #     - HARP scan maps: 16G
+    #     - Everything else: 8G
+    #  SCUBA-2
+    #     - Observations longer than about 20 minutes: 16G
+    #     - Everything else: 8G
+    #    When we have multiple subarrays the 20 minutes will scale accordingly.
+    #    and we'll need to switch to a 64G queue for those.
+    $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_8G;
+    if ( $instrume eq 'SCUBA-2' ) {
+      my $duration = $obs->endobs - $obs->startobs;
+      # We count the number of files as a surrogate for required
+      # computing resources since we know each file is roughly
+      # same length. Assume 2 subsytems.
+      my @files = $obs->filename;
+      my $nfiles = @files / 2;
+      # As of 20100929
+      # 16 files => 6.2 GB
+      # 22 files => 8.8GB
+      # 27 files => 10.7GB
+      # 62 files => 26.2 GB
+      if ($nfiles > 30) {
+        $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_64G;
+      } elsif ($nfiles > 16) {
+        $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_16G;
+      }
+    } elsif ( $instrume eq 'HARP' && $hdr->{SAM_MODE} =~ /scan|raster/i) {
+      $current{dprecipe} = JSA::CADC_DP::CADC_DPREC_16G;
+    }
+
+    # All observations are processed with the same recipe
+    # which has hard-wired parameters. No special tweaking because
+    # we know that it is a calibrator or a blank field
+    $current{drparams} = "REDUCE_SCAN_JSA_PUBLIC";
+
+    my @subsystems = $obs->subsystems;
+
+    for my $subsys (@subsystems) {
+      my @all_obsidss = $subsys->obsidss;
+      my $obsidss = $all_obsidss[0];
+
+      die "Error determining an OBSIDSS for an observation. Can not proceed\n"
+        unless defined $obsidss;
+
+      if (exists $JUNK_OBSIDSS{$obsidss}) {
+	log_message( "Subsystem $obsidss will not be processed in any way\n");
+	next;
+      }
+
+      my $subsyshdr = $subsys->hdrhash;
+
+      # Hybrid ACSIS observations should be reduced together
+      # so we need to ensure that related subsystems are sent to the same processing job.
+
+      # Get all the files, stripped of path
+      my @files = map { basename($_) } $subsys->filename;
+
+      # The grouping key is really OBSID+ASN_ID
+      # where ASN_ID is the subsystem-specific grouping string
+      my $ss_asn_id = (exists $subsyshdr->{ASN_ID} ? $subsyshdr->{ASN_ID}
+                       : $subsyshdr->{FILTER} ); # SCUBA-2 hack until we get ASN_ID
+
+      my $group = "hpx-" . $subsys->obsid . "-" . $ss_asn_id;
+
+      push @{$groups{$group}{files}}, @files;
+      $groups{$group}{mode} = "obs";
+      $groups{$group}{dprecipe} = $current{dprecipe};
+      for my $k (qw/ drparams recpars /) {
+        $groups{$group}{$k} = $current{$k}
+          if defined $current{drparams};
+      }
+    }
+  }
+
+  my $dbh;
+  if ($debug) {
+    log_message( "Would be connecting to CADC data processing database here\n" );
+  } else {
+    log_message( "Connecting to CADC data processing database...");
+    $dbh = connect_to_cadcdp;
+    log_message( "connected!\n\n");
+  }
+
+  foreach my $group ( sort keys %groups ) {
+    log_message( "Requesting CADC processing of the following files:\n");
+    log_message( map { "$_\n" } @{$groups{$group}{files}});
+    my @members = map { file_to_uri( $_ ) } @{$groups{$group}{files}};
+
+    # Assume all files are present
+
+    # Submit the job.
+    my $recipe_id;
+    try {
+      my %opts;
+      $opts{'mode'} = ( exists $groups{$group}{mode} ? $groups{$group}{mode} : $mode);
+      $opts{priority} = $priority if defined $priority;
+      $opts{queue} = $queue if defined $queue;
+      if ( exists $groups{$group}{drparams} ) {
+        $opts{drparams} = $groups{$group}{drparams};
+      }
+
+      if (exists $groups{$group}{dprecipe}) {
+        $opts{dprecipe} = $groups{$group}{dprecipe};
+      }
+
+      # recpars could be part of drparams but for now we let the CADC_DP code handle it
+      if (exists $groups{$group}{recpars}) {
+        $opts{recpars} = $groups{$group}{recpars};
+      }
+
+      $opts{tag} = $group;
+
+      if ($debug) {
+        log_message( "Would be submitting job with options:\n");
+        for my $k (sort keys %opts) {
+           log_message( "\t$k : ".(defined $opts{$k} ? $opts{$k} : "<undef>")."\n");
+        }
+        $recipe_id = "0xFabCADC";
+      } else {
+        $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
+      }
+    }
+    catch JSA::Error::CADCDB with {
+      my $Error = shift;
+      log_message( "Error in CADC DB connectivity: $Error");
+      log_message( "Skipping to next group.\n");
+    }
+    otherwise {
+      my $Error = shift;
+      $Error->throw;
+    };
+    if (!defined $recipe_id) {
+      log_message( "Error submitting. No recipe id returned\n");
+      last;
+    } elsif ($recipe_id =~ /^\-/ ) {
+      $recipe_id =~ s/^\-//;
+      log_message( "*** Attempt to submit recipe update of $recipe_id with group $group failed.\n");
+    } else {
+      log_message( "Request submitted with recipe instance $recipe_id.\n");
+      log_message( "Recipe URL: " . dprecinst_url($recipe_id) . "\n");
+      log_message( "\n");
+    }
+  }
+
+  if ($debug) {
+    log_message( "Would be disconnecting from CADC data processing database here\n");
+  } else {
+    log_message( "Disconnecting from CADC data processing database...");
+    disconnect_from_cadcdp( $dbh );
+    log_message( "disconnected!\n\n");
+  }
+  log_message( "Data processing requests complete.\n");
+
+}
+
+# Write to the logging directory
+if (!$debug) {
+  my $logdir = "/jac_logs/jsa";
+  my $froot = "jsasubmit-". (defined $ut ? $ut : $project) . ".log";
+  my $outfile = File::Spec->catfile( $logdir, $froot );
+  if (-d $logdir) {
+    if (open( my $logfh, ">", $outfile ) ) {
+      for my $msg (all_messages()) {
+	print $logfh $msg;
+      }
+      close $logfh;
+    }
+  }
+}
+
+if ($noemail || $debug) {
+  # do not need to send an email message
+} else {
+  # Send the email.
+  my $smtp = Net::SMTP->new( $MAILHOST );
+  $smtp->mail( $MAILFROM );
+  $smtp->to( $MAILTO );
+
+  $smtp->data();
+  $smtp->datasend( "To: $MAILTO\n" );
+  $smtp->datasend("Subject: CADC HPX SCUBA-2 Obs Processing for " . ( defined( $ut ) ? $ut : $project ) . "\n");
+  $smtp->datasend("\n");
+  $smtp->datasend( all_messages() );
+
+  $smtp->quit;
+}
+
+exit;
+
+# Cache for messages, or we just print them straight out
+{
+  my @MESSAGES;
+
+  sub log_message {
+    my @msg = @_;
+    # Always cache. Sometimes print.
+    if ($noemail || $debug) {
+      print @msg;
+    }
+    push(@MESSAGES, @msg);
+  }
+
+  sub all_messages {
+    return @MESSAGES;
+  }
+
+}
+
+{
+  my %skip_recipe;
+
+  # Tell if an observation is FTS-2 or POL-2 type by recipe.
+  sub obs_is_fts2_or_pol2_RECIPE {
+
+    my ( $backend, $recipe ) = @_;
+
+    defined $recipe && defined $backend && $backend =~ m{^ scuba-?2 $}xi
+      or return;
+
+    unless ( keys %skip_recipe ) {
+
+      %skip_recipe = map { $_ => undef } qw(  REDUCE_FTS2
+                                              REDUCE_FTS_FOCUS
+                                              REDUCE_FTS_POINTING
+                                              REDUCE_FTS_SCAN
+                                              REDUCE_FTS_ZPD
+                                              REDUCE_POL_STARE
+                                              REDUCE_DREAMSTARE
+                                            );
+    }
+
+    return exists $skip_recipe{ uc $recipe };
+  }
+}
+
+=head1 NOTES
+
+All science/pointing observations are submitted unless they are marked junk.
+
+No group handling is required as each observation is submitted as a standalone
+job.
+
+All files are assumed to be at CADC.
+
+=head1 AUTHORS
+
+Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>
+
+=head1 COPYRIGHT
+
+Copyright (C) 2014 Science and Technology Facilities Council.
+All Rights Reserved.
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 3 of the License, or (at
+your option) any later version.
+
+This program is distributed in the hope that it will be useful,but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307,
+USA.
+
+=cut
