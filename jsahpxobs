@@ -76,7 +76,6 @@ use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
-use JSA::Headers::CADC qw/ correct_asn_id /;
 use JSA::Submission qw/prepare_archive_db/;
 
 use OMP::Info::Obs;
