@@ -360,6 +360,30 @@ sub send_log_email {
 
 Submit processing jobs to CADC's DP system.
 
+C<\%groups> is a reference to a hash holding groups and information about them.
+Keys are the group association id string.
+Values are hash references containing keys:
+
+=over 4
+
+=item files
+
+Array of files for this group.
+
+=item drparams
+
+DR parameters.
+
+=item mode
+
+Mode to use for processing.
+
+=item dprecipe
+
+DP recipe to use for this group.
+
+=back
+
 =cut
 
 sub submit_jobs {

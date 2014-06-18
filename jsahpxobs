@@ -165,13 +165,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 } else {
   log_message( scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n");
 
-  # Hash to hold list of groups and information about them.
-  # Keys will be the group association id string
-  # Value will be a hash reference containing keys
-  #   files => []  array of files for this group
-  #   drparams => DR parameters
-  #   mode => mode to use for processing
-  #   dprecipe => DP recipe to use for this group
+  # Group information hash for submit_jobs().
   my %groups;
 
   # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
