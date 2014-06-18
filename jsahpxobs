@@ -76,7 +76,7 @@ use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
-use JSA::Submission qw/prepare_archive_db/;
+use JSA::Submission qw/%JUNK_OBSIDSS prepare_archive_db/;
 
 use OMP::Info::Obs;
 use OMP::Info::ObsGroup;
@@ -145,24 +145,6 @@ if( defined( $project ) ) {
 
 # All observations are submitted regardless of status except for JUNK.
 # A standard recipe is used.
-
-# These subsystems should never be processed. Not even in night mode.
-my @JUNK_OBSIDSS = (qw/
-                        scuba2_34_20100111T083310_450
-                        scuba2_6_20091203T050120_450
-                        scuba2_28_20091205T064832_450
-                        scuba2_23_20100111T063043_450
-                        scuba2_49_20100111T111043_450
-                        scuba2_18_20100112T043655_450
-                        scuba2_29_20100223T052321_450
-                        scuba2_78_20100225T120802_850
-                        scuba2_105_20100310T151153_450
-                        scuba2_106_20100310T152601_450
-                        scuba2_68_20100306T153932_450
-                        scuba2_66_20100306T151319_450
-                        scuba2_9_20100304T040112_450
-                      /);
-my %JUNK_OBSIDSS = map { $_ => undef } @JUNK_OBSIDSS;
 
 my $grp;
 if( $mode eq 'project' ) {

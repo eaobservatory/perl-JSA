@@ -16,7 +16,90 @@ use warnings;
 use strict;
 
 use parent qw/Exporter/;
-our @EXPORT_OK = qw/assign_to_group get_obsidss prepare_archive_db/;
+our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
+                    assign_to_group get_obsidss prepare_archive_db/;
+
+=head1 DATA
+
+=over 4
+
+=item %DR_RECIPES
+
+SLEDGE HAMMER HACK
+
+We need to be able to control pipeline recipe names when doing night
+processing. Currently the submission script will supply an project
+based recipe parameter file in project mode but not in night mode. This
+will not trigger a completely different recipe though. For now we
+have a local hash rather than an external config file during submission.
+We provide a recipe override based on the most recent project id added
+to the group. We only need to override blank field observations for SCUBA-2.
+
+=cut
+
+our %DR_RECIPES = (
+                  M09BGT01 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI152 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI155 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI143 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI115 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI128 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI136 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI120 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI101 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI109 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI130 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI104 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI149 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI134 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI145 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI114 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BI142 => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH101A => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH102A => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH103A => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH105A => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+                  M09BH106B => "REDUCE_SCAN_FAINT_POINT_SOURCES",
+);
+
+=item %BAD_OBSIDSS
+
+HACK 2: The OMP can not yet handle cases where one subsystem has
+a good data set and the other has a bad data set. Here we list
+OBSIDSS values for bad subsystems where the other half is good.
+They will not be included in group processing.
+
+=cut
+
+our %BAD_OBSIDSS = map { $_ => undef } qw/
+                     scuba2_28_20100223T051545_450
+                     scuba2_29_20100223T052321_450
+                     scuba2_67_20100306T152738_450
+                     /;
+
+=item %JUNK_OBSIDSS
+
+These subsystems should never be processed. Not even in night mode.
+
+=cut
+
+our %JUNK_OBSIDSS = map { $_ => undef } qw/
+                     scuba2_34_20100111T083310_450
+                     scuba2_6_20091203T050120_450
+                     scuba2_28_20091205T064832_450
+                     scuba2_23_20100111T063043_450
+                     scuba2_49_20100111T111043_450
+                     scuba2_18_20100112T043655_450
+                     scuba2_29_20100223T052321_450
+                     scuba2_78_20100225T120802_850
+                     scuba2_105_20100310T151153_450
+                     scuba2_106_20100310T152601_450
+                     scuba2_68_20100306T153932_450
+                     scuba2_66_20100306T151319_450
+                     scuba2_9_20100304T040112_450
+                     /;
+
+=back
 
 =head1 SUBROUTINES
 
