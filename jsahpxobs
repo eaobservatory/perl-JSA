@@ -76,7 +76,8 @@ use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
 use JSA::Error qw/ :try /;
 use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
-use JSA::Submission qw/%JUNK_OBSIDSS prepare_archive_db/;
+use JSA::Submission qw/%JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
+                       prepare_archive_db/;
 
 use OMP::Info::Obs;
 use OMP::Info::ObsGroup;
@@ -443,33 +444,6 @@ exit;
     return @MESSAGES;
   }
 
-}
-
-{
-  my %skip_recipe;
-
-  # Tell if an observation is FTS-2 or POL-2 type by recipe.
-  sub obs_is_fts2_or_pol2_RECIPE {
-
-    my ( $backend, $recipe ) = @_;
-
-    defined $recipe && defined $backend && $backend =~ m{^ scuba-?2 $}xi
-      or return;
-
-    unless ( keys %skip_recipe ) {
-
-      %skip_recipe = map { $_ => undef } qw(  REDUCE_FTS2
-                                              REDUCE_FTS_FOCUS
-                                              REDUCE_FTS_POINTING
-                                              REDUCE_FTS_SCAN
-                                              REDUCE_FTS_ZPD
-                                              REDUCE_POL_STARE
-                                              REDUCE_DREAMSTARE
-                                            );
-    }
-
-    return exists $skip_recipe{ uc $recipe };
-  }
 }
 
 =head1 NOTES

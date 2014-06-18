@@ -17,7 +17,8 @@ use strict;
 
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                    assign_to_group get_obsidss prepare_archive_db/;
+                    assign_to_group get_obsidss obs_is_fts2_or_pol2_RECIPE
+                    prepare_archive_db/;
 
 =head1 DATA
 
@@ -224,6 +225,38 @@ sub assign_to_group {
     }
   }
   return $group;
+}
+
+=item obs_is_fts2_or_pol2_RECIPE
+
+Tell if an observation is FTS-2 or POL-2 type by recipe.
+
+=cut
+
+{
+  my %skip_recipe;
+
+  sub obs_is_fts2_or_pol2_RECIPE {
+
+    my ( $backend, $recipe ) = @_;
+
+    defined $recipe && defined $backend && $backend =~ m{^ scuba-?2 $}xi
+      or return;
+
+    unless ( keys %skip_recipe ) {
+
+      %skip_recipe = map { $_ => undef } qw(  REDUCE_FTS2
+                                              REDUCE_FTS_FOCUS
+                                              REDUCE_FTS_POINTING
+                                              REDUCE_FTS_SCAN
+                                              REDUCE_FTS_ZPD
+                                              REDUCE_POL_STARE
+                                              REDUCE_DREAMSTARE
+                                            );
+    }
+
+    return exists $skip_recipe{ uc $recipe };
+  }
 }
 
 =back
