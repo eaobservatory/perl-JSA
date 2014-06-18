@@ -7,6 +7,8 @@ JSA::Submission - Common routines for DP job submission scripts.
 =cut
 
 use File::Basename;
+use File::Spec;
+use Net::SMTP;
 
 use OMP::ArcQuery;
 use OMP::ArchiveDB;
@@ -17,8 +19,9 @@ use strict;
 
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                    assign_to_group get_obsidss obs_is_fts2_or_pol2_RECIPE
-                    prepare_archive_db/;
+                    all_messages assign_to_group echo_messages
+                    get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
+                    prepare_archive_db send_log_email write_log_file/;
 
 =head1 DATA
 
@@ -257,6 +260,94 @@ Tell if an observation is FTS-2 or POL-2 type by recipe.
 
     return exists $skip_recipe{ uc $recipe };
   }
+}
+
+=item echo_messages($echo)
+
+Enable or disable immediate printing of log messages.
+
+=item log_message
+
+Always cache. Sometimes print.
+
+=item all_messages
+
+Return all cached messages.
+
+=cut
+
+{
+  # Cache for messages, or we just print them straight out
+  my @MESSAGES;
+  my $ECHO = 0;
+
+  sub echo_messages {
+    $ECHO = shift;
+  }
+
+  sub log_message {
+    my @msg = @_;
+    if ($ECHO) {
+      print @msg;
+    }
+    push(@MESSAGES, @msg);
+  }
+
+  sub all_messages {
+    return @MESSAGES;
+  }
+}
+
+=item write_log_file
+
+Write to the logging directory.
+
+=cut
+
+sub write_log_file {
+  my $title = shift;
+  my $ut = shift;
+  my $project = shift;
+
+  my $logdir = "/jac_logs/jsa";
+  my $froot = $title . "-" . (defined $ut ? $ut : $project) . ".log";
+  my $outfile = File::Spec->catfile( $logdir, $froot );
+  if (-d $logdir) {
+    if (open( my $logfh, ">", $outfile ) ) {
+      for my $msg (all_messages()) {
+	print $logfh $msg;
+      }
+      close $logfh;
+    }
+  }
+}
+
+=item send_log_email
+
+Send the email.
+
+=cut
+
+sub send_log_email {
+  my $title = shift;
+  my $ut = shift;
+  my $project = shift;
+
+  my $MAILHOST = 'mailhost.jach.hawaii.edu';
+  my $MAILTO = 'jcmtarch@jach.hawaii.edu';
+  my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
+
+  my $smtp = Net::SMTP->new( $MAILHOST );
+  $smtp->mail( $MAILFROM );
+  $smtp->to( $MAILTO );
+
+  $smtp->data();
+  $smtp->datasend( "To: $MAILTO\n" );
+  $smtp->datasend("Subject: " . $title . " for " . ( defined( $ut ) ? $ut : $project ) . "\n");
+  $smtp->datasend("\n");
+  $smtp->datasend( all_messages() );
+
+  $smtp->quit;
 }
 
 =back

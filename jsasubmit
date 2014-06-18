@@ -76,8 +76,9 @@ use JSA::Error qw/ :try /;
 use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
 use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                       assign_to_group get_obsidss obs_is_fts2_or_pol2_RECIPE
-                       prepare_archive_db/;
+                       assign_to_group get_obsidss echo_messages
+                       log_message obs_is_fts2_or_pol2_RECIPE
+                       prepare_archive_db send_log_email write_log_file/;
 
 use OMP::Info::Obs;
 use OMP::Info::ObsGroup;
@@ -87,13 +88,9 @@ use OMP::ProjServer;
 
 use Data::Dumper;
 use Getopt::Long;
-use Net::SMTP;
 use Pod::Usage;
 
 my $TELESCOPE = 'JCMT';
-my $MAILHOST = 'mailhost.jach.hawaii.edu';
-my $MAILTO = 'jcmtarch@jach.hawaii.edu';
-my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
 
 prepare_archive_db();
 
@@ -118,6 +115,8 @@ if( $version ) {
   print " Source code revision: 0.01\n";
   exit;
 }
+
+echo_messages($noemail || $debug);
 
 # Make sure the UT parameter is defined.
 if( ! defined $ut && ! defined $project ) {
@@ -475,58 +474,12 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
 }
 
-# Write to the logging directory
-if (!$debug) {
-  my $logdir = "/jac_logs/jsa";
-  my $froot = "jsasubmit-". (defined $ut ? $ut : $project) . ".log";
-  my $outfile = File::Spec->catfile( $logdir, $froot );
-  if (-d $logdir) {
-    if (open( my $logfh, ">", $outfile ) ) {
-      for my $msg (all_messages()) {
-	print $logfh $msg;
-      }
-      close $logfh;
-    }
-  }
-}
+write_log_file('jsasubmit', $ut, $project) unless $debug;
 
-if ($noemail || $debug) {
-  # do not need to send an email message
-} else {
-  # Send the email.
-  my $smtp = Net::SMTP->new( $MAILHOST );
-  $smtp->mail( $MAILFROM );
-  $smtp->to( $MAILTO );
-
-  $smtp->data();
-  $smtp->datasend( "To: $MAILTO\n" );
-  $smtp->datasend("Subject: CADC Processing for " . ( defined( $ut ) ? $ut : $project ) . "\n");
-  $smtp->datasend("\n");
-  $smtp->datasend( all_messages() );
-
-  $smtp->quit;
-}
+send_log_email('CADC Processing', $ut, $project)
+    unless $noemail || $debug;
 
 exit;
-
-# Cache for messages, or we just print them straight out
-{
-  my @MESSAGES;
-
-  sub log_message {
-    my @msg = @_;
-    # Always cache. Sometimes print.
-    if ($noemail || $debug) {
-      print @msg;
-    }
-    push(@MESSAGES, @msg);
-  }
-
-  sub all_messages {
-    return @MESSAGES;
-  }
-
-}
 
 =head1 AUTHORS
 
