@@ -70,15 +70,12 @@ use strict;
 use warnings;
 
 use JSA::CADC_Copy;
-use JSA::CADC_DP qw/ connect_to_cadcdp disconnect_from_cadcdp
-                     create_recipe_instance dprecinst_url /;
-use JSA::Error qw/ :try /;
-use JSA::Files qw/ file_to_uri /;
 use JSA::Headers qw/ get_orac_instrument /;
 use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                        assign_to_group get_obsidss echo_messages
                        log_message obs_is_fts2_or_pol2_RECIPE
-                       prepare_archive_db send_log_email write_log_file/;
+                       prepare_archive_db send_log_email submit_jobs
+                       write_log_file/;
 
 use OMP::Info::Obs;
 use OMP::Info::ObsGroup;
@@ -140,7 +137,7 @@ if( defined( $project ) ) {
 }
 
 my $grp;
-my $atCADC;
+my $atCADC = undef;
 if( $mode eq 'project' ) {
 
   # Verify the project ID
@@ -376,102 +373,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
   }
 
-  my $dbh;
-  if ($debug) {
-    log_message( "Would be connecting to CADC data processing database here\n" );
-  } else {
-    log_message( "Connecting to CADC data processing database...");
-    $dbh = connect_to_cadcdp;
-    log_message( "connected!\n\n");
-  }
-
-  foreach my $group ( sort keys %groups ) {
-    log_message( "Requesting CADC processing of the following files:\n");
-    log_message( map { "$_\n" } @{$groups{$group}{files}});
-    my @members = map { file_to_uri( $_ ) } @{$groups{$group}{files}};
-
-    # Only check for night mode. If we're in project mode, assume the
-    # files are at CADC.
-    if( $mode eq 'night' ) {
-      log_message( "Checking to ensure files are at CADC...\n");
-      my $there = 1;
-      foreach my $file ( @{$groups{$group}{files}} ) {
-        $file =~ s/\.sdf$//;
-        if( ! exists( $atCADC->{$file} ) ) {
-          $there = 0;
-          log_message( "$file is not at CADC!\n");
-        }
-      }
-      if( ! $there ) {
-        log_message( "One or more files from current group not at CADC.\nSkipping to next group.\n");
-        next;
-      }
-      log_message( "All files are at CADC. Submitting processing request.\n");
-    }
-
-    # Submit the job.
-    my $recipe_id;
-    try {
-      my %opts;
-      $opts{'mode'} = ( exists $groups{$group}{mode} ? $groups{$group}{mode} : $mode);
-      $opts{priority} = $priority if defined $priority;
-      $opts{queue} = $queue if defined $queue;
-      if ( exists $groups{$group}{drparams} ) {
-        $opts{drparams} = $groups{$group}{drparams};
-      }
-
-      if (exists $groups{$group}{dprecipe}) {
-        $opts{dprecipe} = $groups{$group}{dprecipe};
-      }
-
-      # recpars could be part of drparams but for now we let the CADC_DP code handle it
-      if (exists $groups{$group}{recpars}) {
-        $opts{recpars} = $groups{$group}{recpars};
-      }
-
-      $opts{tag} = $group;
-
-      if ($debug) {
-        log_message( "Would be submitting job with options:\n");
-        for my $k (sort keys %opts) {
-           log_message( "\t$k : ".(defined $opts{$k} ? $opts{$k} : "<undef>")."\n");
-        }
-        $recipe_id = "0xFabCADC";
-      } else {
-        $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
-      }
-    }
-    catch JSA::Error::CADCDB with {
-      my $Error = shift;
-      log_message( "Error in CADC DB connectivity: $Error");
-      log_message( "Skipping to next group.\n");
-    }
-    otherwise {
-      my $Error = shift;
-      $Error->throw;
-    };
-    if (!defined $recipe_id) {
-      log_message( "Error submitting. No recipe id returned\n");
-      last;
-    } elsif ($recipe_id =~ /^\-/ ) {
-      $recipe_id =~ s/^\-//;
-      log_message( "*** Attempt to submit recipe update of $recipe_id with group $group failed.\n");
-    } else {
-      log_message( "Request submitted with recipe instance $recipe_id.\n");
-      log_message( "Recipe URL: " . dprecinst_url($recipe_id) . "\n");
-      log_message( "\n");
-    }
-  }
-
-  if ($debug) {
-    log_message( "Would be disconnecting from CADC data processing database here\n");
-  } else {
-    log_message( "Disconnecting from CADC data processing database...");
-    disconnect_from_cadcdp( $dbh );
-    log_message( "disconnected!\n\n");
-  }
-  log_message( "Data processing requests complete.\n");
-
+  submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug);
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $debug;
