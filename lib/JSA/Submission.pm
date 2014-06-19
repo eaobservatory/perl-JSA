@@ -25,7 +25,8 @@ use strict;
 
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                    all_messages assign_to_group echo_messages
+                    all_messages assign_to_group
+                    determine_resource_requirement echo_messages
                     find_observations
                     get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
                     prepare_archive_db send_log_email submit_jobs
@@ -413,6 +414,70 @@ sub find_observations {
   }
 
   return ($mode, $grp);
+}
+
+=item determine_resource_requirement($obs)
+
+Make an estimate of the resources required to process the observation
+The rule is something like:
+
+=over 4
+
+=item ACSIS
+
+=over 4
+
+=item HARP scan maps: 16G
+=item Everything else: 8G
+
+=back
+
+=item SCUBA-2
+
+=over 4
+
+=item Observations longer than about 20 minutes: 16G
+=item Everything else: 8G
+
+=back
+
+When we have multiple subarrays the 20 minutes will scale accordingly.
+and we'll need to switch to a 64G queue for those.
+
+=back
+
+=cut
+
+sub determine_resource_requirement {
+  my $obs = shift;
+
+  my $hdr = $obs->hdrhash();
+  my $instrume = uc($hdr->{'INSTRUME'});
+
+  my $req = JSA::CADC_DP::CADC_DPREC_8G;
+
+  if ( $instrume eq 'SCUBA-2' ) {
+    my $duration = $obs->endobs - $obs->startobs;
+    # We count the number of files as a surrogate for required
+    # computing resources since we know each file is roughly
+    # same length. Assume 2 subsytems.
+    my @files = $obs->filename;
+    my $nfiles = @files / 2;
+    # As of 20100929
+    # 16 files => 6.2 GB
+    # 22 files => 8.8GB
+    # 27 files => 10.7GB
+    # 62 files => 26.2 GB
+    if ($nfiles > 30) {
+      $req = JSA::CADC_DP::CADC_DPREC_64G;
+    } elsif ($nfiles > 16) {
+      $req = JSA::CADC_DP::CADC_DPREC_16G;
+    }
+  } elsif ( $instrume eq 'HARP' && $hdr->{SAM_MODE} =~ /scan|raster/i) {
+    $req = JSA::CADC_DP::CADC_DPREC_16G;
+  }
+
+  return $req;
 }
 
 =item submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug)
