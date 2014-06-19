@@ -12,6 +12,7 @@ use Net::SMTP;
 
 use OMP::ArcQuery;
 use OMP::ArchiveDB;
+use OMP::Info::ObsGroup;
 
 use JSA::CADC_DP qw/connect_to_cadcdp disconnect_from_cadcdp
                     create_recipe_instance dprecinst_url/;
@@ -25,6 +26,7 @@ use strict;
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                     all_messages assign_to_group echo_messages
+                    find_observations
                     get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
                     prepare_archive_db send_log_email submit_jobs
                     write_log_file/;
@@ -354,6 +356,63 @@ sub send_log_email {
   $smtp->datasend( all_messages() );
 
   $smtp->quit;
+}
+
+=item find_observations($ut, $project, $priority)
+
+Determines the mode of operation and retieves the observation group.
+
+  ($mode, $grp) = find_observations($ut, $project);
+
+The project should already be in upper case.
+
+=cut
+
+sub find_observations {
+  my $ut = shift;
+  my $project = shift;
+  my $priority = shift;
+
+  my ($mode, $grp);
+
+  # Make sure the UT parameter is defined.
+  if( ! defined $ut && ! defined $project ) {
+    die "Must include either -ut or -project parameter";
+  } elsif (defined $ut && defined $project ) {
+    die "Can not include both -ut and -project parameters";
+  }
+
+  my $pristring = 'with default priority';
+  if (defined $priority) {
+    $pristring = "with priority $priority";
+  }
+
+  if( defined( $project ) ) {
+    $mode = "project";
+    log_message( "Running jsasubmit for project $project $pristring.\n");
+  } else {
+    log_message( "Running jsasubmit for UT date $ut $pristring.\n");
+    $mode = "night";
+  }
+
+  if( $mode eq 'project' ) {
+
+    # Verify the project ID
+    if (!OMP::ProjServer->verifyProject( $project )) {
+      die "Project '$project' does not seem to exist in the database.\n";
+    }
+
+    $grp = new OMP::Info::ObsGroup( projectid => $project,
+                                    nocomments => 0,
+                                    retainhdr => 1 );
+  } else {
+    $grp = new OMP::Info::ObsGroup( telescope => 'JCMT',
+                                    date => $ut,
+                                    nocomments => 0,
+                                    retainhdr => 1 );
+  }
+
+  return ($mode, $grp);
 }
 
 =item submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug)

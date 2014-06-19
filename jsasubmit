@@ -73,12 +73,12 @@ use JSA::CADC_Copy;
 use JSA::Headers qw/ get_orac_instrument /;
 use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                        assign_to_group get_obsidss echo_messages
+                       find_observations
                        log_message obs_is_fts2_or_pol2_RECIPE
                        prepare_archive_db send_log_email submit_jobs
                        write_log_file/;
 
 use OMP::Info::Obs;
-use OMP::Info::ObsGroup;
 use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
 use OMP::Constants qw/ :obs /;
 use OMP::ProjServer;
@@ -89,7 +89,7 @@ use Pod::Usage;
 prepare_archive_db();
 
 # Handle command-line options.
-my ( $help, $man, $mode, $project, $ut, $version, $priority, $noemail, $debug, $queue );
+my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug, $queue );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -112,46 +112,12 @@ if( $version ) {
 
 echo_messages($noemail || $debug);
 
-# Make sure the UT parameter is defined.
-if( ! defined $ut && ! defined $project ) {
-  die "Must include either -ut or -project parameter";
-} elsif (defined $ut && defined $project ) {
-  die "Can not include both -ut and -project parameters";
-}
+$project = uc($project) if defined $project;
+my ($mode, $grp) = find_observations($ut, $project, $priority);
 
-my $pristring = 'with default priority';
-if (defined $priority) {
-  $pristring = "with priority $priority";
-}
-
-if( defined( $project ) ) {
-  $mode = "project";
-  $project = uc( $project );
-  log_message( "Running jsasubmit for project $project $pristring.\n");
-} else {
-  log_message( "Running jsasubmit for UT date $ut $pristring.\n");
-  $mode = "night";
-}
-
-my $grp;
-my $atCADC = undef;
-if( $mode eq 'project' ) {
-
-  # Verify the project ID
-  if (!OMP::ProjServer->verifyProject( $project )) {
-    die "Project '$project' does not seem to exist in the database.\n";
-  }
-
-  $grp = new OMP::Info::ObsGroup( projectid => $project,
-                                  nocomments => 0,
-                                  retainhdr => 1 );
-} else {
-  $grp = new OMP::Info::ObsGroup( telescope => 'JCMT',
-                                  date => $ut,
-                                  nocomments => 0,
-                                  retainhdr => 1 );
-  $atCADC = JSA::CADC_Copy::at_cadc( $ut );
-}
+my $atCADC = ($mode eq 'night')
+           ? JSA::CADC_Copy::at_cadc($ut)
+           : undef;
 
 if( scalar( @{$grp->obs} ) == 0 ) {
   log_message( "No observations were retrieved from the database.\n");
