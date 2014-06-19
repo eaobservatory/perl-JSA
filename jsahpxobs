@@ -168,6 +168,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
+    # Current default values for this observation in group handling and
+    # recipe submission
+    my %current;
 
     # if the data are truly JUNK we do not want to ask CADC to process the data at
     # all since the chances are excellent that the pipeline will fail
@@ -175,10 +178,6 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       log_message("Observation is junk and so will not be processed at all\n");
       next;
     }
-
-    # Current default values for this observation in group handling and
-    # recipe submission
-    my %current;
 
     $current{'dprecipe'} = determine_resource_requirement($obs);
 
