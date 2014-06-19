@@ -41,8 +41,9 @@ Used to override the default priority for all jobs. Must be an integer between
 
 =item B<-project>
 
-Name of a project to be processed. Should not be used with the "-ut" option. Files
-are not verified to be present at CADC in this mode.
+Name of a project to be processed.  Files are not verified to be present at
+CADC in this mode.  If the "-ut" option is also supplied then night mode
+will be used but selecting observations from this project.
 
 =item B<-queue>
 
@@ -52,7 +53,7 @@ reprocessing.
 
 =item B<-ut>
 
-Specify the UT date to be processed. Should not be used with the "-project" option.
+Specify the UT date to be processed.
 Files to be processed are verified to be at CADC before a job will be submitted.
 
 =item B<-version>
@@ -80,7 +81,6 @@ use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
 
 use OMP::Info::Obs;
 use OMP::Constants qw/ :obs /;
-use OMP::ProjServer;
 
 use Getopt::Long;
 use Pod::Usage;
@@ -112,7 +112,7 @@ if( $version ) {
 echo_messages($noemail || $debug);
 
 $project = uc($project) if defined $project;
-my ($mode, $grp) = find_observations($ut, $project, $priority);
+my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsasubmit');
 
 my $atCADC = ($mode eq 'night')
            ? JSA::CADC_Copy::at_cadc($ut)

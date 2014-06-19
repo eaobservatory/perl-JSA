@@ -15,6 +15,7 @@ use JAC::Setup qw/oracdr/;
 use OMP::ArcQuery;
 use OMP::ArchiveDB;
 use OMP::Info::ObsGroup;
+use OMP::ProjServer;
 use ORAC::Inst::Defn qw/orac_determine_inst_classes/;
 
 use JSA::CADC_DP qw/connect_to_cadcdp disconnect_from_cadcdp
@@ -323,7 +324,9 @@ sub write_log_file {
   my $project = shift;
 
   my $logdir = "/jac_logs/jsa";
-  my $froot = $title . "-" . (defined $ut ? $ut : $project) . ".log";
+  my $froot = $title .
+    (defined $ut      ? '-' . $ut      : '') .
+    (defined $project ? '-' . $project : '') . ".log";
   my $outfile = File::Spec->catfile( $logdir, $froot );
   if (-d $logdir) {
     if (open( my $logfh, ">", $outfile ) ) {
@@ -356,7 +359,9 @@ sub send_log_email {
 
   $smtp->data();
   $smtp->datasend( "To: $MAILTO\n" );
-  $smtp->datasend("Subject: " . $title . " for " . ( defined( $ut ) ? $ut : $project ) . "\n");
+  $smtp->datasend("Subject: " . $title . ' for' .
+    (defined($ut)      ? ' ' . $ut      : '') .
+    (defined($project) ? ' ' . $project : '') . "\n");
   $smtp->datasend("\n");
   $smtp->datasend( all_messages() );
 
@@ -377,14 +382,13 @@ sub find_observations {
   my $ut = shift;
   my $project = shift;
   my $priority = shift;
+  my $title = shift;
 
   my ($mode, $grp);
 
-  # Make sure the UT parameter is defined.
-  if( ! defined $ut && ! defined $project ) {
+  # Make sure the UT or Project parameter is defined.
+  unless (defined $ut || defined $project) {
     die "Must include either -ut or -project parameter";
-  } elsif (defined $ut && defined $project ) {
-    die "Can not include both -ut and -project parameters";
   }
 
   my $pristring = 'with default priority';
@@ -392,30 +396,36 @@ sub find_observations {
     $pristring = "with priority $priority";
   }
 
-  if( defined( $project ) ) {
-    $mode = "project";
-    log_message( "Running jsasubmit for project $project $pristring.\n");
-  } else {
-    log_message( "Running jsasubmit for UT date $ut $pristring.\n");
+  if (defined($ut)) {
     $mode = "night";
+    log_message("Running $title for UT date $ut $pristring.\n");
   }
+  else  {
+    $mode = "project";
+    log_message("Running $title for project $project $pristring.\n");
+  }
+
+  die "Project '$project' does not seem to exist in the database.\n"
+    if (defined $project) && (! OMP::ProjServer->verifyProject($project));
+
+  my %query = (
+                nocomments => 0,
+                retainhdr => 1,
+  );
 
   if( $mode eq 'project' ) {
-
-    # Verify the project ID
-    if (!OMP::ProjServer->verifyProject( $project )) {
-      die "Project '$project' does not seem to exist in the database.\n";
-    }
-
-    $grp = new OMP::Info::ObsGroup( projectid => $project,
-                                    nocomments => 0,
-                                    retainhdr => 1 );
+    $query{'projectid'} = $project;
   } else {
-    $grp = new OMP::Info::ObsGroup( telescope => 'JCMT',
-                                    date => $ut,
-                                    nocomments => 0,
-                                    retainhdr => 1 );
+    $query{'telescope'} = 'JCMT';
+    $query{'date'} = $ut;
+
+    if (defined $project) {
+      log_message("Selecting observations for project $project.\n");
+      $query{'projectid'} = $project;
+    }
   }
+
+  $grp = new OMP::Info::ObsGroup(%query);
 
   return ($mode, $grp);
 }

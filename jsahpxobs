@@ -42,7 +42,8 @@ Used to override the default priority for all jobs. Must be an integer between
 
 =item B<-project>
 
-Name of a project to be processed. Should not be used with the "-ut" option.
+Name of a project to be processed.  If the "-ut" option is also supplied then night mode
+will be used but selecting observations from this project.
 
 =item B<-queue>
 
@@ -52,7 +53,7 @@ reprocessing.
 
 =item B<-ut>
 
-Specify the UT date to be processed. Should not be used with the "-project" option.
+Specify the UT date to be processed.
 
 =item B<-version>
 
@@ -76,7 +77,6 @@ use JSA::Submission qw/%JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
 
 use OMP::Info::Obs;
 use OMP::Constants qw/ :obs /;
-use OMP::ProjServer;
 
 use Getopt::Long;
 use Pod::Usage;
@@ -111,7 +111,7 @@ echo_messages($noemail || $debug);
 # All observations are submitted regardless of status except for JUNK.
 # A standard recipe is used.
 $project = uc($project) if defined $project;
-my ($mode, $grp) = find_observations($ut, $project, $priority);
+my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsahpxobs');
 
 if( scalar( @{$grp->obs} ) == 0 ) {
   log_message( "No observations were retrieved from the database.\n");
