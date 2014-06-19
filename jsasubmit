@@ -83,7 +83,6 @@ use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
 use OMP::Constants qw/ :obs /;
 use OMP::ProjServer;
 
-use Data::Dumper;
 use Getopt::Long;
 use Pod::Usage;
 
