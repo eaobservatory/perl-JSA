@@ -107,8 +107,6 @@ if( $version ) {
   exit;
 }
 
-$debug = 0;
-$noemail = 0;
 echo_messages($noemail || $debug);
 
 # All observations are submitted regardless of status except for JUNK.
