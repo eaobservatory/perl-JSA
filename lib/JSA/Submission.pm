@@ -25,7 +25,7 @@ use strict;
 
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                    all_messages assign_to_group
+                    adjust_header all_messages assign_to_group
                     determine_resource_requirement echo_messages
                     find_observations
                     get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
@@ -414,6 +414,68 @@ sub find_observations {
   }
 
   return ($mode, $grp);
+}
+
+=item adjust_header(\%hdr)
+
+Adjusts the header (in place) to set certain entries:
+
+=over 4
+
+=item TRACKSYS
+
+=item BASEC1
+
+=item BASEC2
+
+=item FRQSIGLO
+
+=item FRQSIGHI
+
+=item SIMULATE
+
+=back
+
+=cut
+
+sub adjust_header {
+  my $hdr = shift;
+
+  # Check to see if we have OBSRA and OBSDEC. If they're defined,
+  # the tracking system is J2000. Otherwise it's APP.
+  if( ! defined( $hdr->{'TRACKSYS'} ) ) {
+    if( defined( $hdr->{'OBSRA'} ) &&
+        defined( $hdr->{'OBSDEC'} ) ) {
+      $hdr->{'TRACKSYS'} = 'J2000';
+    } else {
+      $hdr->{'TRACKSYS'} = 'APP';
+    }
+  }
+
+  # OBSRA and OBSDEC are always ICRS so we have to be careful
+  # if we switch to GALACTIC. The safest solution is to add
+  # BASEC1, BASEC2 and TRACKSYS to the database table since those
+  # are the values used by ORAC-DR group assignment (although only
+  # for night mode in reality).
+  if( defined( $hdr->{'OBSRA'} ) ) {
+    $hdr->{'BASEC1'} = $hdr->{'OBSRA'};
+  }
+  if( defined( $hdr->{'OBSDEC'} ) ) {
+    $hdr->{'BASEC2'} = $hdr->{'OBSDEC'};
+  }
+
+  if( defined( $hdr->{'FREQ_SIG_LOWER'} ) ) {
+    $hdr->{'FRQSIGLO'} = $hdr->{'FREQ_SIG_LOWER'};
+  }
+  if( defined( $hdr->{'FREQ_SIG_UPPER'} ) ) {
+    $hdr->{'FRQSIGHI'} = $hdr->{'FREQ_SIG_UPPER'};
+  }
+
+  # The database will not have a SIMULATE header so assume
+  # it is false.
+  if( ! defined( $hdr->{'SIMULATE'} ) ) {
+    $hdr->{'SIMULATE'} = 0;
+  }
 }
 
 =item determine_resource_requirement($obs)

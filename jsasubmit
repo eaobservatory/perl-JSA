@@ -72,7 +72,8 @@ use warnings;
 use JSA::CADC_Copy;
 use JSA::Headers qw/ get_orac_instrument /;
 use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                       assign_to_group determine_resource_requirement
+                       adjust_header assign_to_group
+                       determine_resource_requirement
                        echo_messages find_observations get_obsidss
                        log_message obs_is_fts2_or_pol2_RECIPE
                        prepare_archive_db send_log_email submit_jobs
@@ -160,41 +161,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
-    # Check to see if we have OBSRA and OBSDEC. If they're defined,
-    # the tracking system is J2000. Otherwise it's APP.
-    if( ! defined( $hdr->{'TRACKSYS'} ) ) {
-      if( defined( $hdr->{'OBSRA'} ) &&
-          defined( $hdr->{'OBSDEC'} ) ) {
-        $hdr->{'TRACKSYS'} = 'J2000';
-      } else {
-        $hdr->{'TRACKSYS'} = 'APP';
-      }
-    }
-
-    # OBSRA and OBSDEC are always ICRS so we have to be careful
-    # if we switch to GALACTIC. The safest solution is to add
-    # BASEC1, BASEC2 and TRACKSYS to the database table since those
-    # are the values used by ORAC-DR group assignment (although only
-    # for night mode in reality).
-    if( defined( $hdr->{'OBSRA'} ) ) {
-      $hdr->{'BASEC1'} = $hdr->{'OBSRA'};
-    }
-    if( defined( $hdr->{'OBSDEC'} ) ) {
-      $hdr->{'BASEC2'} = $hdr->{'OBSDEC'};
-    }
-
-    if( defined( $hdr->{'FREQ_SIG_LOWER'} ) ) {
-      $hdr->{'FRQSIGLO'} = $hdr->{'FREQ_SIG_LOWER'};
-    }
-    if( defined( $hdr->{'FREQ_SIG_UPPER'} ) ) {
-      $hdr->{'FRQSIGHI'} = $hdr->{'FREQ_SIG_UPPER'};
-    }
-
-    # The database will not have a SIMULATE header so assume
-    # it is false.
-    if( ! defined( $hdr->{'SIMULATE'} ) ) {
-      $hdr->{'SIMULATE'} = 0;
-    }
+    adjust_header($hdr);
 
     my $instrument = get_orac_instrument( $obs->fits );
 
