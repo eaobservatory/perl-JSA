@@ -76,7 +76,7 @@ be run.
 
 sub get_file_command {
 
-  my ( $class, $list, $dev ) = @_;
+  my ( $class, $list ) = @_;
 
   defined $list && -r $list
     or throw JSA::Error::BadArgs 'No readable file list given.';
@@ -128,13 +128,18 @@ Known instruments are ...
 
       $inst_ok = qr{^(?:$_)$}i
                     for join '|', map quotemeta( $_ ),
-                                        qw[ HARP RxA RxWB RxWD
+                                        qw[ DAS
+                                            ACSIS
+                                            HARP RxA RxWB RxWD
                                             SCUBA-2(450) SCUBA-2(850)
                                           ];
     }
 
     $inst =~ $inst_ok
       or throw JSA::Error::BadArgs "Unknown instrument name, $inst, given." ;
+
+    $inst =~ m/\b (HARP\b | Rx) /xi
+      and $inst = 'ACSIS';
 
     return
       ( $Tile_List,
