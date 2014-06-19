@@ -42,8 +42,7 @@ Used to override the default priority for all jobs. Must be an integer between
 
 =item B<-project>
 
-Name of a project to be processed. Should not be used with the "-ut" option. Files
-are not verified to be present at CADC in this mode.
+Name of a project to be processed. Should not be used with the "-ut" option.
 
 =item B<-queue>
 
@@ -54,7 +53,6 @@ reprocessing.
 =item B<-ut>
 
 Specify the UT date to be processed. Should not be used with the "-project" option.
-Files to be processed are verified to be at CADC before a job will be submitted.
 
 =item B<-version>
 
