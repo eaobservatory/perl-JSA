@@ -10,14 +10,18 @@ use File::Basename;
 use File::Spec;
 use Net::SMTP;
 
+use JAC::Setup qw/oracdr/;
+
 use OMP::ArcQuery;
 use OMP::ArchiveDB;
 use OMP::Info::ObsGroup;
+use ORAC::Inst::Defn qw/orac_determine_inst_classes/;
 
 use JSA::CADC_DP qw/connect_to_cadcdp disconnect_from_cadcdp
                     create_recipe_instance dprecinst_url/;
 use JSA::Error qw/:try/;
 use JSA::Files qw/file_to_uri/;
+use JSA::Headers qw/get_orac_instrument/;
 use JSA::Headers::CADC qw/correct_asn_id/;
 
 use warnings;
@@ -26,8 +30,8 @@ use strict;
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                     adjust_header all_messages assign_to_group
-                    determine_resource_requirement echo_messages
-                    find_observations
+                    determine_frame_class determine_resource_requirement
+                    echo_messages find_observations
                     get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
                     prepare_archive_db send_log_email submit_jobs
                     write_log_file/;
@@ -182,7 +186,7 @@ Assign the observation to a particular group
 =cut
 
 sub assign_to_group {
-  my $instrument = shift;
+  my $instrume = shift;
   my $obsid = shift;
   my $frameclass = shift;
   my $not_in_group = shift;
@@ -202,7 +206,7 @@ sub assign_to_group {
   my $ORAC_INSTRUMENT = '';
   if( exists $tmphdr{SUBSYSNR} &&
       defined $tmphdr{SUBSYSNR}  &&
-      $instrument eq 'SCUBA-2' ) {
+      $instrume eq 'SCUBA-2' ) {
     $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr{SUBSYSNR};
   }
   $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
@@ -475,6 +479,34 @@ sub adjust_header {
   # it is false.
   if( ! defined( $hdr->{'SIMULATE'} ) ) {
     $hdr->{'SIMULATE'} = 0;
+  }
+}
+
+=item determine_frame_class($obs)
+
+Determines the ORAC-DR frame class for an observation.
+
+=cut
+
+{
+  # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
+  my %frameclassloaded;
+
+  sub determine_frame_class {
+    my $obs = shift;
+
+    my ($frameclass, undef, undef, undef) =
+      orac_determine_inst_classes(get_orac_instrument($obs->fits()));
+
+    unless ($frameclassloaded{$frameclass}) {
+      my $isok = eval " require $frameclass; 1; ";
+      unless ($isok) {
+        die "Could not load $frameclass: $@\n";
+      }
+      $frameclassloaded{$frameclass}++;
+    }
+
+    return $frameclass;
   }
 }
 

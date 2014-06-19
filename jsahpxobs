@@ -63,12 +63,11 @@ Print version information.
 =cut
 
 
-use JAC::Setup qw/ omp oracdr sybase /;
+use JAC::Setup qw/ omp sybase /;
 
 use strict;
 use warnings;
 
-use JSA::Headers qw/ get_orac_instrument /;
 use JSA::Submission qw/%JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
                        determine_resource_requirement
                        echo_messages find_observations log_message
@@ -76,7 +75,6 @@ use JSA::Submission qw/%JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
                        write_log_file/;
 
 use OMP::Info::Obs;
-use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
 use OMP::Constants qw/ :obs /;
 use OMP::ProjServer;
 
@@ -122,9 +120,6 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
   # Group information hash for submit_jobs().
   my %groups;
-
-  # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
-  my %frameclassloaded;
 
   foreach my $obs ( $grp->obs ) {
 

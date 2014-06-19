@@ -64,23 +64,21 @@ Print version information.
 =cut
 
 
-use JAC::Setup qw/ omp oracdr sybase /;
+use JAC::Setup qw/ omp sybase /;
 
 use strict;
 use warnings;
 
 use JSA::CADC_Copy;
-use JSA::Headers qw/ get_orac_instrument /;
 use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                        adjust_header assign_to_group
-                       determine_resource_requirement
+                       determine_frame_class determine_resource_requirement
                        echo_messages find_observations get_obsidss
                        log_message obs_is_fts2_or_pol2_RECIPE
                        prepare_archive_db send_log_email submit_jobs
                        write_log_file/;
 
 use OMP::Info::Obs;
-use ORAC::Inst::Defn qw/ orac_determine_inst_classes /;
 use OMP::Constants qw/ :obs /;
 use OMP::ProjServer;
 
@@ -128,9 +126,6 @@ if( scalar( @{$grp->obs} ) == 0 ) {
   # Group information hash for submit_jobs().
   my %groups;
 
-  # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
-  my %frameclassloaded;
-
   foreach my $obs ( $grp->obs ) {
 
     my $hdr = $obs->hdrhash;
@@ -163,16 +158,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
     adjust_header($hdr);
 
-    my $instrument = get_orac_instrument( $obs->fits );
-
-    my ( $frameclass, $groupclass, $calclass, $instclass ) = orac_determine_inst_classes( $instrument );
-    if( ! $frameclassloaded{$frameclass} ) {
-      my $isok = eval " require $frameclass; 1; ";
-      if( ! $isok ) {
-        die "Could not load $frameclass: $@\n";
-      }
-      $frameclassloaded{$frameclass}++;
-    }
+    my $frameclass = determine_frame_class($obs);
 
     # Current default values for this observation in group handling and
     # recipe submission
@@ -262,7 +248,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 	$subsyshdr->{'FRQSIGHI'} = $subsyshdr->{'FREQ_SIG_UPPER'};
       }
 
-      assign_to_group( $instrument, $subsys->obsid, $frameclass, $obsidss_not_in_group,
+      assign_to_group( $instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
 		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups );
     }
   }
