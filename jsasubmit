@@ -72,7 +72,7 @@ use warnings;
 
 use JSA::CADC_Copy;
 use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                       adjust_header assign_to_group
+                       adjust_header adjust_header_freq assign_to_group
                        determine_frame_class determine_resource_requirement
                        echo_messages find_observations get_obsidss
                        log_message obs_is_fts2_or_pol2_RECIPE
@@ -241,12 +241,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       my $subsyshdr = $subsys->hdrhash;
 
-      if( defined( $subsyshdr->{'FREQ_SIG_LOWER'} ) ) {
-	$subsyshdr->{'FRQSIGLO'} = $subsyshdr->{'FREQ_SIG_LOWER'};
-      }
-      if( defined( $subsyshdr->{'FREQ_SIG_UPPER'} ) ) {
-	$subsyshdr->{'FRQSIGHI'} = $subsyshdr->{'FREQ_SIG_UPPER'};
-      }
+      adjust_header_freq($subsyshdr);
 
       assign_to_group( $instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
 		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups );

@@ -30,7 +30,8 @@ use strict;
 
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                    adjust_header all_messages assign_to_group
+                    adjust_header adjust_header_freq
+                    all_messages assign_to_group
                     determine_frame_class determine_resource_requirement
                     echo_messages find_observations
                     get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
@@ -442,13 +443,12 @@ Adjusts the header (in place) to set certain entries:
 
 =item BASEC2
 
-=item FRQSIGLO
-
-=item FRQSIGHI
-
 =item SIMULATE
 
 =back
+
+Also calls C<adjust_header_freq> to update frequency
+entries.
 
 =cut
 
@@ -478,17 +478,37 @@ sub adjust_header {
     $hdr->{'BASEC2'} = $hdr->{'OBSDEC'};
   }
 
-  if( defined( $hdr->{'FREQ_SIG_LOWER'} ) ) {
-    $hdr->{'FRQSIGLO'} = $hdr->{'FREQ_SIG_LOWER'};
-  }
-  if( defined( $hdr->{'FREQ_SIG_UPPER'} ) ) {
-    $hdr->{'FRQSIGHI'} = $hdr->{'FREQ_SIG_UPPER'};
-  }
+  adjust_header_freq($hdr);
 
   # The database will not have a SIMULATE header so assume
   # it is false.
   if( ! defined( $hdr->{'SIMULATE'} ) ) {
     $hdr->{'SIMULATE'} = 0;
+  }
+}
+
+=item adjust_header_freq(\%hdr)
+
+Adjusts the header (in place) to set certain entries:
+
+=over 4
+
+=item FRQSIGLO
+
+=item FRQSIGHI
+
+=back
+
+=cut
+
+sub adjust_header_freq {
+  my $hdr = shift;
+
+  if( defined( $hdr->{'FREQ_SIG_LOWER'} ) ) {
+    $hdr->{'FRQSIGLO'} = $hdr->{'FREQ_SIG_LOWER'};
+  }
+  if( defined( $hdr->{'FREQ_SIG_UPPER'} ) ) {
+    $hdr->{'FRQSIGHI'} = $hdr->{'FREQ_SIG_UPPER'};
   }
 }
 
