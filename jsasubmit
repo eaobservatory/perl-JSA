@@ -244,7 +244,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       adjust_header_freq($subsyshdr);
 
       assign_to_group( $instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
-		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups );
+		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups, undef );
     }
   }
 

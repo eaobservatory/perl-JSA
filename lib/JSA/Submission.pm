@@ -196,6 +196,7 @@ sub assign_to_group {
   my $curref = shift;
   my $fileref = shift;
   my $groups = shift;
+  my $tagprefix = shift;
 
   # Deref some hashes and arrays
   my %current = %$curref;
@@ -228,6 +229,8 @@ sub assign_to_group {
   # Now correct for the association identifier
   $tmphdr{ASN_ID} = $group;
   $group = correct_asn_id( $current{mode}, \%tmphdr );
+
+  $group = $tagprefix . '-' . $group if defined $tagprefix;
 
   push @{$groups->{$group}{files}}, @files;
   $groups->{$group}{mode} = $current{mode};
