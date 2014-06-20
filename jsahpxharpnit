@@ -100,7 +100,7 @@ pod2usage( 1 ) if $help;
 pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
 
 if( $version ) {
-  print "Submit a job to the CADC GridEngine for JSA processing.\n";
+  print "Submit a HPX observation job to the CADC GridEngine for JSA processing.\n";
   print " Source code revision: 0.01\n";
   exit;
 }
@@ -108,7 +108,7 @@ if( $version ) {
 echo_messages($noemail || $debug);
 
 $project = uc($project) if defined $project;
-my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsasubmit');
+my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsahpxharpnit');
 
 die 'This script should not be used in project mode'
   if $mode eq 'project';
@@ -246,9 +246,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
   submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug);
 }
 
-write_log_file('jsasubmit', $ut, $project) unless $debug;
+write_log_file('jsasubmit-hpx-harp-nit', $ut, $project) unless $debug;
 
-send_log_email('CADC Processing', $ut, $project)
+send_log_email('CADC HPX HARP Night Processing', $ut, $project)
     unless $noemail || $debug;
 
 exit;
