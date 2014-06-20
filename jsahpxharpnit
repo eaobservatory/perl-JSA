@@ -67,7 +67,7 @@ use JAC::Setup qw/ omp sybase /;
 use strict;
 use warnings;
 
-use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
+use JSA::Submission qw/%JUNK_OBSIDSS
                        adjust_header adjust_header_freq assign_to_group
                        determine_frame_class determine_resource_requirement
                        echo_messages find_observations get_obsidss
@@ -139,6 +139,12 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
+    # This script is only for HARP.
+    if ($instrume ne 'HARP') {
+      log_message( "Instrument $instrume currently not supported for HPX nit processing\n");
+      next;
+    }
+
     # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
     # ACSIS and the DAS.
     unless (
@@ -159,55 +165,19 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     # recipe submission
     my %current;
 
-    # If the observation is NOT GOOD we don't want to combine it with other
-    # members of the group so we just want to submit it standalone.
-    # REJECT status could arguably be included in full coadds but for now
-    # we only combine GOOD.
-
-    # Observations to be processed standalone need to be reduced in "obs" mode.
-
-    # We do not process bad observations in PROJECT mode since we assume they have
-    # already been done in NIGHT mode
-
-    my $not_in_group;
-    $current{mode} = $mode;
-    if ( $obs->status != OMP__OBS_GOOD ) {
-      # Do not care about group so add a disambiguater based on obsid
-      log_message( "Observation with OBSID ". $obs->obsid ." is not good so will not be included in a group\n" );
-      $not_in_group = 1;
-      $current{mode} = "obs";
-
-      # if the data are truly JUNK we do not want to ask CADC to process the data at
-      # all since the chances are excellent that the pipeline will fail
-      if ( $obs->status == OMP__OBS_JUNK ) {
-        log_message("Observation is junk and so will not be processed at all\n");
-        next;
-      }
-
-      # Skip to next observation unless we are in night mode
-      if ($mode ne "night") {
-        log_message("Not including this observation in $mode processing\n");
-        next;
-      }
+    # If the data are not good then do not include them.
+    if ($obs->status != OMP__OBS_GOOD ) {
+      log_message("Observation is not good and so will not be processed\n");
+      next;
     }
 
     $current{'dprecipe'} = determine_resource_requirement($obs);
 
-    # Set up recipe parameters and recipe overrides.
-    # We only do this for non-calibrator science observations
-    if ( $obstype eq 'SCIENCE' && ! $hdr->{STANDARD}) {
-      my $pid = $obs->projectid;
-      if (defined $pid) {
-        # Override the recipe?
-        if ( exists $DR_RECIPES{$pid} ) {
-          $current{drparams} = $DR_RECIPES{$pid};
-        }
+    # All observations are processed with the same recipe.
+    $current{'drparams'} = 'REDUCE_SCIENCE_LEGACY';
 
-        # We use this for all modes since the parameter file is relevant
-        # for both night and project processing.
-        $current{recpars} = "recpars-$pid.ini";
-      }
-    }
+    # Placeholder for addition of recpars once they are added to ORAC-DR.
+    # $current{'recpars'} = '???.ini';
 
     my @subsystems = $obs->subsystems;
 
@@ -219,7 +189,6 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         unless defined $obsidss;
 
       # local copies
-      my $obsidss_not_in_group = $not_in_group;
       my %obsidss_current = %current;
 
       if (exists $JUNK_OBSIDSS{$obsidss}) {
@@ -227,18 +196,11 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 	next;
       }
 
-      if (exists $BAD_OBSIDSS{$obsidss}) {
-	log_message( "Subsystem $obsidss should not be included in group processing\n" );
-	next if $mode ne "night";
-	$obsidss_not_in_group = 1;
-	$obsidss_current{mode} = "obs";
-      }
-
       my $subsyshdr = $subsys->hdrhash;
 
       adjust_header_freq($subsyshdr);
 
-      assign_to_group( $instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
+      assign_to_group( $instrume, $subsys->obsid, $frameclass, undef,
 		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups );
     }
   }
