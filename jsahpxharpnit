@@ -41,9 +41,7 @@ Used to override the default priority for all jobs. Must be an integer between
 
 =item B<-project>
 
-Name of a project to be processed.  Files are not verified to be present at
-CADC in this mode.  If the "-ut" option is also supplied then night mode
-will be used but selecting observations from this project.
+Name of a project to be processed which and must be accompanied by the  "-ut" option.
 
 =item B<-queue>
 
@@ -54,7 +52,6 @@ reprocessing.
 =item B<-ut>
 
 Specify the UT date to be processed.
-Files to be processed are verified to be at CADC before a job will be submitted.
 
 =item B<-version>
 
@@ -70,7 +67,6 @@ use JAC::Setup qw/ omp sybase /;
 use strict;
 use warnings;
 
-use JSA::CADC_Copy;
 use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                        adjust_header adjust_header_freq assign_to_group
                        determine_frame_class determine_resource_requirement
@@ -114,9 +110,8 @@ echo_messages($noemail || $debug);
 $project = uc($project) if defined $project;
 my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsasubmit');
 
-my $atCADC = ($mode eq 'night')
-           ? JSA::CADC_Copy::at_cadc($ut)
-           : undef;
+die 'This script should not be used in project mode'
+  if $mode eq 'project';
 
 if( scalar( @{$grp->obs} ) == 0 ) {
   log_message( "No observations were retrieved from the database.\n");
@@ -248,7 +243,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
   }
 
-  submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug);
+  submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug);
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $debug;
