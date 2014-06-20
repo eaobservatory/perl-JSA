@@ -171,6 +171,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
+    $current{'mode'} = $mode;
     $current{'dprecipe'} = determine_resource_requirement($obs);
 
     # All observations are processed with the same recipe.
