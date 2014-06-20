@@ -71,7 +71,7 @@ use JSA::Submission qw/%JUNK_OBSIDSS
                        adjust_header adjust_header_freq assign_to_group
                        determine_frame_class determine_resource_requirement
                        echo_messages find_observations get_obsidss
-                       log_message obs_is_fts2_or_pol2_RECIPE
+                       log_message
                        prepare_archive_db send_log_email submit_jobs
                        write_log_file/;
 
@@ -128,16 +128,6 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $obstype = uc( $hdr->{'OBS_TYPE'} );
     my $instrume = uc( $hdr->{'INSTRUME'} );
     my $backend = uc( $hdr->{'BACKEND'} );
-
-    # No reduction recipe at CADC yet for (FTS|POL)-2.
-    if ( obs_is_fts2_or_pol2_RECIPE( $backend, $obs->drrecipe() ) ) {
-
-      log_message( sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction %s\n",
-                      $obs->obsid(),
-                      'based on recipe value'
-                  );
-      next;
-    }
 
     # This script is only for HARP.
     if ($instrume ne 'HARP') {
