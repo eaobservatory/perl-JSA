@@ -128,6 +128,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $obstype = uc( $hdr->{'OBS_TYPE'} );
     my $instrume = uc( $hdr->{'INSTRUME'} );
     my $backend = uc( $hdr->{'BACKEND'} );
+    my $survey = uc($hdr->{'SURVEY'} // '');
 
     # No reduction recipe at CADC yet for (FTS|POL)-2.
     if ( obs_is_fts2_or_pol2_RECIPE( $backend, $obs->drrecipe() ) ) {
@@ -160,6 +161,12 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     # Skip moving sources
     if (!defined $hdr->{"OBSRA"}) {
       log_message("Observation is from a moving source so skipping for HPX obs processing\n");
+      next;
+    }
+
+    # Skip CLS for now.
+    if ($survey eq 'CLS') {
+      log_message("Observation is from CLS so skipping for HPX obs processing\n");
       next;
     }
 
