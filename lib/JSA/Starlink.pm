@@ -379,8 +379,15 @@ sub set_wcs_attribs {
   my $template = Starlink::AST::SpecFrame->new( "MaxAxes=7" );
   my $spf = $wcs->FindFrame( $template, " " );
 
+  # Determine the projection -- if it is HEALPix then we do not want to change
+  # it from ICRS to FK5.
+  my $projection = $wcs->GetFrame(Starlink::AST::AST__CURRENT())->GetC('Projection');
+
   # Form argument string
-  my @argstr = qw/ System(1)=FK5 /;
+  my @argstr = ();
+  unless ($projection eq 'HEALPix') {
+    push @argstr, qw/ System(1)=FK5 /;
+  }
   if (defined $spf) {
     push(@argstr, qw/ System(3)=FREQ StdOfRest=BARY / );
   }
