@@ -511,6 +511,7 @@ sub ndf2fits {
                "IN=$infile",
                "OUT=$outfile",
                "ENCODING=FITS-WCS(CD)",
+               'AXISORDER=COPY',
                "CHECKSUM",
                "PROEXTS",
                "PROFITS",
