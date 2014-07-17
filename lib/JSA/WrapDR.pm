@@ -201,7 +201,7 @@ sub run_pipeline {
     log_message( "Using PICARD\n" );
 
     # PICARD needs a recipe name so we need to abort if we do not have one
-    die "Processing reduced data requires the use of the -parameters option\n"
+    die "Processing reduced data requires the use of the -drparameters option\n"
       unless (defined $drparameters);
 
     # PICARD only uses a recipe name from drparameters
