@@ -182,7 +182,7 @@ use JSA::Headers qw/ get_header_value read_headers /;
 use JSA::Logging qw/log_message log_warning/;
 use JSA::WrapDR qw/prepare_environment prepare_environment_cadc
                    retrieve_data determine_instrument
-                   run_pipeline capture_products
+                   run_pipeline capture_products capture_log_files
                    clean_directory_final clean_directory_pre_capture/;
 
 print "Debugging information:\n*** ARGV:\n";
@@ -523,7 +523,7 @@ my %drhdrs = read_headers( @drfiles );
 convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
                               dpdate => DateTime->now->datetime } );
 # Convert any log files which we want to save.
-convert_log_files();
+convert_log_files() and capture_log_files($id, $persist, $canfar, $canfar);
 
 if ($cleanup eq 'cadc') {
   clean_directory_pre_capture($outdir, \%all_existing_files,
