@@ -127,7 +127,7 @@ sub run_command {
   if ($exstat == -1) {
     # Triggered from eval above
     $sigtext = "(via die) ";
-    $exit_status = 1;
+    $exit_status = -1;
   } elsif ($signal) {
     $sigtext =  "(signal $signal) ";
   } elsif ($exit_status == 255) {

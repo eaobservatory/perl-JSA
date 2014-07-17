@@ -169,7 +169,7 @@ sub run_star_command {
       . "\n" ;
 
     throw JSA::Error::StarlinkCommand( $text )
-      if $exstat == 1;
+      if ($exstat == 1 or $exstat == -1);
 
     throw JSA::Error::BadExec( $text );
   }
