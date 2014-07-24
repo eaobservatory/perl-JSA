@@ -22,6 +22,10 @@ tiles for individual observations.
 Enable debug messages and do not actually submit a processing job. Also
 disables emailing.
 
+=item B<-filter>
+
+Filter to select.
+
 =item B<-help>
 
 Print help information.
@@ -85,7 +89,8 @@ use File::Basename;
 prepare_archive_db();
 
 # Handle command-line options.
-my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug, $queue );
+my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
+     $queue, $filter );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -94,6 +99,7 @@ my $status = GetOptions( "help"      => \$help,
                          "version"   => \$version,
                          "debug"     => \$debug,
                          "noemail"   => \$noemail,
+                         'filter=s'  => \$filter,
                          "queue=s"     => \$queue,
                        );
 
@@ -203,6 +209,11 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       }
 
       my $subsyshdr = $subsys->hdrhash;
+
+      if ((defined $filter) and ($filter ne $subsyshdr->{'FILTER'})) {
+	log_message( "Subsystem $obsidss skipped due to filter selection\n");
+	next;
+      }
 
       # Hybrid ACSIS observations should be reduced together
       # so we need to ensure that related subsystems are sent to the same processing job.
