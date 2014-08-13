@@ -215,9 +215,6 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 	next;
       }
 
-      # Hybrid ACSIS observations should be reduced together
-      # so we need to ensure that related subsystems are sent to the same processing job.
-
       # Get all the files, stripped of path
       my @files = map { basename($_) } $subsys->filename;
 
