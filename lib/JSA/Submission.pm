@@ -33,6 +33,7 @@ our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                     adjust_header adjust_header_freq
                     all_messages assign_to_group
                     determine_frame_class determine_resource_requirement
+                    determine_s2_hpx_chunkning
                     echo_messages find_observations
                     get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
                     prepare_archive_db send_log_email submit_jobs
@@ -605,6 +606,61 @@ sub determine_resource_requirement {
   }
 
   return $req;
+}
+
+=item determine_s2_hpx_chunking($subsystem)
+
+Determines whether a SCUBA-2 observation is expected to chunk at CADC
+when reduced using the JSA HEALPix settings.
+
+Returns true if it is expected to chunk, based on the criterion
+given in SciCom trac ticket #442.
+
+=cut
+
+{
+  my %pixel_size = (
+      450 => 1.61,
+      850 => 3.22,
+  );
+
+  my %max_fred = (
+      450 => 44000,
+      850 => 85000,
+  );
+
+  sub determine_s2_hpx_chunkning {
+    my $subsys = shift;
+
+    my $hdr = $subsys->hdrhash();
+
+    my $filter = $hdr->{'FILTER'};
+    die 'Filter undefined' unless defined $filter;
+    my $svel = $hdr->{'SCAN_VEL'};
+    die 'Scan velocity undefined' unless defined $svel;
+    my $steptime = 0.0059;
+
+    my $pixsize = $pixel_size{$filter};
+    die 'Don\'t know pixel size for filter ' . $filter
+        unless defined $pixsize;
+
+    my $max = $max_fred{$filter};
+    die 'Don\'t know max fred for filter ' . $filter
+        unless defined $max;
+
+    my $scalelen = $steptime * $svel / $pixsize;
+
+    # filename() returns the first filename if called in scalar
+    # context so we need to fetch the whole list to determine the number.
+    my @file = $subsys->filename();
+    my $nfile = scalar @file;
+
+    my $fred = ($scalelen < 0.8)
+             ? ($nfile * $svel)
+             : ($nfile * $pixsize / $steptime);
+
+    return $fred >= $max;
+  }
 }
 
 =item submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug)
