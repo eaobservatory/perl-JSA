@@ -33,7 +33,7 @@ our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                     adjust_header adjust_header_freq
                     all_messages assign_to_group
                     determine_frame_class determine_resource_requirement
-                    determine_s2_hpx_chunkning
+                    determine_s2_hpx_chunking
                     echo_messages find_observations
                     get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
                     prepare_archive_db send_log_email submit_jobs
@@ -629,7 +629,7 @@ given in SciCom trac ticket #442.
       850 => 85000,
   );
 
-  sub determine_s2_hpx_chunkning {
+  sub determine_s2_hpx_chunking {
     my $subsys = shift;
 
     my $hdr = $subsys->hdrhash();
