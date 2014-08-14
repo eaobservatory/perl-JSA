@@ -691,6 +691,9 @@ DP recipe to use for this group.
 
 =back
 
+For groups which are successfully submitted, the recipe instance identifier
+is added to the hash as a key "recipe_id".
+
 =cut
 
 sub submit_jobs {
@@ -784,6 +787,7 @@ sub submit_jobs {
       $recipe_id =~ s/^\-//;
       log_message( "*** Attempt to submit recipe update of $recipe_id with group $group failed.\n");
     } else {
+      $groups{$group}{'recipe_id'} = $recipe_id;
       log_message( "Request submitted with recipe instance $recipe_id.\n");
       log_message( "Recipe URL: " . dprecinst_url($recipe_id) . "\n");
       log_message( "\n");

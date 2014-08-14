@@ -79,6 +79,7 @@ use JSA::Submission qw/%JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
                        echo_messages find_observations log_message
                        prepare_archive_db send_log_email submit_jobs
                        write_log_file/;
+use JSA::Proc qw/add_jsa_proc_jobs/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/ :obs /;
@@ -251,6 +252,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
   # Submit jobs to CADC, but only if we found some non-chunking jobs.
   submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug) if %groups;
+
+  # Add the jobs to the local JSA processing system.
+  add_jsa_proc_jobs(\%groups_local, \%groups);
 }
 
 write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $debug;
