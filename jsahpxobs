@@ -75,6 +75,7 @@ use warnings;
 
 use JSA::Submission qw/%JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
                        determine_resource_requirement
+                       determine_s2_hpx_chunking
                        echo_messages find_observations log_message
                        prepare_archive_db send_log_email submit_jobs
                        write_log_file/;
@@ -126,6 +127,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
   # Group information hash for submit_jobs().
   my %groups;
+  # Equivalent hash for jobs which must be processed locally due to
+  # chunking concerns.
+  my %groups_local;
 
   foreach my $obs ( $grp->obs ) {
 
@@ -225,17 +229,28 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       my $group = "hpx-" . $subsys->obsid . "-" . $ss_asn_id;
 
-      push @{$groups{$group}{files}}, @files;
-      $groups{$group}{mode} = "obs";
-      $groups{$group}{dprecipe} = $current{dprecipe};
+      my %group = (
+          files => \@files,
+          mode => 'obs',
+          dprecipe => $current{'dprecipe'},
+      );
+
       for my $k (qw/ drparams recpars /) {
-        $groups{$group}{$k} = $current{$k}
-          if defined $current{drparams};
+        $group{$k} = $current{$k}
+          if defined $current{$k};
+      }
+
+      if (determine_s2_hpx_chunking($subsys)) {
+        $groups_local{$group} = \%group;
+      }
+      else {
+        $groups{$group} = \%group;
       }
     }
   }
 
-  submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug);
+  # Submit jobs to CADC, but only if we found some non-chunking jobs.
+  submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug) if %groups;
 }
 
 write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $debug;
