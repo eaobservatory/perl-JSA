@@ -254,7 +254,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
   submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug) if %groups;
 
   # Add the jobs to the local JSA processing system.
-  add_jsa_proc_jobs(\%groups_local, \%groups);
+  add_jsa_proc_jobs(\%groups_local, \%groups, $mode, $debug);
 }
 
 write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $debug;
