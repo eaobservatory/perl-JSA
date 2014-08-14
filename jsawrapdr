@@ -76,9 +76,9 @@ this script.
 
 =item B<-persist>
 
-Controls whether dpCapture should ingest the output files or simply check
-them for compliance. By default .fits and .png files will be retained but
-see the "persistall" option.
+Controls whether dpCapture should store the output files (if the --persist
+option is given) or simply check them for compliance (if the option is not
+given).
 
 =item B<-log>
 
