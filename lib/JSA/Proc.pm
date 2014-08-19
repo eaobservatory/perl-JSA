@@ -21,7 +21,7 @@ our @EXPORT_OK = qw/add_jsa_proc_jobs/;
 
 =over 4
 
-=item add_jsa_proc_jobs(\%group_local, \%group_cadc, $mode, $debug)
+=item add_jsa_proc_jobs(\%group_local, \%group_cadc, $mode, $priority, $debug)
 
 Adds processing jobs to the JSA local processing system.  Takes references
 to two hashes containing the jobs to be run locally, and those running at
@@ -41,6 +41,7 @@ have their recipe instance added to the hash as "recipe_id".
         my $group_local = shift;
         my $group_cadc = shift;
         my $mode = shift;
+        my $priority = shift;
         my $debug = shift;
 
         log_message("\nBeginning to add jobs to local jsa_proc system.\n");
@@ -88,6 +89,7 @@ have their recipe instance added to the hash as "recipe_id".
                     parameters      => $group->{'drparams'},
                     input_file_names=> \@files,
                     foreign_id      => $recipe_id,
+                    priority        => $priority,
                 );
 
                 unless ($debug) {
