@@ -2528,7 +2528,7 @@ sub _fix_dates {
       if ! $date
       || $date =~ $zero_date_re
       || ( looks_like_number( $date ) && 0 == $date )
-          ;
+      ;
   }
 
   return;
