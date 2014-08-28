@@ -2517,6 +2517,8 @@ sub _fix_dates {
 
   my $date_re = qr{ (?: \b date | dat(?: en | st )\b ) }xi;
 
+  my $zero_date_re = qr{^0{4} -? 00 -? 00}x;
+
   for my $k ( keys %{ $header } ) {
 
     next unless $k =~ $date_re;
@@ -2524,6 +2526,7 @@ sub _fix_dates {
     my $date = $header->{ $k };
     undef $header->{ $k }
       if ! $date
+      || $date =~ $zero_date_re
       || ( looks_like_number( $date ) && 0 == $date )
           ;
   }
