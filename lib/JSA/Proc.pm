@@ -90,6 +90,7 @@ have their recipe instance added to the hash as "recipe_id".
                     input_file_names=> \@files,
                     foreign_id      => $recipe_id,
                     priority        => $priority,
+                    obsinfolist     => $group->{'obsinfolist'},
                 );
 
                 unless ($debug) {

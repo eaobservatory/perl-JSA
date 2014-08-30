@@ -246,6 +246,23 @@ if( scalar( @{$grp->obs} ) == 0 ) {
           files => \@files,
           mode => 'obs',
           dprecipe => $current{'dprecipe'},
+          obsinfolist => [{
+            obsid =>        $subsyshdr->{'OBSID'},
+            obsidss =>      $subsyshdr->{'OBSID_SUBSYSNR'},
+            utdate =>       $subsyshdr->{'UTDATE'},
+            obsnum =>       0 + $subsyshdr->{'OBSNUM'},
+            instrument =>   $subsyshdr->{'INSTRUME'},
+            backend =>      $subsyshdr->{'BACKEND'},
+            subsys =>       $subsyshdr->{'FILTER'}, # SCUBA-2 specific
+            project =>      $subsyshdr->{'PROJECT'},
+            survey =>       $subsyshdr->{'SURVEY'},
+            scanmode =>     (($subsyshdr->{'SAM_MODE'} eq 'scan')
+                              ? $subsyshdr->{'SCAN_PAT'}
+                              : $subsyshdr->{'SAM_MODE'}),
+            sourcename =>   $subsyshdr->{'OBJECT'},
+            obstype =>      $subsyshdr->{'OBS_TYPE'},
+            association =>  $subsyshdr->{'FILTER'}, # SCUBA-2 specific
+          }],
       );
 
       for my $k (qw/ drparams recpars /) {
