@@ -187,6 +187,12 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
+    # Skip E&C observations.
+    if ($hdr->{'PROJECT'} =~ /EC/i) {
+      log_message("Observation is from an E&C project so skipping for HPX obs processing\n");
+      next;
+    }
+
     # Current default values for this observation in group handling and
     # recipe submission
     my %current;
