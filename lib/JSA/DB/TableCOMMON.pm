@@ -22,6 +22,7 @@ sub column_names {
         jigl_cnt jigl_crd jigl_nam jigl_pa jig_scal jos_min jos_mult
         last_modified lat_obs locl_crd long_obs lstend lststart
         map_hght map_pa map_wdth map_x map_y msbid msbtid
+        moving_target
         nfocstep num_cyc
         object obsdec obsdecbl obsdecbr obsdectl obsdectr obsgeo_x obsgeo_y
         obsgeo_z obsid obsnum obsra obsrabl obsrabr obsratl obsratr obs_type
