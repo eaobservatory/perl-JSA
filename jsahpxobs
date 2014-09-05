@@ -35,6 +35,10 @@ Print help information.
 Submit all jobs locally rather than to CADC regardless of expected
 chunking.
 
+=item B<--local-add-info>
+
+Update existing local jobs without observation information.
+
 =item B<-man>
 
 Print full manual.
@@ -97,7 +101,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-     $queue, $filter, $local_only );
+     $queue, $filter, $local_only, $local_only_info );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -109,7 +113,11 @@ my $status = GetOptions( "help"      => \$help,
                          'filter=s'  => \$filter,
                          "queue=s"     => \$queue,
                          'local'     => \$local_only,
+                         'local-add-info' => \$local_only_info,
                        );
+
+# If asked to update local info, do not try to submit anything to CADC.
+$local_only = 1 if $local_only_info;
 
 pod2usage( 1 ) if $help;
 pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
@@ -283,7 +291,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
   submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug) if %groups;
 
   # Add the jobs to the local JSA processing system.
-  add_jsa_proc_jobs(\%groups_local, \%groups, $mode, $priority, $debug);
+  add_jsa_proc_jobs(\%groups_local, \%groups, $mode, $priority,
+                    $local_only_info, $debug);
 }
 
 write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $debug;

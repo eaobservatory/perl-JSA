@@ -21,13 +21,16 @@ our @EXPORT_OK = qw/add_jsa_proc_jobs/;
 
 =over 4
 
-=item add_jsa_proc_jobs(\%group_local, \%group_cadc, $mode, $priority, $debug)
+=item add_jsa_proc_jobs(\%group_local, \%group_cadc, $mode, $priority, $add_info_only, $debug)
 
 Adds processing jobs to the JSA local processing system.  Takes references
 to two hashes containing the jobs to be run locally, and those running at
 CADC.  These should be of the same form as that for the
 JSA::Submission::submit_jobs subroutine, except that the CADC jobs should
 have their recipe instance added to the hash as "recipe_id".
+
+If the C<$add_info_only> option is set then instead of adding jobs, observation
+info is added to jobs which currently lack it.
 
 =cut
 
@@ -42,12 +45,15 @@ have their recipe instance added to the hash as "recipe_id".
         my $group_cadc = shift;
         my $mode = shift;
         my $priority = shift;
+        my $add_info_only = shift;
         my $debug = shift;
 
         log_message("\nBeginning to add jobs to local jsa_proc system.\n");
 
         # Create Taco connection to Python unless we already have one.
-        unless ($debug or defined $jsa_proc_db) {
+        # Submission mode debugging does not require a connection, but
+        # info adding debugging does.
+        unless (($debug and not $add_info_only) or defined $jsa_proc_db) {
             log_message("Opening connection to jsa_proc.\n");
             $taco = new Alien::Taco(lang => 'python');
             $taco->import_module('jsa_proc.config', args => ['get_database']);
@@ -81,36 +87,98 @@ have their recipe instance added to the hash as "recipe_id".
                 # Make list of plain file names with the extensions removed.
                 my @files = map {s/\.sdf$//; $_} @{$group->{'files'}};
 
-                # Prepare arguments for the jsa_proc database add_job method.
-                my %args = (
-                    tag             => $tag,
-                    location        => $location,
-                    mode            => $group->{'mode'} // $mode,
-                    parameters      => $group->{'drparams'},
-                    input_file_names=> \@files,
-                    foreign_id      => $recipe_id,
-                    priority        => $priority,
-                    obsinfolist     => $group->{'obsinfolist'},
-                );
 
-                unless ($debug) {
-                    # In non-debug mode, try calling the add_job method.
+                unless ($add_info_only) {
+                    # Job submission mode.
 
-                    log_message("Adding job to jsa_proc database.\n");
-                    eval {
-                        my $job_id = $jsa_proc_db->call_method(
-                                        'add_job', kwargs => \%args);
-                        log_message("Job added with ID: $job_id\n");
-                    };
-                    if ($@) {
-                        log_message("ERROR: failed to add job:\n$@\n");
-                    };
+                    # Prepare arguments for the jsa_proc database add_job method.
+                    my %args = (
+                        tag             => $tag,
+                        location        => $location,
+                        mode            => $group->{'mode'} // $mode,
+                        parameters      => $group->{'drparams'},
+                        input_file_names=> \@files,
+                        foreign_id      => $recipe_id,
+                        priority        => $priority,
+                        obsinfolist     => $group->{'obsinfolist'},
+                    );
+
+                    unless ($debug) {
+                        # In non-debug mode, try calling the add_job method.
+
+                        log_message("Adding job to jsa_proc database.\n");
+                        eval {
+                            my $job_id = $jsa_proc_db->call_method(
+                                            'add_job', kwargs => \%args);
+                            log_message("Job added with ID: $job_id\n");
+                        };
+                        if ($@) {
+                            log_message("ERROR: failed to add job:\n$@\n");
+                        }
+                    }
+                    else {
+                        # In debug mode, print the arguments we would have given.
+
+                        log_message("Would have added the job: [DEBUG MODE]\n");
+                        log_message(Data::Dumper->Dump([\%args], [qw/args/]));
+                    }
                 }
                 else {
-                    # In debug mode, print the arguments we would have given.
+                    # Info adding mode.
 
-                    log_message("Would have added the job: [DEBUG MODE]\n");
-                    print Data::Dumper->Dump([\%args], [qw/args/]);
+                    # Find the jsa_proc job ID based on the tag.
+                    my $job_id = eval {
+                        my @job = $jsa_proc_db->call_method(
+                            'get_job', kwargs => {tag => $tag});
+                        $job[0];
+                    };
+                    unless (defined $job_id) {
+                        log_message("WARNING: could not find job by tag '$tag'\n");
+                        next;
+                    }
+                    log_message("Found job ID: '$job_id'\n");
+
+                    # See if the job already has obs info.
+                    eval {
+                        my @existing_info = $jsa_proc_db->call_method(
+                            'get_obs_info', args => [$job_id]);
+
+                        if (@existing_info) {
+                            log_message("Job already has info\n");
+                            next;
+                        }
+
+                        log_message("Job needs info adding\n");
+                    };
+                    if ($@) {
+                        log_message("Failed to check if job already has info\n");
+                        next;
+                    }
+
+                    # Job did not have info: prepare to add it.
+                    my %args = (
+                        job_id      => $job_id,
+                        obsinfolist => $group->{'obsinfolist'},
+                    );
+
+                    unless ($debug) {
+                        # Non-debug mode: attempt to update the job info.
+
+                        log_message("Updating obs info in jsa_proc database.\n");
+                        eval {
+                            $jsa_proc_db->call_method(
+                                    'set_obs_info', kwargs => \%args);
+                        };
+                        if ($@) {
+                            log_message("ERROR: failed to update obs info.\n");
+                        }
+                    }
+                    else {
+                        # Debug mode: print the arguments we would have submitted.
+
+                        log_message("Would have updated the job: [DEBUG MODE]\n");
+                        log_message(Data::Dumper->Dump([\%args], [qw/args/]));
+                    }
                 }
             }
         }
