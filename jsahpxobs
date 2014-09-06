@@ -195,8 +195,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
-    # Skip E&C observations.
-    if ($hdr->{'PROJECT'} =~ /EC/i) {
+    # Skip E&C observations except EC05.
+    if ($hdr->{'PROJECT'} =~ /EC/i and $hdr->{'PROJECT'} !~ /EC05/i) {
       log_message("Observation is from an E&C project so skipping for HPX obs processing\n");
       next;
     }
