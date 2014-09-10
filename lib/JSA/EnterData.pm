@@ -2434,13 +2434,13 @@ sub fill_headers_COMMON {
   # Create release_date (end of semester + one year)
   # for the general case but for OBSTYPE != SCIENCE or
   # STANDARD=T the release date is immediate
-  # Surveys are special since we do not know when the release date
+  # CLS special since we do not know when the release date
   # should be at ingest time
   my $release_date;
 
-  if ( $obs->projectid =~ /^mjls/i && $obs->isScience) {
+  if ( $obs->projectid =~ /^mjlsc/i && $obs->isScience) {
 
-    # Survey. Should properly check the SURVEY FITS header
+    # CLS. Should properly check the SURVEY FITS header
     $release_date = DateTime->new( 'month' => 1,
                                    'year' => 2031,
                                    'day' => 1,
