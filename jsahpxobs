@@ -6,7 +6,7 @@ jsahpxobs - submit observations for HPX tile generation
 
 =head1 SYNOPSIS
 
-  jsahpxobs -ut 20080705
+  jsahpxobs -ut 20080705 --task <task name>
 
 =head1 DESCRIPTION
 
@@ -64,6 +64,10 @@ Can be used to override the queue that should be used for the data processing
 at CADC. Can be left unset. Useful values are "JAC_REPROC" for low priority
 reprocessing.
 
+=item B<--task>
+
+Name of data processing task.
+
 =item B<-ut>
 
 Specify the UT date to be processed.
@@ -101,7 +105,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-     $queue, $filter, $local_only, $local_only_info );
+     $queue, $filter, $local_only, $local_only_info, $task );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -114,6 +118,7 @@ my $status = GetOptions( "help"      => \$help,
                          "queue=s"     => \$queue,
                          'local'     => \$local_only,
                          'local-add-info' => \$local_only_info,
+                         'task=s'    => \$task,
                        );
 
 # If asked to update local info, do not try to submit anything to CADC.
@@ -127,6 +132,8 @@ if( $version ) {
   print " Source code revision: 0.01\n";
   exit;
 }
+
+die 'Task name must be given' unless defined $task;
 
 echo_messages($noemail || $debug);
 
@@ -271,6 +278,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
             obstype =>      $subsyshdr->{'OBS_TYPE'},
             association =>  $subsyshdr->{'FILTER'}, # SCUBA-2 specific
           }],
+          task => $task,
       );
 
       for my $k (qw/ drparams recpars /) {

@@ -101,6 +101,7 @@ info is added to jobs which currently lack it.
                         foreign_id      => $recipe_id,
                         priority        => $priority,
                         obsinfolist     => $group->{'obsinfolist'},
+                        task            => $group->{'task'},
                     );
 
                     unless ($debug) {
