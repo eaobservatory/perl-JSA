@@ -92,11 +92,17 @@ info is added to jobs which currently lack it.
                     # Job submission mode.
 
                     # Prepare arguments for the jsa_proc database add_job method.
+                    my @param = ();
+                    push @param, '--recpars', $group->{'recpars'}
+                        if exists $group->{'recpars'};
+                    push @param, $group->{'drparams'}
+                        if exists $group->{'drparams'};
+
                     my %args = (
                         tag             => $tag,
                         location        => $location,
                         mode            => $group->{'mode'} // $mode,
-                        parameters      => $group->{'drparams'},
+                        parameters      => join(' ', @param),
                         input_file_names=> \@files,
                         foreign_id      => $recipe_id,
                         priority        => $priority,
