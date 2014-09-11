@@ -49,6 +49,10 @@ Can be used to override the queue that should be used for the data processing
 at CADC. Can be left unset. Useful values are "JAC_REPROC" for low priority
 reprocessing.
 
+=item B<--task>
+
+Name of data processing task.
+
 =item B<-ut>
 
 Specify the UT date to be processed.
@@ -74,6 +78,7 @@ use JSA::Submission qw/%JUNK_OBSIDSS
                        log_message
                        prepare_archive_db send_log_email submit_jobs
                        write_log_file/;
+use JSA::Proc qw/create_obsinfo_hash/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/ :obs /;
@@ -84,7 +89,8 @@ use Pod::Usage;
 prepare_archive_db();
 
 # Handle command-line options.
-my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug, $queue );
+my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
+     $queue, $task );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -94,6 +100,7 @@ my $status = GetOptions( "help"      => \$help,
                          "debug"     => \$debug,
                          "noemail"   => \$noemail,
                          "queue=s"     => \$queue,
+                         'task=s'    => \$task,
                        );
 
 pod2usage( 1 ) if $help;
@@ -104,6 +111,8 @@ if( $version ) {
   print " Source code revision: 0.01\n";
   exit;
 }
+
+die 'Task name must be given' unless defined $task;
 
 echo_messages($noemail || $debug);
 
@@ -191,8 +200,13 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       adjust_header_freq($subsyshdr);
 
+      my $obsinfo = create_obsinfo_hash($subsyshdr);
+      # TODO: insert correct association here.
+      # $obsinfo->{'association'} = ...;
+
       assign_to_group( $instrume, $subsys->obsid, $frameclass, undef,
-		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups, 'hpx-tmp' );
+		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
+                       'hpx-tmp', $task, $obsinfo );
     }
   }
 

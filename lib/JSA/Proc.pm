@@ -15,7 +15,7 @@ use Data::Dumper; # For "debug" mode.
 
 use JSA::Submission qw/log_message/;
 
-our @EXPORT_OK = qw/add_jsa_proc_jobs/;
+our @EXPORT_OK = qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 =head1 SUBROUTINES
 
@@ -192,6 +192,48 @@ info is added to jobs which currently lack it.
 
         log_message("\nDone adding jobs to local jsa_proc system.\n")
     }
+}
+
+=item create_obsinfo_hash(\%subsyshdr)
+
+Creates an obsinfo hash and returns a reference to it.
+
+Does not include association.
+
+=cut
+
+sub create_obsinfo_hash {
+    my $subsyshdr = shift;
+
+    my $subsys;
+
+    if ($subsyshdr->{'BACKEND'} eq 'SCUBA-2') {
+        $subsys = $subsyshdr->{'FILTER'};
+    }
+    elsif ($subsyshdr->{'BACKEND'} eq 'ACSIS') {
+        $subsys = $subsyshdr->{'SUBSYSNR'};
+    }
+    else {
+        die 'Do not know how to derive subsystem for backend: ' .
+            $subsyshdr->{'BACKEND'};
+    }
+
+    return {
+            obsid =>        $subsyshdr->{'OBSID'},
+            obsidss =>      $subsyshdr->{'OBSID_SUBSYSNR'},
+            utdate =>       $subsyshdr->{'UTDATE'},
+            obsnum =>       0 + $subsyshdr->{'OBSNUM'},
+            instrument =>   $subsyshdr->{'INSTRUME'},
+            backend =>      $subsyshdr->{'BACKEND'},
+            subsys =>       $subsys,
+            project =>      $subsyshdr->{'PROJECT'},
+            survey =>       $subsyshdr->{'SURVEY'},
+            scanmode =>     (($subsyshdr->{'SAM_MODE'} eq 'scan')
+                              ? $subsyshdr->{'SCAN_PAT'}
+                              : $subsyshdr->{'SAM_MODE'}),
+            sourcename =>   $subsyshdr->{'OBJECT'},
+            obstype =>      $subsyshdr->{'OBS_TYPE'},
+          }
 }
 
 =back

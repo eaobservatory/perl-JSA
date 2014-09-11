@@ -198,6 +198,8 @@ sub assign_to_group {
   my $fileref = shift;
   my $groups = shift;
   my $tagprefix = shift;
+  my $task = shift;
+  my $obsinfo = shift;
 
   # Deref some hashes and arrays
   my %current = %$curref;
@@ -225,6 +227,10 @@ sub assign_to_group {
     $frm->hdr( %tmphdr );
     $frm->findgroup;
     $group = $frm->asn_id;
+
+    # Add the (non-corrected) association identifier to the obsinfo.
+    $obsinfo->{'association'} = $group
+      unless defined $obsinfo->{'association'};
   }
 
   # Now correct for the association identifier
@@ -237,6 +243,8 @@ sub assign_to_group {
   $groups->{$group}{mode} = $current{mode};
   $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
   $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
+  $groups->{$group}{'task'} = $task;
+  push @{$groups->{$group}{'obsinfolist'}}, $obsinfo;
   # Only set if either we have no previous value for dprecipe or if the
   # previous value is lower than the current value (so this observation
   # needs more resources than a previous group member)

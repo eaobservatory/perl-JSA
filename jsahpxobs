@@ -92,7 +92,7 @@ use JSA::Submission qw/%JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
                        echo_messages find_observations log_message
                        prepare_archive_db send_log_email submit_jobs
                        write_log_file/;
-use JSA::Proc qw/add_jsa_proc_jobs/;
+use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/ :obs /;
@@ -257,27 +257,14 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       my $group = "hpx-" . $subsys->obsid . "-" . $ss_asn_id;
 
+      my $obsinfo = create_obsinfo_hash($subsyshdr);
+      $obsinfo->{'association'} = $subsyshdr->{'FILTER'};
+
       my %group = (
           files => \@files,
           mode => 'obs',
           dprecipe => $current{'dprecipe'},
-          obsinfolist => [{
-            obsid =>        $subsyshdr->{'OBSID'},
-            obsidss =>      $subsyshdr->{'OBSID_SUBSYSNR'},
-            utdate =>       $subsyshdr->{'UTDATE'},
-            obsnum =>       0 + $subsyshdr->{'OBSNUM'},
-            instrument =>   $subsyshdr->{'INSTRUME'},
-            backend =>      $subsyshdr->{'BACKEND'},
-            subsys =>       $subsyshdr->{'FILTER'}, # SCUBA-2 specific
-            project =>      $subsyshdr->{'PROJECT'},
-            survey =>       $subsyshdr->{'SURVEY'},
-            scanmode =>     (($subsyshdr->{'SAM_MODE'} eq 'scan')
-                              ? $subsyshdr->{'SCAN_PAT'}
-                              : $subsyshdr->{'SAM_MODE'}),
-            sourcename =>   $subsyshdr->{'OBJECT'},
-            obstype =>      $subsyshdr->{'OBS_TYPE'},
-            association =>  $subsyshdr->{'FILTER'}, # SCUBA-2 specific
-          }],
+          obsinfolist => [$obsinfo],
           task => $task,
       );
 

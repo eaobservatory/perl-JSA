@@ -25,6 +25,10 @@ disables emailing.
 
 Print help information.
 
+=item B<--local>
+
+Submit jobs locally rather than to CADC.
+
 =item B<-man>
 
 Print full manual.
@@ -50,6 +54,10 @@ will be used but selecting observations from this project.
 Can be used to override the queue that should be used for the data processing
 at CADC. Can be left unset. Useful values are "JAC_REPROC" for low priority
 reprocessing.
+
+=item B<--task>
+
+Name of data processing task. [default: "jcmt-nightly"]
 
 =item B<-ut>
 
@@ -78,6 +86,7 @@ use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                        log_message obs_is_fts2_or_pol2_RECIPE
                        prepare_archive_db send_log_email submit_jobs
                        write_log_file/;
+use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/ :obs /;
@@ -88,7 +97,8 @@ use Pod::Usage;
 prepare_archive_db();
 
 # Handle command-line options.
-my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug, $queue );
+my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
+     $queue, $local, $task );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -97,7 +107,9 @@ my $status = GetOptions( "help"      => \$help,
                          "version"   => \$version,
                          "debug"     => \$debug,
                          "noemail"   => \$noemail,
-                         "queue=s"     => \$queue,
+                         "queue=s"   => \$queue,
+                         'local'     => \$local,
+                         'task=s'    => \$task,
                        );
 
 pod2usage( 1 ) if $help;
@@ -107,6 +119,15 @@ if( $version ) {
   print "Submit a job to the CADC GridEngine for JSA processing.\n";
   print " Source code revision: 0.01\n";
   exit;
+}
+
+if (not defined $task) {
+    if (defined $project) {
+        die 'Task name not given';
+    }
+    else {
+        $task = 'jcmt-nightly';
+    }
 }
 
 echo_messages($noemail || $debug);
@@ -244,11 +265,18 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       adjust_header_freq($subsyshdr);
 
       assign_to_group( $instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
-		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups, undef );
+		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
+                       undef, $task, create_obsinfo_hash($subsyshdr) );
     }
   }
 
-  submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug);
+  unless ($local) {
+    submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug);
+    add_jsa_proc_jobs({}, \%groups, $mode, $priority, 0, $debug);
+  }
+  else {
+    add_jsa_proc_jobs(\%groups, {}, $mode, $priority, 0, $debug);
+  }
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $debug;
