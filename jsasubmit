@@ -135,7 +135,7 @@ echo_messages($noemail || $debug);
 $project = uc($project) if defined $project;
 my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsasubmit');
 
-my $atCADC = ($mode eq 'night')
+my $atCADC = ($mode eq 'night' and not $local)
            ? JSA::CADC_Copy::at_cadc($ut)
            : undef;
 
