@@ -89,6 +89,10 @@ HTML log file and standard output.
 
 Enable debug messages.
 
+=item B<-debugxfer>
+
+Enable debugging directory listings for capture.
+
 =item B<-indir>
 
 Controls the input directory. The current working directory is used if
@@ -185,7 +189,8 @@ use JSA::Logging qw/log_message log_warning/;
 use JSA::WrapDR qw/prepare_environment prepare_environment_cadc
                    retrieve_data determine_instrument
                    run_pipeline capture_products capture_log_files
-                   clean_directory_final clean_directory_pre_capture/;
+                   clean_directory_final clean_directory_pre_capture
+                   log_listing/;
 
 print "Debugging information:\n*** ARGV:\n";
 print Dumper \@ARGV;
@@ -195,7 +200,7 @@ print Dumper \%ENV;
 # Options
 my( $cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
     $instrument, $log, $man, $mode, $outdir, $parameters, $persist,
-    $tmpdir, $transdir, $ut, $version, $canfar );
+    $tmpdir, $transdir, $ut, $version, $canfar, $debugxfer );
 
 my $status = GetOptions( "cleanup=s"      => \$cleanup,
                          "canfar"         => \$canfar,
@@ -216,6 +221,7 @@ my $status = GetOptions( "cleanup=s"      => \$cleanup,
                          "transdir=s"     => \$transdir,
                          "ut=s"           => \$ut,
                          "version"        => \$version,
+                         'debugxfer'      => \$debugxfer,
                        );
 
 pod2usage(1) if $help;
@@ -546,6 +552,8 @@ convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
 # Convert any log files which we want to save.
 convert_log_files() and capture_log_files($id, $persist, $canfar, $canfar);
 
+log_listing('pre-cleanup', '.') if $debugxfer;
+
 if ($cleanup eq 'cadc') {
   clean_directory_pre_capture($outdir, \%all_existing_files,
                               \&looks_like_cadcfile);
@@ -558,9 +566,13 @@ if ($cleanup eq 'cadc') {
       if $tmpdir;
 }
 
+log_listing('post-cleanup', '.') if $debugxfer;
+
 capture_products($id, $persist, $transdir,
                  ($canfar ? 'CANFAR' : 'JCMT'),
                  $canfar);
+
+log_listing('transdir', $transdir) if $transdir && $debugxfer;
 
 clean_directory_final($outdir, \%all_existing_files)
     unless $cleanup eq 'none';

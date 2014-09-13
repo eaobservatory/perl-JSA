@@ -22,7 +22,8 @@ use parent qw/Exporter/;
 our @EXPORT_OK = qw/prepare_environment prepare_environment_cadc
                     retrieve_data determine_instrument
                     run_pipeline capture_products capture_log_files
-                    clean_directory_final clean_directory_pre_capture/;
+                    clean_directory_final clean_directory_pre_capture
+                    log_listing/;
 
 our $VERSION = '0.03';
 
@@ -332,6 +333,20 @@ sub clean_directory_final {
       unlink $path;
     }
   }
+}
+
+=item log_listing
+
+Print a debugging listing.
+
+=cut
+
+sub log_listing {
+    my ($name, $directory) = @_;
+
+    log_message('DEBUG LISTING BEGIN: ' . $name);
+    log_message($_) foreach `ls $directory`;
+    log_message('DEBUG LISTING END');
 }
 
 1;
