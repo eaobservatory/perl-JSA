@@ -164,6 +164,7 @@ use strict;
 use warnings;
 
 use Getopt::Long qw/ GetOptionsFromString /;
+use IO::File;
 use Pod::Usage;
 use File::Spec;
 use File::Temp;
@@ -378,6 +379,19 @@ if( ! $skipdp ) {
   # compare the old list with the new and return a list of files that
   # should be processed
   @files = compare_file_lists( \%existing_files, \%post_retrieve );
+
+  # Check we got the correct number of files.
+  do {
+    my $fh = new IO::File($inputs);
+    my $n = 0;
+    while (<$fh>) {
+        $n ++ if /\w/ && ! /^\#/;
+    }
+    $fh->close();
+    die 'Incorrect number of files retrieved: expected ' .
+        $n . ' but got ' . (scalar @files)
+        unless $n == (scalar @files);
+  };
 
   # Keep a copy of the list of files which were retrieved so that they
   # can be cleaned up before running dpCapture.
