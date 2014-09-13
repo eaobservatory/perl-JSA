@@ -165,6 +165,7 @@ use warnings;
 
 use Getopt::Long qw/ GetOptionsFromString /;
 use IO::File;
+use IO::Uncompress::Gunzip qw/gunzip $GunzipError/;
 use Pod::Usage;
 use File::Spec;
 use File::Temp;
@@ -372,6 +373,13 @@ if( ! $skipdp ) {
   my %existing_files = scan_dir();
 
   retrieve_data($id, $inputs, 1);
+
+  # Check for gzipped SDF files.
+  my %gzipped_sdf = scan_dir(qr/\.sdf\.gz$/);
+  foreach my $gz (compare_file_lists(\%all_existing_files, \%gzipped_sdf)) {
+    log_message('Ungzipping file: ' . $gz);
+    gunzip $gz => substr($gz, 0, -3) or die $GunzipError;
+  }
 
   # Now scan the directory again
   %post_retrieve = scan_dir();
