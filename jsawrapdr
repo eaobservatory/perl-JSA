@@ -416,9 +416,8 @@ if( ! $skipdp ) {
     die "Could not open any of the supplied files to read headers: " .
         join(", ",@files);
   } elsif (keys %FITS != @files) {
-    log_warning("Some files could not be read. " .
-                "Continuing with those that can\n");
-    @files = keys %FITS;
+    die "Some files could not be read: " .
+        join(', ', grep {not exists $FITS{$_}} @files);
   }
 
   # Decide on ORAC-DR vs PICARD
