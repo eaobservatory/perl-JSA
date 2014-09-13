@@ -370,7 +370,7 @@ if( ! $skipdp ) {
   # dpRetrieve has fetched.
   my %existing_files = scan_dir();
 
-  retrieve_data($id, $inputs, $canfar);
+  retrieve_data($id, $inputs, 1);
 
   # Now scan the directory again
   %post_retrieve = scan_dir();
