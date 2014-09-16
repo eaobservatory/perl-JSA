@@ -194,7 +194,7 @@ info is added to jobs which currently lack it.
     }
 }
 
-=item create_obsinfo_hash(\%subsyshdr)
+=item create_obsinfo_hash($obs, \%subsyshdr)
 
 Creates an obsinfo hash and returns a reference to it.
 
@@ -203,6 +203,7 @@ Does not include association.
 =cut
 
 sub create_obsinfo_hash {
+    my $obs = shift;
     my $subsyshdr = shift;
 
     my $subsys;
@@ -221,6 +222,7 @@ sub create_obsinfo_hash {
     return {
             obsid =>        $subsyshdr->{'OBSID'},
             obsidss =>      $subsyshdr->{'OBSID_SUBSYSNR'},
+            date_obs =>     $obs->startobs()->strftime('%Y-%m-%d %H:%M:%S'),
             utdate =>       $subsyshdr->{'UTDATE'},
             obsnum =>       0 + $subsyshdr->{'OBSNUM'},
             instrument =>   $subsyshdr->{'INSTRUME'},

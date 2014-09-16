@@ -200,7 +200,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       adjust_header_freq($subsyshdr);
 
-      my $obsinfo = create_obsinfo_hash($subsyshdr);
+      my $obsinfo = create_obsinfo_hash($obs, $subsyshdr);
       # TODO: insert correct association here.
       # $obsinfo->{'association'} = ...;
 

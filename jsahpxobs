@@ -257,7 +257,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       my $group = "hpx-" . $subsys->obsid . "-" . $ss_asn_id;
 
-      my $obsinfo = create_obsinfo_hash($subsyshdr);
+      my $obsinfo = create_obsinfo_hash($obs, $subsyshdr);
       $obsinfo->{'association'} = $subsyshdr->{'FILTER'};
 
       my %group = (
