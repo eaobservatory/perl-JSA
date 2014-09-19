@@ -29,6 +29,10 @@ Print help information.
 
 Submit jobs locally rather than to CADC.
 
+=item B<--local-add-info>
+
+Update existing local jobs without observation information.
+
 =item B<-man>
 
 Print full manual.
@@ -98,7 +102,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-     $queue, $local, $task );
+     $queue, $local, $local_only_info, $task );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -110,7 +114,11 @@ my $status = GetOptions( "help"      => \$help,
                          "queue=s"   => \$queue,
                          'local'     => \$local,
                          'task=s'    => \$task,
+                         'local-add-info' => \$local_only_info,
                        );
+
+# If asked to update local info, do not try to submit anything to CADC.
+$local = 1 if $local_only_info;
 
 pod2usage( 1 ) if $help;
 pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
@@ -275,7 +283,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     add_jsa_proc_jobs({}, \%groups, $mode, $priority, 0, $debug);
   }
   else {
-    add_jsa_proc_jobs(\%groups, {}, $mode, $priority, 0, $debug);
+    add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $local_only_info,
+                      $debug);
   }
 }
 
