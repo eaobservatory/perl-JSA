@@ -472,7 +472,7 @@ sub looks_like_drfile {
 
   # do not check that the "a" corresponds to the correct UT date for
   # DAS -> ACSIS transition
-  if ($filename =~ /^g?[ah]\d{8}_\d{1,5}_\d\d?_[a-z]+(\d\d\d)?\.sdf$/) {
+  if ($filename =~ /^g?[ah]\d{8}_\d{1,5}_\d\d?_[a-z]+(\d{3,6})?\.sdf$/) {
     # ACSIS
     return 1;
   } elsif ($filename =~ /^g?s\d{8}_\d{1,5}_\d{3}_\w+\.sdf$/) {
