@@ -48,6 +48,11 @@ Print full manual.
 By default a mail message is sent with the job details. If this option is given
 the message will be printed to standard output instead.
 
+=item B<--not_moving_obsid>
+
+Specifies a file listing obsids for observations for targets which aren't
+really moving.
+
 =item B<-priority>
 
 Used to override the default priority for all jobs. Must be an integer between
@@ -100,12 +105,14 @@ use OMP::Constants qw/ :obs /;
 use Getopt::Long;
 use Pod::Usage;
 use File::Basename;
+use IO::File;
 
 prepare_archive_db();
 
 # Handle command-line options.
 my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-     $queue, $filter, $local_only, $local_only_info, $task );
+     $queue, $filter, $local_only, $local_only_info, $task,
+     $not_moving_obsid_file );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -119,6 +126,7 @@ my $status = GetOptions( "help"      => \$help,
                          'local'     => \$local_only,
                          'local-add-info' => \$local_only_info,
                          'task=s'    => \$task,
+                         'not_moving_obsid=s' => \$not_moving_obsid_file,
                        );
 
 # If asked to update local info, do not try to submit anything to CADC.
@@ -134,6 +142,16 @@ if( $version ) {
 }
 
 die 'Task name must be given' unless defined $task;
+
+my %not_moving = ();
+if ($not_moving_obsid_file) {
+  my $fh = new IO::File($not_moving_obsid_file, 'r');
+  foreach (<$fh>) {
+    chomp;
+    $not_moving{$_} = 1;
+  }
+  $fh->close()
+}
 
 echo_messages($noemail || $debug);
 
@@ -191,7 +209,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
 
     # Skip moving sources
-    if (!defined $hdr->{"OBSRA"}) {
+    if ((!defined $hdr->{"OBSRA"}) and not $not_moving{$obs->obsid()}) {
       log_message("Observation is from a moving source so skipping for HPX obs processing\n");
       next;
     }
