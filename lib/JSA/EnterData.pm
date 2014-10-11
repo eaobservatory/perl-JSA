@@ -2111,7 +2111,9 @@ sub prepare_update_hash {
 
     # Allowed to be set undef if key from $field_values is missing, say as a
     # result of external header munging.
-    my $miss_ok = qr{\b(?:INBEAM)}i;
+    my $miss_ok = _or_regex( qw/ INBEAM /,
+                              _suffix_start_end_headers( qw/ SEEING SEEDAT / )
+                            ) ;
 
     my $tau_val = qr{\b(?:WVMTAU|TAU225)(?:ST|EN)\b}i;
 
@@ -2246,6 +2248,29 @@ sub prepare_update_hash {
   }
 
   return [ @update_hash ];
+}
+
+sub _suffix_start_end_headers { return map {; qq/${_}ST/ , qq/${_}EN/ } @_; }
+
+sub _or_regex_string {
+
+  return join '|',
+            map
+            { quotemeta( $_ ) }
+            sort { length $b <=> length $a }
+            @_ ;
+}
+
+sub _or_regex {
+
+  my $re = _or_regex_string( @_ );
+  return qr{\b(?:$re)}i;
+}
+
+sub _or_regex_suffix_start_end_headers {
+
+  my $re = _or_regex_string( @_ );
+  return qr{\b (?: $re )(?: ST|EN )}ix;
 }
 
 =item B<_get_primary_key>
