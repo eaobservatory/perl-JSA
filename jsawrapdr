@@ -200,7 +200,7 @@ print Dumper \%ENV;
 
 # Options
 my( $cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
-    $instrument, $log, $man, $mode, $outdir, $parameters, $persist,
+    $instrument, $log, $man, $mode, $specified_outdir, $parameters, $persist,
     $tmpdir, $transdir, $ut, $version, $canfar, $debugxfer );
 
 my $status = GetOptions( "cleanup=s"      => \$cleanup,
@@ -215,7 +215,7 @@ my $status = GetOptions( "cleanup=s"      => \$cleanup,
                          "log=s"          => \$log,
                          "man"            => \$man,
                          "mode=s"         => \$mode,
-                         "outdir=s"       => \$outdir,
+                         "outdir=s"       => \$specified_outdir,
                          "parameters=s"   => \$parameters,
                          "persist"        => \$persist,
                          "tmpdir"         => \$tmpdir,
@@ -331,11 +331,12 @@ if (defined $inputs) {
 # Change to the output directory so that dpRetrieve will copy to this
 # directory regardless of dpRetrieve not having a -outdir option at CADC
 
+my $outdir;
 if ($tmpdir) {
   $outdir = File::Temp->newdir ( DIR => $curdir );
   log_message( "Using temporary output directory '$outdir'\n");
-} elsif (defined $outdir) {
-  $outdir = File::Spec->rel2abs($outdir);
+} elsif (defined $specified_outdir) {
+  $outdir = File::Spec->rel2abs($specified_outdir);
   log_message( "Using specified output directory '$outdir'\n");
 } else {
   $outdir = $curdir;
@@ -569,12 +570,13 @@ if ($cleanup eq 'cadc') {
   clean_directory_pre_capture($outdir, \%all_existing_files,
                               \&looks_like_cadcfile);
 
-  # If working in a temporary directory (e.g. at CADC), make sure
+  # If working in a temporary directory (e.g. at CADC) or a
+  # specified output directory (e.g. in the jsa_proc system), make sure
   # all the retrieved files have been deleted.  If we are working
   # on processed data with PICARD then we don't want to send back
   # the original files.
   unlink grep {-e $_} map {File::Spec->catfile($outdir, $_)} @files_retrieved
-      if $tmpdir;
+      if ($tmpdir or $specified_outdir);
 }
 
 log_listing('post-cleanup', '.') if $debugxfer;
