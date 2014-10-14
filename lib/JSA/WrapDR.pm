@@ -208,6 +208,7 @@ sub run_pipeline {
     # PICARD only uses a recipe name from drparameters
     @drcommand = ( $^X,
                  File::Spec->catfile($ENV{ORAC_DIR},"bin","picard"),
+                 "-nodisplay",
                  "-log","hs",
                  "-verbose",
                  ( split /\s+/, $drparameters ),
