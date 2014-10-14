@@ -114,13 +114,17 @@ if( $version ) {
 
 die 'Task name must be given' unless defined $task;
 
+die 'This script should not be used in project mode'
+  unless defined $ut;
+
 echo_messages($noemail || $debug);
 
 $project = uc($project) if defined $project;
-my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsahpxharpnit');
+my (undef, $grp) = find_observations($ut, $project, $priority, 'jsahpxharpnit');
 
-die 'This script should not be used in project mode'
-  if $mode eq 'project';
+# Always submit jobs in "obs" mode.  ORAC-DR will still be processing groups
+# of observations, but we only want jsawrapdr to save the obs products.
+my $mode = 'obs';
 
 if( scalar( @{$grp->obs} ) == 0 ) {
   log_message( "No observations were retrieved from the database.\n");
