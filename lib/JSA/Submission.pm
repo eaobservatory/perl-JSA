@@ -201,6 +201,7 @@ sub assign_to_group {
   my $task = shift;
   my $obsinfo = shift;
   my $use_pub_asn = shift;
+  my $mode_override = shift;
 
   # Deref some hashes and arrays
   my %current = %$curref;
@@ -262,7 +263,7 @@ sub assign_to_group {
   $group = $tagprefix . '-' . $group if defined $tagprefix;
 
   push @{$groups->{$group}{files}}, @files;
-  $groups->{$group}{mode} = $current{mode};
+  $groups->{$group}{mode} = $mode_override // $current{mode};
   $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
   $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
   $groups->{$group}{'task'} = $task;

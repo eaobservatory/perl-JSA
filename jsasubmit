@@ -274,7 +274,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       assign_to_group( $instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
 		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
-                       undef, $task, create_obsinfo_hash($obs, $subsyshdr), 0 );
+                       undef, $task, create_obsinfo_hash($obs, $subsyshdr), 0, undef );
     }
   }
 

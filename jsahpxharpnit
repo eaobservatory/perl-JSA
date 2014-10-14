@@ -127,10 +127,6 @@ echo_messages($noemail || $debug);
 $project = uc($project) if defined $project;
 my (undef, $grp) = find_observations($ut, $project, $priority, 'jsahpxharpnit');
 
-# Always submit jobs in "obs" mode.  ORAC-DR will still be processing groups
-# of observations, but we only want jsawrapdr to save the obs products.
-my $mode = 'obs';
-
 if( scalar( @{$grp->obs} ) == 0 ) {
   log_message( "No observations were retrieved from the database.\n");
 } else {
@@ -179,7 +175,9 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
-    $current{'mode'} = $mode;
+    # Prepare the group as if it is night mode, because we need
+    # assign_to_group to generate a night-style association ID.
+    $current{'mode'} = 'night';
     $current{'dprecipe'} = determine_resource_requirement($obs);
 
     # All observations are processed with the same recipe.
@@ -211,13 +209,16 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 
       my $obsinfo = create_obsinfo_hash($obs, $subsyshdr);
 
+      # Override mode to "obs".  ORAC-DR will still be processing groups
+      # of observations, but we only want jsawrapdr to save the obs products.
+
       assign_to_group( $instrume, $subsys->obsid, $frameclass, undef,
 		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
-                       'hpx-tmp', $task, $obsinfo, 1 );
+                       'hpx-tmp', $task, $obsinfo, 1, 'obs' );
     }
   }
 
-  add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $local_only_info, $debug);
+  add_jsa_proc_jobs(\%groups, {}, 'obs', $priority, $local_only_info, $debug);
 }
 
 write_log_file('jsasubmit-hpx-harp-nit', $ut, $project) unless $debug;
