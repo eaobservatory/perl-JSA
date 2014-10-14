@@ -25,6 +25,10 @@ disables emailing.
 
 Print help information.
 
+=item B<--local-add-info>
+
+Update existing local jobs without observation information.
+
 =item B<-man>
 
 Print full manual.
@@ -76,9 +80,9 @@ use JSA::Submission qw/%JUNK_OBSIDSS
                        determine_frame_class determine_resource_requirement
                        echo_messages find_observations get_obsidss
                        log_message
-                       prepare_archive_db send_log_email submit_jobs
+                       prepare_archive_db send_log_email
                        write_log_file/;
-use JSA::Proc qw/create_obsinfo_hash/;
+use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/ :obs /;
@@ -90,7 +94,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-     $queue, $task );
+     $queue, $task, $local_only_info );
 my $status = GetOptions( "help"      => \$help,
                          "man"       => \$man,
                          "project=s" => \$project,
@@ -100,6 +104,7 @@ my $status = GetOptions( "help"      => \$help,
                          "debug"     => \$debug,
                          "noemail"   => \$noemail,
                          "queue=s"     => \$queue,
+                         'local-add-info' => \$local_only_info,
                          'task=s'    => \$task,
                        );
 
@@ -131,7 +136,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
 } else {
   log_message( scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n");
 
-  # Group information hash for submit_jobs().
+  # Group information hash for add_jsa_proc_jobs().
   my %groups;
 
   foreach my $obs ( $grp->obs ) {
@@ -214,7 +219,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     }
   }
 
-  submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug);
+  add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $local_only_info, $debug);
 }
 
 write_log_file('jsasubmit-hpx-harp-nit', $ut, $project) unless $debug;
