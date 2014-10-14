@@ -210,12 +210,10 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       adjust_header_freq($subsyshdr);
 
       my $obsinfo = create_obsinfo_hash($obs, $subsyshdr);
-      # TODO: insert correct association here.
-      # $obsinfo->{'association'} = ...;
 
       assign_to_group( $instrume, $subsys->obsid, $frameclass, undef,
 		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
-                       'hpx-tmp', $task, $obsinfo );
+                       'hpx-tmp', $task, $obsinfo, 1 );
     }
   }
 
