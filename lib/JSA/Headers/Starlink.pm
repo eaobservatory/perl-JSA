@@ -26,8 +26,7 @@ use File::Spec;
 use File::Temp;
 
 use JSA::Starlink qw/ check_star_env run_star_command /;
-use JSA::Headers qw/ read_header /;
-use JSA::Headers::CADC qw/ correct_asn_id /;
+use JSA::Headers::CADC qw/ prepare_header_updates /;
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ update_fits_headers add_fits_comments /;
@@ -42,20 +41,11 @@ Update CADC-specific FITS headers in an NDF file.
 
   update_fits_headers( $file, \%options );
 
-This function updates one FITS header:
+The options hash reference is passed on to
+JSA::Headers::CADC::prepare_header_updates.  Please see the documentation
+for that function for a list of possible keys.  This function also accepts
+an additional key:
 
- o INSTREAM: set to 'JCMT'
-
-This function takes one mandatory argument: the NDF file to be
-updated.
-
-This function takes the following optional arguments: a hash reference with the
-following allowed keys:
-
- - mode: Processing mode ("night", "project", "public")
- - dpdate: Date of processing in ISO8601 format
- - dpid  : Recipe instance ID associated with this processing
- - instream: Alternative INSTREAM header (default JCMT)
  - fitsmod_extra: List of extra commands to give to FITSMOD
                   as if entered with MODE=FILE
 
@@ -65,13 +55,7 @@ This function does not return anything.
 
 sub update_fits_headers {
   my $file = shift;
-
   my $options = shift;
-  my $mode = lc( $options->{'mode'} );
-  my $instream = (exists $options->{'instream'} and
-                  defined $options->{'instream'})
-                      ? uc($options->{'instream'})
-                      : 'JCMT';
 
   check_star_env( "KAPPA", "fitsmod" );
 
@@ -79,35 +63,11 @@ sub update_fits_headers {
   # of more. For efficiency we only want to call FITSMOD once
   # so we create a command file
   my $tmpfile = File::Temp->new();
-  print $tmpfile "A INSTREAM $instream Source of input stream\n";
-
-  # Get the FITS headers.
-  my $header = read_header( $file );
-
-  # Retrieve the ASN_ID.
-  my $asn_id = correct_asn_id( $mode, $header );
-
-  if( defined( $asn_id ) ) {
-
-    if( $mode eq 'project' ) {
-      # Fix the ASN_TYPE header if we are a project and this is
-      # an association (group coadd).
-      print $tmpfile "A ASN_TYPE project \$C\n";
-    }
-    elsif ($mode eq 'public') {
-      print $tmpfile "A ASN_TYPE public \$C\n";
-    }
-
-    # Write the ASN_ID header back into the FITS header.
-    print $tmpfile "A ASN_ID $asn_id \$C\n";
+  foreach (@{prepare_header_updates($file, $options)}) {
+    my ($header, $value, $comment) = @$_;
+    print $tmpfile "A $header $value $comment\n";
   }
 
-  if (exists $options->{dpdate} && defined $options->{dpdate}) {
-    print $tmpfile "A DPDATE ".$options->{dpdate}." Data processing date\n";
-  }
-  if (exists $options->{dpid} && defined $options->{dpid}) {
-    print $tmpfile "A DPRCINST ".$options->{dpid}." Data processing recipe instance ID\n";
-  }
   if (exists $options->{'fitsmod_extra'}
       and defined $options->{'fitsmod_extra'}) {
     print $tmpfile $_ . "\n" foreach @{$options->{'fitsmod_extra'}};

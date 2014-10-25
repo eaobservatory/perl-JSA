@@ -22,8 +22,10 @@ use warnings::register;
 
 use Scalar::Util qw/ blessed /;
 
+use JSA::Headers qw/ read_header /;
+
 use Exporter 'import';
-our @EXPORT_OK = qw/ correct_asn_id /;
+our @EXPORT_OK = qw/ correct_asn_id prepare_header_updates /;
 
 =head1 FUNCTIONS
 
@@ -116,6 +118,71 @@ sub correct_asn_id {
     $asn_id = $prefix . '-' . $asn_id if defined $prefix;
   }
   return $asn_id;
+}
+
+=item B<prepare_header_updates>
+
+Prepare a list of FITS header updates for a processed data file being
+stored in the archive at CADC.
+
+    @updates = @{prepare_header_updates($file, \%options)};
+
+This function takes the name of the NDF file to be updated and
+the following optional arguments: a hash reference with the
+following allowed keys:
+
+ - mode: Processing mode ("night", "project", "public")
+ - dpdate: Date of processing in ISO8601 format
+ - dpid  : Recipe instance ID associated with this processing
+ - instream: Alternative INSTREAM header (default JCMT)
+
+Returns a reference to an array of [header, value, comment] arrays.
+
+=cut
+
+sub prepare_header_updates {
+  my $file = shift;
+  my $options = shift;
+
+  my @updates = ();
+
+  my $mode = lc( $options->{'mode'} );
+  my $instream = (exists $options->{'instream'} and
+                  defined $options->{'instream'})
+                      ? uc($options->{'instream'})
+                      : 'JCMT';
+
+  push @updates, ['INSTREAM', $instream, 'Source of input stream'];
+
+  # Get the FITS headers.
+  my $header = read_header( $file );
+
+  # Retrieve the ASN_ID.
+  my $asn_id = correct_asn_id( $mode, $header );
+
+  if( defined( $asn_id ) ) {
+
+    if( $mode eq 'project' ) {
+      # Fix the ASN_TYPE header if we are a project and this is
+      # an association (group coadd).
+      push @updates, ['ASN_TYPE', 'project', 'Time-based selection criterion'];
+    }
+    elsif ($mode eq 'public') {
+      push @updates, ['ASN_TYPE', 'public', 'Time-based selection criterion'];
+    }
+
+    # Write the ASN_ID header back into the FITS header.
+    push @updates, ['ASN_ID', $asn_id, 'Association Identifier'];
+  }
+
+  if (exists $options->{dpdate} && defined $options->{dpdate}) {
+    push @updates, ['DPDATE',  $options->{dpdate}, 'Data processing date'];
+  }
+  if (exists $options->{dpid} && defined $options->{dpid}) {
+    push @updates, ['DPRCINST', $options->{dpid}, 'Data processing recipe instance ID'];
+  }
+
+  return \@updates;
 }
 
 
