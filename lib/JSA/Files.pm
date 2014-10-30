@@ -59,7 +59,10 @@ while ( my ($k,$v) = each(%PRODUCT_TYPES) ) {
 # Products and associations to look for.
 our @ASSOCS = qw/ obs night project public /;
 our @PRODUCTS = qw/ healpix reduced rimg rsp /;
-our %EXTRA_PRODUCTS = ( 'obs' => [ qw/ cube / ], );
+our %EXTRA_PRODUCTS = (
+    obs => [ qw/ cube / ],
+    public => [qw/extent-mask/],
+);
 
 # Set up a hash.
 our %PRODS = map { $_ => { map { $_ => undef } @PRODUCTS } } @ASSOCS;
@@ -495,11 +498,11 @@ sub looks_like_drfile {
     # looking for SDF files rather than thumbnails.
     return 0 if $filename =~ /_\d+\.sdf$/;
     return 1;
-  } elsif ($filename =~ /^gs[48]50um_healpix\d{6}.sdf$/) {
-    # SCUBA-2 co-added JSA tile
+  } elsif ($filename =~ /^gs[48]50um_[-a-z]+\d{6}.sdf$/) {
+    # SCUBA-2 co-added JSA tile, or product generated from it.
     return 1;
-  } elsif ($filename =~ /^ga\d{6}MHz-(?:250|1000)MHz-[ULS]SB_healpix\d{6}.sdf$/) {
-    # ACSIS co-added JSA tile
+  } elsif ($filename =~ /^ga\d{6}MHz-(?:250|1000)MHz-[ULS]SB_[-a-z]+\d{6}.sdf$/) {
+    # ACSIS co-added JSA tile, or product generated from it.
     return 1;
   } elsif ($filename =~ /^\d{8}_\d{4}_(resw|flat)\.sdf$/ ||
            $filename =~ /^\d{1,8}_\d{4}_(sho|lon|p13|p20|p11)_\w+\.sdf$/ ||
@@ -622,7 +625,7 @@ sub dissect_drfile {
     $isgroup = 1;
     $suffix = 'sdf';
 
-  } elsif ($drfile =~ /^(s)([48]50um)_(healpix)(\d{6})(?:_(\d{2,4}))?\.(sdf|png)$/) {
+  } elsif ($drfile =~ /^(s)([48]50um)_([-a-z]+)(\d{6})(?:_(\d{2,4}))?\.(sdf|png)$/) {
     # SCUBA-2 co-added JSA tile
     $prefix = $1;
     $asn_id = $2;
@@ -634,7 +637,7 @@ sub dissect_drfile {
     $resolution = $5;
     $suffix = $6;
 
-  } elsif ($drfile =~ /^(a)(\d{6}MHz-(?:250|1000)MHz-[ULS]SB)_(healpix)(\d{6})(?:_(\d{2,4}))?\.(sdf|png)$/) {
+  } elsif ($drfile =~ /^(a)(\d{6}MHz-(?:250|1000)MHz-[ULS]SB)_([-a-z]+)(\d{6})(?:_(\d{2,4}))?\.(sdf|png)$/) {
     # ACSIS co-added JSA tile
     $prefix = $1;
     $asn_id = $2;
