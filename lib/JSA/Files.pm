@@ -122,6 +122,13 @@ sub can_send_to_cadc {
   my $assoc = $header->value( "ASN_TYPE" );
   my $product = $header->value( "PRODUCT" );
 
+  # This function is often called before the association type
+  # header has been updated.  So if we read "night" then we
+  # know we have a group product but that could be wrong.
+  # If given an operating mode, use this in place of the association
+  # type header for group products.
+  $assoc = $mode if ((defined $mode) and ($assoc eq 'night'));
+
   return _can_send_to_cadc_quick( $assoc, $product );
 
 }
