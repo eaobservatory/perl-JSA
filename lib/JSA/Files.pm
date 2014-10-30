@@ -567,9 +567,9 @@ sub looks_like_cadcfile {
     return 1; # SCUBA
   } elsif ($filename =~ /^jcmt_.*_preview_\d+\.png$/) {
     return 1; # CAOM-2 style preview filename: <collection>_<observationID>_<productID>_preview_(64|256|1024)
-  } elsif ($filename =~/^jcmts[48]50um_[a-z]+\d{6}_pub_\d{3}\.fits$/) {
+  } elsif ($filename =~/^jcmts[48]50um_[-a-z]+\d{6}_pub_\d{3}\.fits$/) {
     return 1; # SCUBA-2 co-added JSA tile
-  } elsif ($filename =~/^jcmth\d{6}mhz-(?:250|1000)mhz-[uls]sb_[a-z]+\d{6}_pub_\d{3}\.fits$/) {
+  } elsif ($filename =~/^jcmth\d{6}mhz-(?:250|1000)mhz-[uls]sb_[-a-z]+\d{6}_pub_\d{3}\.fits$/) {
     return 1; # ACSIS co-added JSA tile
   }
   print "Failed looks_like_cadcfile\n" if $DEBUG;
