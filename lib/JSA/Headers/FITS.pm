@@ -18,10 +18,14 @@ FITS files.
 
 use strict;
 
+use parent qw/Exporter/;
+
 use Astro::FITS::Header::CFITSIO;
 use Astro::FITS::Header::Item;
 
 use JSA::Headers::CADC qw/prepare_header_updates/;
+
+our @EXPORT_OK = qw/update_fits_file_fits_headers/;
 
 =head1 FUNCTIONS
 
