@@ -134,7 +134,7 @@ sub run_pipeline {
       $drparameters, $options) = @_;
 
   # We want normal messages from Starlink subsystem
-  $ENV{MSG_FILTER} = "NORM" unless exists $ENV{MSG_FILTER};
+  $ENV{MSG_FILTER} = "NORMAL" unless exists $ENV{MSG_FILTER};
 
   # Configure shared environment variables
   $ENV{'ORAC_DATA_IN'} = ( defined $indir ? $indir : $outdir );
