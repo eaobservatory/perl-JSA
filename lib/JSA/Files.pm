@@ -33,7 +33,9 @@ use JSA::Error;
 use Exporter 'import';
 our @EXPORT_OK = qw( uri_to_file file_to_uri drfilename_to_cadc
                      dissect_drfile dissect_cadcfile
-                     cadc_to_drfilename looks_like_drfile looks_like_cadcfile
+                     cadc_to_drfilename
+                     looks_like_drfile looks_like_fits_drfile
+                     looks_like_cadcfile
                      looks_like_rawfile cadc_transfer_check
                      compare_file_lists scan_dir construct_rawfile
                      can_send_to_cadc can_send_to_cadc_guess
@@ -511,6 +513,24 @@ sub looks_like_drfile {
     return 1;
   }
   return 0;
+}
+
+=item B<looks_like_fits_drfile>
+
+Determine whether a file looks like a FITS file produced by the
+DR pipeline.
+
+=cut
+
+sub looks_like_fits_drfile {
+    my $filename = _strip_path(shift);
+
+    if ($filename =~ /^gs[48]50um_[-a-z]+\d{6}\.fits$/) {
+        # Product from SCUBA-2 co-added JSA tile.
+        return 1;
+    }
+
+    return 0;
 }
 
 sub looks_like_drthumb {

@@ -43,7 +43,7 @@ use JSA::Headers::Starlink qw/ update_fits_headers add_fits_comments /;
 use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
-                   looks_like_drfile looks_like_cadcfile
+                   looks_like_drfile looks_like_fits_drfile looks_like_cadcfile
                    looks_like_rawfile can_send_to_cadc_guess
                    can_send_to_cadc looks_like_drthumb
                    dissect_drfile construct_rawfile
@@ -273,10 +273,12 @@ sub convert_dr_files {
       if ($DEBUG) {
         my $can_send = can_send_to_cadc( $mode, $href->{$file} );
         my $isdr = looks_like_drfile( $file );
+        my $isfitsdr = looks_like_fits_drfile($file);
         my $want = want_to_send_to_cadc( $mode, filename => $href->{$file} );
         print "File $file not suitable for conversion (is ".
           ( $can_send ? "" : "not ") . "valid product) (is ".
           ( $isdr ? "" : "not ") . "valid DR filename) (is ".
+          ( $isfitsdr ? "" : "not ") . "valid FITS DR filename) (is ".
           ( $want ? "" : "not " ) . "wanted at CADC)\n";
       }
     }
