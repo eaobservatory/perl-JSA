@@ -178,7 +178,7 @@ sub convert_dr_files {
 
     if( looks_like_drfile( $file ) ) {
 
-      if ( can_send_to_cadc( $href->{$file} ) && want_to_send_to_cadc( $mode, header => $href->{$file} ) ) {
+      if ( can_send_to_cadc( $mode, $href->{$file} ) && want_to_send_to_cadc( $mode, header => $href->{$file} ) ) {
 
         print "Converting file $file\n" if $DEBUG;
 
@@ -253,7 +253,7 @@ sub convert_dr_files {
       } else {
 
         if ($DEBUG) {
-          my $can_send = can_send_to_cadc( $href->{$file} );
+          my $can_send = can_send_to_cadc( $mode, $href->{$file} );
           my $want = want_to_send_to_cadc( $mode, header => $href->{$file} );
           print "File $file not suitable for conversion (is ".
             ( $can_send ? "" : "not ") . "valid product) (is ".
@@ -271,7 +271,7 @@ sub convert_dr_files {
 
     } else {
       if ($DEBUG) {
-        my $can_send = can_send_to_cadc( $href->{$file} );
+        my $can_send = can_send_to_cadc( $mode, $href->{$file} );
         my $isdr = looks_like_drfile( $file );
         my $want = want_to_send_to_cadc( $mode, filename => $href->{$file} );
         print "File $file not suitable for conversion (is ".
@@ -398,16 +398,17 @@ sub list_convert_plan {
   my $href = shift;
 
   my $opts = shift;
+  my $mode = $opts->{'mode'};
 
   for my $file ( sort keys %$href ) {
 
     if( looks_like_drfile( $file ) ) {
-      if ( can_send_to_cadc( $href->{$file} ) ) {
+      if ( can_send_to_cadc( $mode, $href->{$file} ) ) {
         my $assoc = $href->{$file}->value( "ASN_TYPE" );
         my $outfile = drfilename_to_cadc( $file, ASN_TYPE => $assoc );
         print "Converting file $file -> $outfile\n";
       } else {
-        my $can_send = can_send_to_cadc( $href->{$file} );
+        my $can_send = can_send_to_cadc( $mode, $href->{$file} );
         my $isdr = looks_like_drfile( $file );
         print "File $file not suitable for conversion (is ".
           ( $can_send ? "" : "not ") . "valid product) (is ".
@@ -417,7 +418,7 @@ sub list_convert_plan {
       my $outfile = drfilename_to_cadc( $file );
       print "Converting file $file -> $outfile\n";
     } else {
-      my $can_send = can_send_to_cadc( $href->{$file} );
+      my $can_send = can_send_to_cadc( $mode, $href->{$file} );
       my $isdr = looks_like_drfile( $file );
       print "File $file not suitable for conversion (is ".
         ( $can_send ? "" : "not ") . "valid product) (is ".
@@ -708,7 +709,7 @@ sub _prov_check_file {
       die "Unable to read FITS header from $path"
         unless (defined $hdr);
 
-      if ( can_send_to_cadc( $hdr ) ) {
+      if ( can_send_to_cadc( undef, $hdr ) ) {
         # we are good
         print "Product match\n" if $DEBUG;
         return 1;

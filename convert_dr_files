@@ -139,7 +139,7 @@ if ($debug) {
 }
 if ($list) {
   # List what would happen (assuming headers are okay)
-  list_convert_plan( \%drhdrs );
+  list_convert_plan( \%drhdrs, {mode => $mode} );
 } else {
   # Do the actual conversion
   convert_dr_files( \%drhdrs, { "mode" => $mode } );

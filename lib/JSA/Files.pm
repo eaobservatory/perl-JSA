@@ -81,7 +81,7 @@ my $JCMTINFO = "/home/cadcops/bin/jcmtInfo";
 Determine whether or not an NDF can be converted to a FITS file for
 ingest by CADC.
 
-  $convert = can_send_to_cadc( $header );
+  $convert = can_send_to_cadc( $mode, $header );
 
 A file can be converted if it is a science observation and its product
 type is listed in the association type array.
@@ -92,6 +92,7 @@ NDF.
 =cut
 
 sub can_send_to_cadc {
+  my $mode = shift;
   my $header = shift;
 
   return 0 if ( ! UNIVERSAL::isa( $header, "Astro::FITS::Header" ) );
