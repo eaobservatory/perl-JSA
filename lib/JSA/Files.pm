@@ -498,10 +498,10 @@ sub looks_like_drfile {
     # looking for SDF files rather than thumbnails.
     return 0 if $filename =~ /_\d+\.sdf$/;
     return 1;
-  } elsif ($filename =~ /^gs[48]50um_[-a-z]+\d{6}.sdf$/) {
+  } elsif ($filename =~ /^gs[48]50um_[-a-z]+\d{6}\.sdf$/) {
     # SCUBA-2 co-added JSA tile, or product generated from it.
     return 1;
-  } elsif ($filename =~ /^ga\d{6}MHz-(?:250|1000)MHz-[ULS]SB_[-a-z]+\d{6}.sdf$/) {
+  } elsif ($filename =~ /^ga\d{6}MHz-(?:250|1000)MHz-[ULS]SB_[-a-z]+\d{6}\.sdf$/) {
     # ACSIS co-added JSA tile, or product generated from it.
     return 1;
   } elsif ($filename =~ /^\d{8}_\d{4}_(resw|flat)\.sdf$/ ||
