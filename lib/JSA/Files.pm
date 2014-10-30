@@ -597,7 +597,9 @@ product.
 sub dissect_drfile {
   my $drfile = shift;
   my $original = $drfile;
-  return () unless ( looks_like_drfile( $drfile ) || looks_like_drthumb( $drfile ) );
+  return () unless ( looks_like_drfile( $drfile ) ||
+                     looks_like_fits_drfile($drfile) ||
+                     looks_like_drthumb( $drfile ) );
   $drfile = _strip_path( $drfile );
 
   my $isgroup = ($drfile =~ s/^g//);
@@ -645,7 +647,7 @@ sub dissect_drfile {
     $isgroup = 1;
     $suffix = 'sdf';
 
-  } elsif ($drfile =~ /^(s)([48]50um)_([-a-z]+)(\d{6})(?:_(\d{2,4}))?\.(sdf|png)$/) {
+  } elsif ($drfile =~ /^(s)([48]50um)_([-a-z]+)(\d{6})(?:_(\d{2,4}))?\.(sdf|png|fits)$/) {
     # SCUBA-2 co-added JSA tile
     $prefix = $1;
     $asn_id = $2;
@@ -657,7 +659,7 @@ sub dissect_drfile {
     $resolution = $5;
     $suffix = $6;
 
-  } elsif ($drfile =~ /^(a)(\d{6}MHz-(?:250|1000)MHz-[ULS]SB)_([-a-z]+)(\d{6})(?:_(\d{2,4}))?\.(sdf|png)$/) {
+  } elsif ($drfile =~ /^(a)(\d{6}MHz-(?:250|1000)MHz-[ULS]SB)_([-a-z]+)(\d{6})(?:_(\d{2,4}))?\.(sdf|png|fits)$/) {
     # ACSIS co-added JSA tile
     $prefix = $1;
     $asn_id = $2;

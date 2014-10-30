@@ -39,6 +39,7 @@ use Starlink::Versions qw/ starversion_lt starversion_string/;
 use JSA::Error qw/ :try /;
 use JSA::Headers qw/ update_fits_product read_header cadc_ack /;
 use JSA::Headers::CADC qw/ correct_asn_id /;
+use JSA::Headers::FITS qw/update_fits_file_fits_headers/;
 use JSA::Headers::Starlink qw/ update_fits_headers add_fits_comments /;
 use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
                       set_wcs_attribs /;
@@ -174,6 +175,12 @@ sub convert_dr_files {
 
   my @pngs;
 
+  my %fits_options = (
+      mode => $mode,
+      dpid => $dpid,
+      dpdate => $dpdate,
+  );
+
   for my $file ( sort keys %$href ) {
 
     if( looks_like_drfile( $file ) ) {
@@ -217,9 +224,7 @@ sub convert_dr_files {
         # headers regardless of how the pipeline was configured.
         set_wcs_attribs( $tfile );
 
-        update_fits_headers( $tfile, { "mode" => $mode,
-                                       "dpid" => $dpid,
-                                       "dpdate" => $dpdate, } );
+        update_fits_headers( $tfile, \%fits_options );
 
         my @comments = cadc_ack();
         add_fits_comments( $tfile, \@comments ) if @comments;
@@ -261,6 +266,19 @@ sub convert_dr_files {
         }
 
       }
+    } elsif (looks_like_fits_drfile($file) and
+             can_send_to_cadc($mode, $href->{$file}) and
+             want_to_send_to_cadc($mode, header => $href->{$file})) {
+        print "Processing FITS file $file\n" if $DEBUG;
+
+        update_fits_file_fits_headers($file, \%fits_options);
+
+        my $hdr = read_header($file);
+        my $type = $hdr->value('ASN_TYPE');
+        my $outfile = drfilename_to_cadc($file, ASN_TYPE => $type);
+
+        copy($file, $outfile);
+
     } elsif( looks_like_drthumb( $file ) && want_to_send_to_cadc( $mode, filename => $file ) ) {
 
       print "Converting file $file\n" if $DEBUG;
