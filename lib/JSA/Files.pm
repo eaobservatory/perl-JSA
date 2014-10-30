@@ -63,7 +63,7 @@ our @ASSOCS = qw/ obs night project public /;
 our @PRODUCTS = qw/ healpix reduced rimg rsp /;
 our %EXTRA_PRODUCTS = (
     obs => [ qw/ cube / ],
-    public => [qw/extent-mask/],
+    public => [qw/extent-mask extent-cat extent-moc peak-cat tile-moc/],
 );
 
 # Set up a hash.
