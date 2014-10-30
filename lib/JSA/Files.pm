@@ -105,7 +105,7 @@ sub can_send_to_cadc {
 
   # For SCUBA there is no obs_type header but we simply want
   # to harvest all files with matching product
-  if ($inst ne "SCUBA") {
+  if ($inst ne "SCUBA" and not ((defined $mode) and $mode eq 'public')) {
 
     my $obstype = $header->value( "OBS_TYPE" );
 
