@@ -841,8 +841,12 @@ sub drfilename_to_cadc {
     $prodcount = 1;
   }
 
-  # The product count is only formatted if defined
-  my $p = ( defined $prodcount ? $product eq 'healpix' ? '%06d' : "%03d" : "" );
+  # The product count is only formatted if defined.  We need 6 digits if it
+  # is a JSA tile file.  Assume that "healpix" products and everything
+  # of "public" association type is a JSA tile.
+  my $jsa_tiles = $product eq 'healpix'
+                || $type eq 'pub';
+  my $p = ( defined $prodcount ? $jsa_tiles ? '%06d' : "%03d" : "" );
 
   # Note that we format subsystem as %02d because this will work
   # for SCUBA-2 850/450 without breaking ACSIS 2digit.
