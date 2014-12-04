@@ -356,7 +356,7 @@ $id = "NONE" unless defined $id;
 #    newer than those before calling dpRetrieve).
 #
 # #2 is less annoying for people but means that dpRetrieve will have to remove
-# and recreate soft links if it uses soft links or use touch if the file is 
+# and recreate soft links if it uses soft links or use touch if the file is
 # already real. This is more work to implement but for the non-JSA user
 # it will be worth it.
 #
@@ -601,7 +601,6 @@ automatically:
  -log hs
  -file
  -loop file
- -recsuffix CADC
  -batch
 
 The handling of calibration options is still TBD.

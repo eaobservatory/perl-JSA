@@ -173,7 +173,6 @@ sub run_pipeline {
                  "-nodisplay",
                  "-log","hs",
                  "-verbose",
-                 "-recsuffix", "ADV,CADC",
                  );
 
     push @drcommand, '-batch' if $options->{'batch'};
