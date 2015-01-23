@@ -52,7 +52,7 @@ to the transfer directory.
 =item B<-transdir>
 
 Override the CADC transfer drectory. Defaults to the standard CADC
-transfer directory (/jcmtdata/cadc/new). This directory is used
+transfer directory (/export/jcmtdata/ptransfer/new). This directory is used
 to receive the output files if the "-persist" option is true.
 
 If the directory does not exist but the parent does, an attempt will
@@ -84,7 +84,7 @@ use lib $FindBin::RealBin."/lib";
 
 use JSA::Files qw/ looks_like_cadcfile scan_dir /;
 
-my $CADCDIR = "/jcmtdata/cadc/new";
+my $CADCDIR = "/export/jcmtdata/ptransfer/new";
 
 # Options
 my ($help, $man, $version, $persist, $archive, $id, $transdir, $debug);

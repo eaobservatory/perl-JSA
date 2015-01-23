@@ -45,7 +45,7 @@ Override the temporary directory used for file conversion.
 =item B<-transdir>
 
 Override the CADC transfer directory. Defaults to the standard CADC
-transfer directory (/jcmtdata/cadc/new).
+transfer directory (/export/jcmtdata/ptransfer/new).
 
 =item B<-version>
 
@@ -97,7 +97,7 @@ use JSA::Headers qw/ read_headers /;
 
 my %INSTRUMENTS = ( ACSIS => '/jcmtdata/reduced/acsis/',
                   );
-my $CADCDIR = "/jcmtdata/cadc/new";
+my $CADCDIR = "/export/jcmtdata/ptransfer/new";
 
 # Get command-line options.
 my ( $date_str, $dir, $help, $man, $tempdir, $transdir, $version );

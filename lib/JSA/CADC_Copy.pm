@@ -143,7 +143,7 @@ BEGIN {
       'force' => undef,
 
       'cadc-dir' =>
-        '/jcmtdata/cadc/new',
+        '/export/jcmtdata/ptransfer/new',
     ) ;
 
   # Make cadc_dir(), dry_run(), force(), verbose() accessors.
@@ -860,7 +860,7 @@ I<start-date>, and I<end-date> as options as a "hash".
 =item I<cadc-dir>
 
 Specify the directory where symbolic needs to be made for upload.
-Default is F</jcmtdata/cadc/new>.
+Default is F</export/jcmtdata/ptransfer/new>.
 
 =item I<date>
 
