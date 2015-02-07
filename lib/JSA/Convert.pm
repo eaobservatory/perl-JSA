@@ -26,11 +26,9 @@ use warnings;
 use warnings::register;
 
 use Carp;
-use DateTime;
 use File::Copy;
 use File::Spec;
 use Image::ExifTool qw/ :Public /;
-use IO::File;
 use Proc::SafeExec;
 use File::Basename qw/ fileparse /;
 use Starlink::Config qw/ :override /;
@@ -52,8 +50,8 @@ use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
 
 use Exporter 'import';
 our @EXPORT_OK = qw/ convert_to_fits convert_to_ndf
-                     convert_dr_files convert_log_files list_convert_plan
-                     ndf2fits split_log_file write_dpinfo_png /;
+                     convert_dr_files list_convert_plan
+                     ndf2fits write_dpinfo_png /;
 
 our $DEBUG = 0;
 
@@ -311,82 +309,6 @@ sub convert_dr_files {
     my %reduced = map {$_ => 1} @$reduced;
     $reduced{$_} = 1 foreach grep {/_reduced-/} @pngs;
     _create_raw_previews(keys %reduced);
-  }
-}
-
-=item B<convert_log_files>
-
-Processes pipeline log files.
-
-The following files are handled:
-
-=over 4
-
-=item log.checkrms
-
-=back
-
-=cut
-
-sub convert_log_files {
-  split_log_file('log.checkrms') if -e 'log.checkrms';
-}
-
-=item B<split_log_file>
-
-Splits a single log file into separate files based on individual
-lines from the file.
-
-=cut
-
-sub split_log_file {
-  my $file = shift;
-
-  die 'Cannot match log file pattern' unless $file =~ /^log\.(\w+)$/;
-  my $type = $1;
-
-  # Read the file.
-  my @head = ();
-  my @body = ();
-
-  my $fh = new IO::File($file, 'r');
-  while (<$fh>) {
-    chomp;
-    if (/^#/) {push @head, $_;}
-    else      {push @body, $_;}
-  }
-
-  $fh->close();
-
-  # Check the file has entries and a valid header.
-  return unless @body;
-  die 'Wrong number of header lines' unless 3 == scalar @head;
-
-  # Read the header.
-  my $heading_line = $head[-1];
-  $heading_line =~ s/^# *//;
-  my @columns = split ' ', $heading_line;
-
-  # Loop over the entries.
-  foreach my $entry (@body) {
-    my @values = split ' ', $entry;
-    die 'Wrong number of columns' unless (scalar @values) == (scalar @columns);
-    my %values; @values{@columns} = @values;
-    my $hdr = read_header($values{'file'} . '.sdf');
-
-    my $fn = join('_', $type,
-        $hdr->value('OBSID'),
-        $hdr->value('PRODID'),
-        $hdr->value('DPRCINST'),
-        DateTime->now()->strftime('stamp-%Y%m%dT%H%M%S')) . '.log';
-
-    do {
-      local $\ = "\n";
-      my $fh = new IO::File($fn, 'w');
-      print $fh $_ foreach @head;
-      print $fh $entry;
-      $fh->close();
-    };
   }
 }
 

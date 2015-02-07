@@ -183,7 +183,7 @@ use Astro::FITS::Header::CFITSIO;
 use Astro::FITS::HdrTrans;
 
 use JSA::Starlink qw/ check_star_env run_star_command /;
-use JSA::Convert qw/ convert_to_ndf convert_dr_files convert_log_files /;
+use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
 use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
 use JSA::Headers qw/ get_header_value read_headers /;
 use JSA::Logging qw/log_message log_warning/;
@@ -551,9 +551,6 @@ my %drhdrs = read_headers( @drfiles );
 # And convert those files that have valid PRODUCT headers.
 convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
                               dpdate => DateTime->now->datetime } );
-
-# Convert any log files which we want to save.
-convert_log_files();
 
 # TEMPORARY HACK: copy all log.* files into the ORAC_LOGDIR if defined.
 if (exists $ENV{'ORAC_LOGDIR'}) {
