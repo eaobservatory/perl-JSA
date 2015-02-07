@@ -326,16 +326,10 @@ The following files are handled:
 
 =back
 
-Returns the number of converted log files written.
-
 =cut
 
 sub convert_log_files {
-  my $n = 0;
-
-  $n += split_log_file('log.checkrms') if -e 'log.checkrms';
-
-  return $n;
+  split_log_file('log.checkrms') if -e 'log.checkrms';
 }
 
 =item B<split_log_file>
@@ -394,8 +388,6 @@ sub split_log_file {
       $fh->close();
     };
   }
-
-  return scalar @body;
 }
 
 =item B<list_convert_plan>

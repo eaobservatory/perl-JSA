@@ -16,12 +16,12 @@ use FindBin;
 use JSA::Command qw/run_command/;
 use JSA::Files qw/scan_dir/;
 use JSA::Headers qw/get_orac_instrument/;
-use JSA::Logging qw/log_message log_command log_warning/;
+use JSA::Logging qw/log_message log_command/;
 
 use parent qw/Exporter/;
 our @EXPORT_OK = qw/prepare_environment prepare_environment_cadc
                     retrieve_data determine_instrument
-                    run_pipeline capture_products capture_log_files
+                    run_pipeline capture_products
                     clean_directory_final clean_directory_pre_capture
                     log_listing/;
 
@@ -250,39 +250,6 @@ sub capture_products {
 
   my( $dpcstdout, $dpcstderr, $dpcstatus ) = run_command("dpCapture", "--id=$id", @args);
   log_command( "dpCapture", $dpcstdout, $dpcstderr ) if $show_output;
-}
-
-=item capture_log_files
-
-Call jcmt2vos to store log files in the JSA VO space.
-
-    capture_log_files($id, $persist, $canfar, $show_output);
-
-Does not run jcmt2vos unless $persist is set.  Currently ignores
-the $id and $canfar options.
-
-=cut
-
-sub capture_log_files {
-  my ($id, $persist, $canfar, $show_output) = @_;
-
-  log_message("\n*** calling jcmt2vos");
-
-  unless ($persist) {
-    log_message('skipping because persist mode is not set');
-    return;
-  }
-
-  my ($out, $err, $status) = run_command({nothrow => 1}, 'jcmt2vos');
-
-  if ($status == -1) {
-    log_warning('jcmt2vos appears to be missing');
-  }
-  elsif ($status) {
-    log_warning('jcmt2vos exited with bad status');
-  }
-
-  log_command('jcmt2vos', $out, $err) if $show_output;
 }
 
 =item clean_directory_pre_capture

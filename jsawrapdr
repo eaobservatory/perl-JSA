@@ -189,7 +189,7 @@ use JSA::Headers qw/ get_header_value read_headers /;
 use JSA::Logging qw/log_message log_warning/;
 use JSA::WrapDR qw/prepare_environment prepare_environment_cadc
                    retrieve_data determine_instrument
-                   run_pipeline capture_products capture_log_files
+                   run_pipeline capture_products
                    clean_directory_final clean_directory_pre_capture
                    log_listing/;
 
@@ -553,7 +553,7 @@ convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
                               dpdate => DateTime->now->datetime } );
 
 # Convert any log files which we want to save.
-convert_log_files() and capture_log_files($id, $persist, $canfar, $canfar);
+convert_log_files();
 
 # TEMPORARY HACK: copy all log.* files into the ORAC_LOGDIR if defined.
 if (exists $ENV{'ORAC_LOGDIR'}) {
