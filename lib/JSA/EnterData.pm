@@ -2466,13 +2466,13 @@ sub calculate_release_date {
 
   if ( $obs->projectid =~ /^mjlsc/i && $obs->isScience) {
     # CLS. Should properly check the SURVEY FITS header
-    return DateTime->new('month' => 1,
-                         'year' => 2031,
+    return DateTime->new('month' => 3,
+                         'year' => 2016,
                          'day' => 1,
-                         'hour' => 0,
-                         'minute' => 0,
-                         'second' => 0,
-                         'time_zone' => 0
+                         'hour' => 23,
+                         'minute' => 59,
+                         'second' => 59,
+                         'time_zone' => 'UTC'
     );
 
   } elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
