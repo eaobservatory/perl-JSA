@@ -4,7 +4,7 @@ package JSA::DB::TableTransfer;
 
 =head1 NAME
 
-JSA::DB::TableTransfer - Check file replication, transfer files to CADC
+JSA::DB::TableTransfer - Check file status, transfer files to CADC
 
 =head1 SYNOPSIS
 
@@ -13,25 +13,25 @@ Make an object ...
   $xfer = JSA::DB::TableTransfer->new( 'dbhandle' => $dbh,
                                       );
 
-Set replicated state for a file ...
+Set copied state for a file ...
 
-  $xfer->set_replicated( [ 'a20100612_00005_01_0001.sdf',
+  $xfer->set_copied( [ 'a20100612_00005_01_0001.sdf',
                             'a20100612_00006_01_0001.sdf'
                           ]
                       );
 
-Find replicated files in CADC database ...
+Find copied files ...
 
-  $xfer->get_replicated_files( 20100612 );
+  $xfer->get_copied_files( 20100612 );
 
 =head1 DESCRIPTION
 
 This package manipulates the database table to track progress of raw file data
-ingestion and replication to CADC.
+ingestion and transfer to CADC.
 
-The file ingestion process adds a row on successful ingestion; file copy to CADC
-& table replication tracking processes update the state. Disk cleaning process
-should delete the rows (to be implemented).
+The file ingestion process adds a row on successful ingestion; file copy
+to CADC processes update the state. Disk cleaning process should delete
+the rows (to be implemented).
 
 =cut
 
@@ -69,7 +69,6 @@ The state types are ...
   found
   ignored
   ingested
-  replicated
   transferred
   simulation
   final
@@ -135,9 +134,6 @@ BEGIN {
 
       #  File has been locally ingested.
       'ingested' => 'i',
-
-      #  File appeared in CADC database.
-      'replicated' => 'r',
 
       #  File has been put in CADC transfer directory.
       'copied' => 'c',
@@ -264,25 +260,6 @@ Add state of C<ingested> of given array reference of files (base names).
 Set state to C<ingested> of given array reference of files (base names).
 
   $xfer->set_ingested( [ @files ] );
-
-=item B<get_replicated_files>
-
-Return a array reference of files with C<replicated> state, given a partial file
-name.
-
-  $files = $xfer->get_replicated_files( 20100612 );
-
-=item B<add_replicated>
-
-Add state of C<replicated> of given array reference of files (base names).
-
-  $xfer->add_replicated( [ @files ] );
-
-=item B<set_replicated>
-
-Set state to C<replicated> of given array reference of files (base names).
-
-  $xfer->set_replicated( [ @files ] );
 
 =item B<get_simulation_files>
 
