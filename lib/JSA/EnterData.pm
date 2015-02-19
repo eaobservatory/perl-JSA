@@ -2479,7 +2479,7 @@ sub calculate_release_date {
     # EC05 is a public calibrator monitoring project
     return OMP::DateTools->yesterday(1);
 
-  } elsif ($obs->projectid =~ /ec/i && $obs->isScience ) {
+  } elsif ($obs->projectid =~ /ec/i) {
     # Do not release EC data.
 
     return DateTime->new('month' => 1,
