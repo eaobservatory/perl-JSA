@@ -1535,19 +1535,8 @@ sub prepare_insert_hash {
 
   my ( $self, $table, $field_values ) = @_;
 
-
-use lib '/home/agarwal/comp/perl5/lib';
-use Anubhav::Debug qw[ epl eph errt ];
-
-  unless ( scalar keys %{ $field_values } )
-  {
-
-eph( 'table' => $table 
-  , 'val' => $field_values
-  );
-
-    throw JSA::Error "Empty hash reference was given to insert.";
-  }
+  throw JSA::Error "Empty hash reference was given to insert."
+    unless scalar keys %{ $field_values };
 
   return $self->_handle_multiple_changes( $table, $field_values );
 }
