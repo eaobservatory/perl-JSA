@@ -62,7 +62,6 @@ use JSA::EnterData::ACSIS;
 use JSA::EnterData::DAS;
 use JSA::EnterData::SCUBA2;
 use JSA::EnterData::StarCommand;
-use JSA::EnterData::TileList;
 use JSA::Error qw[ :try ];
 use JSA::Files qw[ looks_like_rawfile ];
 use JSA::WriteList ();
@@ -87,8 +86,6 @@ BEGIN {
   # Make sure that bad status from SMURF triggers bad exit status
   $ENV{ADAM_EXIT} = 1;
 }
-
-our $SKIP_TILE_LIST = 1;
 
 {
   my %default =
@@ -690,7 +687,6 @@ set.  File paths are fetched from database unless otherwise specified.
 
       $columns->{$name} = $self->get_columns( $inst->table, $dbh );
       $columns->{FILES} = $self->get_columns( 'FILES', $dbh );
-      $columns->{TILES} = $self->get_columns( 'TILES', $dbh );
 
       # Need to create a hash with keys corresponding to the observation number
       # (an array won't be very efficient since observations can be missing and
@@ -865,7 +861,6 @@ It is called by I<prepare_and_insert> method.
 
     my ( $shutter_re, $empty_re ) = ( qr{\b SHUTTER \b}ix, qr{^\s*$} );
 
-    my %tile;
     for my $obs ( @{ $run_obs } ) {
 
       my $headers = $obs->hdrhash();
@@ -907,12 +902,6 @@ It is called by I<prepare_and_insert> method.
 
         my ( $hash , $array ) = $inst->transform_header( $headers );
         $obs->hdrhash( $hash );
-      }
-
-      my @tmp = $self->get_tiles( $obs );
-      if ( scalar @tmp ) {
-
-        undef $tile{ $obs->obsid() }->{ $_ } for @tmp;
       }
     }
 
@@ -987,33 +976,6 @@ It is called by I<prepare_and_insert> method.
                                   'headers'  => $common_hdrs,
                                 );
 
-    if ( $dbh->err() ) {
-
-      my $text = $dbh->errstr();
-
-      $db->rollback_trans();
-      $self->_print_error_simple_dup( $text );
-
-      return ( 'nothing-to-do' , 'ignored duplicate insert' )
-        if $self->_is_insert_dup_error( $text );
-
-      return ( 'error', $text );
-    }
-
-    # TILES table.
-    my %tile_header;
-    for my $obsid ( keys %tile ) {
-
-      $tile_header{'OBSID'} = $obsid;
-      $tile_header{'TILE'}  = [ keys %{ $tile{ $obsid } } ];
-    }
-
-    $error =
-      $self->_modify_db_on_obsend( %pass_arg,
-                                  'dbhandle' => $dbh,
-                                  'table'    => 'TILES',
-                                  'headers'  => { %tile_header }
-                                );
     if ( $dbh->err() ) {
 
       my $text = $dbh->errstr();
@@ -1573,8 +1535,19 @@ sub prepare_insert_hash {
 
   my ( $self, $table, $field_values ) = @_;
 
-  throw JSA::Error "Empty hash reference was given to insert."
-    unless scalar keys %{ $field_values };
+
+use lib '/home/agarwal/comp/perl5/lib';
+use Anubhav::Debug qw[ epl eph errt ];
+
+  unless ( scalar keys %{ $field_values } )
+  {
+
+eph( 'table' => $table 
+  , 'val' => $field_values
+  );
+
+    throw JSA::Error "Empty hash reference was given to insert.";
+  }
 
   return $self->_handle_multiple_changes( $table, $field_values );
 }
@@ -1671,7 +1644,7 @@ sub insert_hash {
   }
 
   my ( @prim_key );
-  if ( any { $table eq $_ } 'FILES', 'TILES' ) {
+  if ( any { $table eq $_ } 'FILES' ) {
 
     my $prim_key = _get_primary_key( $table );
     @prim_key = ref $prim_key ? @{ $prim_key } : $prim_key ;
@@ -2290,7 +2263,6 @@ sub _get_primary_key {
       'COMMON' => 'obsid',
       'FILES'  => [qw{ obsid_subsysnr file_id }],
       'SCUBA2' => 'obsid_subsysnr',
-      'TILES'  => [qw{ obsid tile }],
       'transfer' => 'file_id',
     );
 
@@ -2808,92 +2780,6 @@ sub create_dictionary {
   return %dict;
 }
 
-=item B<get_tiles>
-
-Returns a list of tile numbers given L<OMP::Info:Obs> object.
-
-L<JSA::Error> exception is thrown if there are problems executing
-C<jsatilenum>.
-
-  @num = $enter->get_tiles( $obs );
-
-=cut
-
-sub get_tiles {
-
-  my ( $self, $obs ) = @_;
-
-  $self->skip_tile_list( 'obs' => $obs ) and return;
-
-  my $log = Log::Log4perl->get_logger( '' );
-
-  my $files = [ $obs->filename() ];
-
-  my $temp = File::Temp->new( 'template' => _file_template( 'tile' ) );
-  $temp->unlink_on_destroy( 1 );
-  JSA::WriteList::write_list( $temp->filename(), $files )
-    or return;
-
-  my $err_obs = sprintf q[%s OBSID, %s OBS_TYPE],
-                  $obs->obsid(),
-                  $self->_find_header(  'headers' => $obs->hdrhash(),
-                                        'name'    => 'OBS_TYPE',
-                                        'value'   => 1
-                                      ) ;
-
-  my ( $start, $end ) = map { $files->[$_] } 0, -1;
-  my $err_file = $start ne $end ? qq[$start .. $end] : $start;
-     $err_file = $#$files . qq[ file(s) $err_file];
-
-  $self->_debug_text( qq[Getting tiles for ($err_obs) $err_file] );
-
-  my @command;
-  try {
-
-    @command = JSA::EnterData::TileList->get_file_command( $temp );
-  }
-  catch JSA::Error::BadArgs with {
-
-    my ( $e ) = @_;
-    $log->error( 'Error while getting tile number command: ' . $e->text() );
-  };
-
-  my $starcom = JSA::EnterData::StarCommand->new();
-  $starcom->verbose( $self->debug() ? 3 : $self->verbosity() );
-
-  my $run_err = qq[Error running tilelist for ($err_obs) $err_file\n];
-  my $ok;
-  try {
-
-    $log->info( 'Start: tile list command' );
-
-    $ok = $starcom->try_command(  'command' => [ @command ],
-                                  'error-text' => $run_err
-                                );
-
-  }
-  catch JSA::Error::BadExec with {
-
-    my ( $err ) = @_;
-    $log->warn( q[Exec failed of tilelist: ] . $err->text() );
-    throw JSA::Error::BadExec $err;
-  }
-  finally {
-
-    $log->info( 'End: tile list command' );
-
-    #JSA::WriteList::clear_list();
-  };
-
-  $ok or return;
-
-  my $key  = 'TILES';
-  my %tile = $starcom->get_value( $key );
-  my @num  = $tile{ $key } // return;
-  return
-    ( grep looks_like_number( $_ ), map { split / +/, $_ } @num );
-}
-
 =item B<skip_obs_calc>
 
 Given a hash of C<headers> key with L<OMP::Info::Obs> object header hash
@@ -2954,31 +2840,6 @@ sub skip_obs_calc {
   }
 
   return;
-}
-
-=iten B<skip_tile_list>
-
-Given a C<OMP::Info::Obs> object header hash reference -- or an
-C<OMP::Info::Obs> object -- as a hash, returns a truth value if
-tile list should not be generated.
-
-  print "skipped tile list"
-    if $enter->skip_tile_list(  'headers' => $obs->hdrhash(),
-                                'test' =>
-                                  { 'OBS_TYPE' => qr{\b(?: skydip | noise )\b}xi
-                                  }
-                              );
-=cut
-
-sub skip_tile_list {
-
-  my ( $self, %arg ) = @_;
-
-  $SKIP_TILE_LIST and return 1;
-
-  my $skip = qr{\b (?: skydips? | flatfield | setup | noise | ramp ) \b}xi;
-
-  return $self->skip_obs_calc( 'test' => { 'OBS_TYPE' => $skip }, %arg );
 }
 
 =item B<skip_calc_radec>
