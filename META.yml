@@ -177,5 +177,5 @@ requires:
   perl: v5.8.0
 resources:
   license: http://opensource.org/licenses/gpl-license.php
-  repository: git://github.com/jac-h/perl-JSA.git
+  repository: git://github.com/eaobservatory/perl-JSA.git
 version: 0.03

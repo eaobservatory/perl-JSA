@@ -243,7 +243,7 @@
          "http://opensource.org/licenses/gpl-license.php"
       ],
       "repository" : {
-         "url" : "git://github.com/jac-h/perl-JSA.git"
+         "url" : "git://github.com/eaobservatory/perl-JSA.git"
       }
    },
    "version" : "0.03"
