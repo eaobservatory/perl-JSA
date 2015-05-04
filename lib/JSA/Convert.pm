@@ -40,7 +40,7 @@ use JSA::Headers::CADC qw/ correct_asn_id /;
 use JSA::Headers::FITS qw/update_fits_file_fits_headers/;
 use JSA::Headers::Starlink qw/ update_fits_headers add_fits_comments /;
 use JSA::Starlink qw/ check_star_env run_star_command prov_update_parent_path
-                      set_wcs_attribs /;
+                      set_wcs_attribs get_ndf_bb /;
 use JSA::Files qw/ drfilename_to_cadc cadc_to_drfilename
                    looks_like_drfile looks_like_fits_drfile looks_like_cadcfile
                    looks_like_rawfile can_send_to_cadc_guess
@@ -104,7 +104,7 @@ sub convert_to_fits {
   JSA::Error::FatalError->throw( "Unable to convert the DR filename ($ndf) to CADC form: $msg") if !defined $outfile;
 
   # Now do the conversion
-  ndf2fits( $ndf, $outfile )
+  ndf2fits( $ndf, $outfile, quality => 1 )
     or JSA::Error::Conversion->throw( "Could not convert $ndf to FITS" );
 
   return $outfile;
@@ -511,6 +511,7 @@ call the convert_to_fits wrapper subroutine instead.
 sub ndf2fits {
   my $infile = shift;
   my $outfile = shift;
+  my %opt = @_;
 
   # make sure we have a reasonable environment
   check_star_env( "CONVERT", "ndf2fits" );
@@ -526,6 +527,16 @@ sub ndf2fits {
     $has_cadc_prov = 0;
   }
 
+  my $comp = 'DV';
+  if ($opt{'quality'}) {
+    # If outputting a quality array, ensure that the bad-bit mask
+    # is zero, otherwise FITS viewers which only look at the primary
+    # HDU won't realize that some pixels are bad.
+    JSA::Error::Conversion->throw('File ' . $infile . ' has non-zero BB mask')
+        unless get_ndf_bb($infile) == 0;
+    $comp .= 'Q';
+  }
+
   # CADC specific options
   my @args = ( File::Spec->catfile($StarConfig{"Star_Bin"},
                                    "convert", "ndf2fits"),
@@ -539,7 +550,7 @@ sub ndf2fits {
                "DUPLEX",
                "PROHIS",
                ($has_cadc_prov ? "PROVENANCE=CADC" : () ),
-               "COMP=DV" );
+               "COMP=$comp" );
 
 
   print join(" ",@args)."\n" if $DEBUG;
