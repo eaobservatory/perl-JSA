@@ -40,6 +40,7 @@ our @EXPORT_OK = qw/ check_star_env
                      run_star_command
                      prov_update_parent_path
                      set_wcs_attribs
+                     get_ndf_bb
                    /;
 
 our $DEBUG = 0;
@@ -404,6 +405,43 @@ sub set_wcs_attribs {
 
   run_star_command( @args );
   return;
+}
+
+=item get_ndf_bb
+
+Get the bad bit mask from a file.
+
+=cut
+
+sub get_ndf_bb {
+    my $file = shift;
+    $file =~ s/\.sdf$//;
+
+    my $status = &NDF::SAI__OK();
+    err_begin($status);
+    ndf_begin();
+
+    my $ndf = undef;
+    my $bb = 0;
+
+    ndf_find(&NDF::DAT__ROOT(), $file, $ndf, $status);
+
+    if ($status == &NDF::SAI__OK) {
+        ndf_bb($ndf, $bb, $status);
+        ndf_annul($ndf, $status);
+    }
+
+    ndf_end($status);
+
+    if ($status != &NDF::SAI__OK()) {
+        my $err = err_flush_to_string($status);
+        err_end($status);
+        JSA::Error::Starlink->throw('Error reading BB mask: ' . $err);
+    }
+
+    err_end($status);
+
+    return $bb;
 }
 
 =back
