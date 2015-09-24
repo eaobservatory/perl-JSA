@@ -385,9 +385,9 @@ sub send_log_email {
   my $ut = shift;
   my $project = shift;
 
-  my $MAILHOST = 'mailhost.jach.hawaii.edu';
-  my $MAILTO = 'jcmtarch@jach.hawaii.edu';
-  my $MAILFROM = 'jcmtarch@jach.hawaii.edu';
+  my $MAILHOST = 'malama.eao.hawaii.edu';
+  my $MAILTO = 'jcmt_archive@eao.hawaii.edu';
+  my $MAILFROM = 'jcmt_archive@eao.hawaii.edu';
 
   my $smtp = Net::SMTP->new( $MAILHOST );
   $smtp->mail( $MAILFROM );
