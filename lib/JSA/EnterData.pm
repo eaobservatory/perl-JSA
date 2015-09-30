@@ -857,41 +857,11 @@ It is called by I<prepare_and_insert> method.
 
     @touched{ @file } = ();
 
-    my @adjust = ( 'INBEAM' );
-
-    my ( $shutter_re, $empty_re ) = ( qr{\b SHUTTER \b}ix, qr{^\s*$} );
-
     for my $obs ( @{ $run_obs } ) {
 
       my $headers = $obs->hdrhash();
 
-      for my $name ( @adjust ) {
-
-        if ( $name eq 'INBEAM' ) {
-
-          $self->save_inbeam( $headers  );
-        }
-
-        $self->_delete_header( 'headers' => $headers,
-                                'name'   => $name,
-                                'test'   =>
-                                  sub {
-                                    my ( $val ) = @_;
-                                    return
-                                      defined $val && ! ref $val
-                                      && ( $val =~ m/$shutter_re/
-                                            ||
-                                          $val =~ m/$empty_re/
-                                        )
-                                      ;
-                                  },
-                              )
-        # No sense in case change if header has been already deleted.
-        or
-        $self->_make_lowercase_header(  'headers' => $headers,
-                                        'name'    => $name,
-                                      );
-      }
+      $headers = $self->munge_header_INBEAM( $headers  );
 
       if ( $inst->can( 'fill_max_subscan' ) ) {
 
@@ -1370,26 +1340,6 @@ sub is_simulation {
   return;
 }
 
-sub save_inbeam {
-
-  my ( $self, $header ) = @_;
-
-  my $name  = 'INBEAM';
-  my $saved = lc( $name . '_orig' );
-
-  my @val =
-      $self->_find_header( 'headers' => $header,
-                            'name'   => $name,
-                            'value'  => 1,
-                            'cond-name'        => 'SEQ_TYPE',
-                            'cond-value-regex' =>
-                              qr{\b(?: science | pointing | focus )\b}xi
-                          )
-                          or return;;
-
-  $header->{ $saved } = join ' ', @val;
-  return 1;
-}
 
 =item B<add_subsys_obs>
 
@@ -2590,6 +2540,55 @@ sub fill_headers_FILES {
 
   return;
 }
+
+
+=item B<munge_header_INBEAM>
+
+Given a header hash reference, removes all the I<INBEAM> header occurances
+which have C<SHUTTER>; combines any remaining header values (in subheaders) in a
+space separated list. Returns a possibly changed header hash reference.
+
+  $changed = $enter->munge_header_INBEAM( $header_hash );
+
+=cut
+
+sub munge_header_INBEAM {
+
+  my ( $self , $headers ) = @_;
+
+  my $name       = 'INBEAM' ;
+  my $empty_re   = qr{^\s*$} ;
+  my $shutter_re = qr{\b SHUTTER \b}ix ;
+
+  $self->_delete_header( 'headers' => $headers,
+                          'name'   => $name,
+                          'test'   =>
+                            sub {
+                              my ( $val ) = @_;
+                              return
+                                defined $val && ! ref $val
+                                && ( $val =~ m/$shutter_re/
+                                      ||
+                                    $val =~ m/$empty_re/
+                                  )
+                                ;
+                            },
+                        );
+
+  my @val = $self->_find_header( 'headers' => $headers,
+                                  'name'   => $name,
+                                  'value'  => 1,
+                                  'cond-name'        => 'SEQ_TYPE',
+                                  'cond-value-regex' =>
+                                    qr{\b(?: science | pointing | focus )\b}xi
+                                );
+
+    scalar @val
+      and $headers->{ $name } = lc( join ' ' , @val );
+
+  return $headers;
+}
+
 
 =item B<get_columns>
 
