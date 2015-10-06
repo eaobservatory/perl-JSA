@@ -2887,7 +2887,7 @@ sub calc_radec {
   my $temp = File::Temp->new( 'template' => _file_template( 'radec' ) );
   $temp->unlink_on_destroy( 1 );
   # Now need to write these files to  temp file
-  my $file_list = JSA::WriteList::write_list( $temp->filename(), [ @filenames ] );
+  my $rc = JSA::WriteList::write_list( $temp->filename(), [ @filenames ] );
 
   # PA (may not be present)
   my $pa = $headerref->{MAP_PA};
