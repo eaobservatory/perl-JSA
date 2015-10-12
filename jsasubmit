@@ -162,15 +162,25 @@ if( scalar( @{$grp->obs} ) == 0 ) {
     my $obstype = uc( $hdr->{'OBS_TYPE'} );
     my $instrume = uc( $hdr->{'INSTRUME'} );
     my $backend = uc( $hdr->{'BACKEND'} );
+    my $project = uc( $hdr->{'PROJECT'} );
+
+
+    # Don't submit EC jobs for processing except for special calibration observation project EC05
+    if ($project =~ /EC/i and $project !~ /EC05/i) {
+      log_message( sprintf "Skipped observation with OBSID %s because it is from engineering/comissioning project %s.\n",
+                   $obs->obsid(), $project
+                 );
+      next;
+    }
 
     # No reduction recipe at CADC yet for (FTS|POL)-2.
     if ( obs_is_fts2_or_pol2_RECIPE( $backend, $obs->drrecipe() ) ) {
-
       log_message( sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction %s\n",
                       $obs->obsid(),
                       'based on recipe value'
                   );
       next;
+
     }
 
     # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
