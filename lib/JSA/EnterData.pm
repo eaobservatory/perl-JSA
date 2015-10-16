@@ -132,6 +132,8 @@ BEGIN {
       # Update only an observation run time.
       'obstime-only' => 0,
 
+      'update-only-inbeam' => 0,
+
       # To avoid getting file paths with 'f'ound state from database.
       'path-not-from-db' => 0
     );
@@ -960,7 +962,10 @@ It is called by I<prepare_and_insert> method.
     }
 
     # FILES, ACSIS, SCUBA2 tables.
-    unless ( $self->update_only_obstime() ) {
+    unless ( $self->update_only_obstime()
+                ||
+              $self->update_only_inbeam()
+            ) {
 
       $self->add_subsys_obs(  %pass_arg,
                               'db'  => $db,
@@ -2021,6 +2026,8 @@ sub prepare_update_hash {
 
     my $obs_date_re = qr{\bDATE.(?:OBS|END)\b}i;
 
+    my $inbeam_re = qr{\b INBEAM \b}xi;
+
     # Allowed to be set undef if key from $field_values is missing, say as a
     # result of external header munging.
     my $miss_ok = _or_regex( qw/ INBEAM /,
@@ -2032,6 +2039,10 @@ sub prepare_update_hash {
     my $only_obstime =
       $table eq 'COMMON'
       && $self->update_only_obstime();
+
+    my $only_inbeam =
+      $table eq 'COMMON'
+      && $self->update_only_inbeam();
 
     for my $key ( sort keys %{$indb} ) {
 
@@ -2057,6 +2068,11 @@ sub prepare_update_hash {
           'new'   => $new,
         );
       my $in_range = any { $test{ $_ } } (qw[ start end ]);
+
+      next
+        if $only_inbeam
+        && $key !~ $inbeam_re
+        ;
 
       next
         if $only_obstime
