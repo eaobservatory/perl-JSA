@@ -133,6 +133,8 @@ BEGIN {
       'update-only-obstime' => 0,
 
       'update-only-inbeam' => 0,
+
+      'acsic-calc-radec' => 1
     );
 
   #  Generate some accessor functions.
@@ -2852,6 +2854,8 @@ regular expressions ...
 sub skip_calc_radec {
 
   my ( $self, %arg ) = @_;
+
+  $self->acsis_calc_radec() or return;
 
   my $skip = qr{\b skydips? \b}xi;
 
