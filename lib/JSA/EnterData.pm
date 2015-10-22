@@ -134,7 +134,7 @@ BEGIN {
 
       'update-only-inbeam' => 0,
 
-      'acsic-calc-radec' => 1
+      'acsis-calc-radec' => 1
     );
 
   #  Generate some accessor functions.
