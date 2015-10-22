@@ -130,7 +130,7 @@ BEGIN {
       'process_simulation' => 0,
 
       # Update only an observation run time.
-      'obstime-only' => 0,
+      'update-only-obstime' => 0,
 
       'update-only-inbeam' => 0,
 
@@ -146,7 +146,6 @@ BEGIN {
           (
             # Must be given in constructor.
             'dict',
-            'obstime-only',
             # Special handling when date to set is given.
             'date',
             # Validate instruments before setting.
@@ -467,6 +466,32 @@ returns nothing.  In insert mode, nothing is inserted in "FILES"
 table.
 
   $enter->update_mode( 0 );
+
+=item B<update_only_obstime>
+
+Returns a truth value to inidicate if to update only the times for an
+observation run if no arguments given.
+
+  print "Only date obs & end will be updated"
+    if $enter->update_only_obstime();
+
+Else, sets the truth value if to update only observation date values;
+returns nothing.
+
+    $enter->update_only_obstime( my $only_obstime = 1 );
+
+=item B<update_only_inbeam>
+
+Returns a truth value to inidicate if to update only the C<INBEAM> header
+values if no arguments given.
+
+  print "Only INBEAM values will be updated"
+    if $enter->update_only_inbeam();
+
+Else, sets the truth value if to update only C<INBEAM> values;
+returns nothing.
+
+    $enter->update_only_inbeam( my $only_inbeam = 1 );
 
 =item B<verbosity>
 
@@ -1013,23 +1038,6 @@ sub skip_state_setting {
 
   $self->{ $store } = !! $_[0];
   return;
-}
-
-=item B<update_only_obstime>
-
-Returns a truth value to inidicate if to update only the times for an
-observattion run.
-
-  print "Only date obs & end will be updated"
-    if $enter->update_only_obstime();
-
-=cut
-
-sub update_only_obstime {
-
-  my ( $self) = @_;
-
-  return $self->{'obstime-only'};
 }
 
 sub _filter_header {
