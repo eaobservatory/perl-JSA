@@ -152,11 +152,10 @@ BEGIN {
             'instruments',
             # Need to check for an array ref.
             'files',
-            # Need to check for an array ref.
-            'files',
           )
+          ||
       # Need to turn off the other if one is true.
-      or $k =~ m/^ force-d(?: isk | b ) $/x
+      $k =~ m/^ force-d(?: isk | b ) $/x
       ;
 
     {
