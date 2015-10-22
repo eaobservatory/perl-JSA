@@ -2,12 +2,12 @@ package JSA::EnterData;
 
 =head1 NAME
 
-JAS::EnterData - Parse headers and store in database
+JSA::EnterData - Parse headers and store in database
 
 =head1 SYNOPSIS
 
   # Create new object, with specific header dictionary.
-  my $enter = JAS::EnterData
+  my $enter = JSA::EnterData
               ->new( 'dict' => '/path/to/dict' );
 
   # Do not actually insert into database.
@@ -28,7 +28,7 @@ JAS::EnterData - Parse headers and store in database
 
 =head1 DESCRIPTION
 
-JAS::EnterData is a object oriented module to provide back end support
+JSA::EnterData is a object oriented module to provide back end support
 to load data to CADC.
 
 Reads the headers of all data from either the current date or the
@@ -126,7 +126,7 @@ BEGIN {
       # very verbose.
       'debug' => 0,
 
-      # Force procssing of simulation if true.
+      # Force processing of simulation if true.
       'process_simulation' => 0,
 
       # Update only an observation run time.
@@ -438,7 +438,7 @@ if to avoid database to fetch raw file paths to ingest.
   print "Getting paths from database"
     unless $enter->path_not_from_db();
 
-Else, sets the truth value to inidicate to access database.
+Else, sets the truth value to indicate to access database.
 
   # Avoid database access.
   $enter->path_not_from_db( 1 );
@@ -469,7 +469,7 @@ table.
 
 =item B<update_only_obstime>
 
-Returns a truth value to inidicate if to update only the times for an
+Returns a truth value to indicate if to update only the times for an
 observation run if no arguments given.
 
   print "Only date obs & end will be updated"
@@ -482,7 +482,7 @@ returns nothing.
 
 =item B<update_only_inbeam>
 
-Returns a truth value to inidicate if to update only the C<INBEAM> header
+Returns a truth value to indicate if to update only the C<INBEAM> header
 values if no arguments given.
 
   print "Only INBEAM values will be updated"
@@ -1186,7 +1186,7 @@ sub _get_obs_group {
 
     unless ( -r $file && -s _ ) {
 
-      my $ignored = 'Unreadble or empty file';
+      my $ignored = 'Unreadable or empty file';
 
       $self->skip_state_setting()
         or $xfer->add_ignored( [ $base ], $ignored );
@@ -1269,17 +1269,17 @@ sub _get_files_from_db {
 
 =item B<skip_obs>
 
-Returs a truth value indicating if an observation is a simulation run,
+Returns a truth value indicating if an observation is a simulation run,
 or for which RA/Dec cannot be calculated. It accepts an
 L<OMP::Info::Obs> object.  If optional header hash reference (see
-L<OMP::Info::Obs/hdrhash>) is not given, it will be retreived from the
+L<OMP::Info::Obs/hdrhash>) is not given, it will be retrieved from the
 given L<OMP::Info::Obs> object.
 
   $skip = $enter->skip_obs( $inst, $obs );
 
   $skip = $enter->skip_obs( $inst, $obs, $header );
 
-C<JSA::Error> execption is thrown if header hash (reference) is
+C<JSA::Error> exception is thrown if header hash (reference) is
 undefined.
 
 =cut
@@ -1799,7 +1799,7 @@ sub _make_insert_select_sql {
 
 =item B<_fill_in_sql>
 
-Returns a given format string substitued with given row values (as an
+Returns a given format string substituted with given row values (as an
 array reference), in addition to a valid database handle, table name,
 and column names (as an array reference) in a hash.
 
@@ -2126,7 +2126,7 @@ sub prepare_update_hash {
 
       if (looks_like_number($new)) {
 
-        # Overide range check for tau values as there is no relation between start
+        # Override range check for tau values as there is no relation between start
         # & end values; these are weather dependent.
         if ( $key =~ $tau_val && $new != $old ) {
 
@@ -2568,7 +2568,7 @@ sub fill_headers_FILES {
 
 =item B<munge_header_INBEAM>
 
-Given a header hash reference, removes all the I<INBEAM> header occurances
+Given a header hash reference, removes all the I<INBEAM> header occurrences
 which have C<SHUTTER>; combines any remaining header values (in subheaders) in a
 space separated list. Returns a possibly changed header hash reference.
 
@@ -2905,7 +2905,7 @@ sub calc_radec {
 
   my $log = Log::Log4perl->get_logger( '' );
 
-  # Filenames for a subsystem
+  # File names for a subsystem
   my @filenames = $obs->filename;
 
   my $temp = File::Temp->new( 'template' => _file_template( 'radec' ) );
@@ -3338,9 +3338,9 @@ sub _combined_prepare_insert_hash {
 Returns a list of header values or a truth value, given a hash with
 I<headers> and I<name> as the required keys. Respective hash values
 are a header hash reference and header name to search for.  B<Default>
-behaviour is to B<return a truh value if the given header exists>.
+behaviour is to B<return a truth value if the given header exists>.
 Returns nothing if the header is missing or specified test fails.
-C<SUBEHEADERS> are also searched along with the main header hash.
+C<SUBHEADERS> are also searched along with the main header hash.
 
   print 'OBSEND header exists'
     if $enter->_find_header( 'headers' => $hdrhash,
@@ -3619,7 +3619,7 @@ object cannot be created.
 
   die _dataverify_obj_fail_text( $obs );
 
-Optionaly accepts a string to be printed before observation summary (see
+Optionally accepts a string to be printed before observation summary (see
 L<OMP::Info::Obs>). It also accepts an optional integer for that many space of
 indent.
 
