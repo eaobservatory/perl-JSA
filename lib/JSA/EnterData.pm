@@ -133,9 +133,6 @@ BEGIN {
       'update-only-obstime' => 0,
 
       'update-only-inbeam' => 0,
-
-      # To avoid getting file paths with 'f'ound state from database.
-      'path-not-from-db' => 0
     );
 
   #  Generate some accessor functions.
@@ -429,18 +426,6 @@ sub force_disk {
   return;
 }
 
-=item B<path_not_from_db>
-
-When called without a truth value, returns a truth value to indicate
-if to avoid database to fetch raw file paths to ingest.
-
-  print "Getting paths from database"
-    unless $enter->path_not_from_db();
-
-Else, sets the truth value to indicate to access database.
-
-  # Avoid database access.
-  $enter->path_not_from_db( 1 );
 
 =item B<load_header_db>
 
@@ -1250,21 +1235,6 @@ sub _get_obs_group {
     OMP::Info::ObsGroup->new( 'obs' => [ @obs ] );
 }
 
-sub _get_files_from_db {
-
-  my ( $self ) = @_;
-
-  return if $self->path_not_from_db();
-
-  my $xfer = $self->_get_xfer_unconnected_dbh();
-  my $tmp  = $xfer->get_found_files();
-
-  # Merge any new & old file in one list.
-  $self->files( [ map {  $_ && ref $_ ? @{ $_ } : () } $tmp, $self->files() ] )
-    if $tmp && scalar @{ $tmp };
-
-  return;
-}
 
 =item B<skip_obs>
 
