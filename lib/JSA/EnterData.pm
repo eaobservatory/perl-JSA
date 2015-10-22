@@ -142,21 +142,21 @@ BEGIN {
   for my $k ( keys %default, qw[ conditional_insert ] ) {
 
     next
-      if any { $k eq $_ }
-          (
-            # Must be given in constructor.
-            'dict',
-            # Special handling when date to set is given.
-            'date',
-            # Validate instruments before setting.
-            'instruments',
-            # Need to check for an array ref.
-            'files',
+      if ( any { $k eq $_ }
+            ( # Must be given in constructor.
+              'dict',
+              # Special handling when date to set is given.
+              'date',
+              # Validate instruments before setting.
+              'instruments',
+              # Need to check for an array ref.
+              'files',
+            )
           )
           ||
-      # Need to turn off the other if one is true.
-      $k =~ m/^ force-d(?: isk | b ) $/x
-      ;
+          # Need to turn off the other if one is true.
+          $k =~ m/^ force-d(?: isk | b ) $/x
+          ;
 
     {
       (my $sub = $k ) =~ tr/-/_/;
