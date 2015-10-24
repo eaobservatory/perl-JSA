@@ -2891,6 +2891,9 @@ sub calc_radec {
                         or return;
 
   # Get the bounds
+  my @corner     = qw[ TL BR TR BL ];
+  my %par_corner = map {; $_ => 'F' . $_ } @corner;
+
   my %result =
     ( 'REFLAT' => undef,
       'REFLON' => undef,
@@ -2898,19 +2901,34 @@ sub calc_radec {
 
   my $prog = _basename( $command[0] );
 
-  for my $k ( qw/ FTL FBR FTR FBL /) {
+  for my $k ( sort values %par_corner ) {
 
     my $res = qx{ /star/bin/kappa/parget $k $prog };
+
+    # Rarely happens but when it does, produces warnings about operations on
+    # undef values.
+    # XXX Need to ask if it is important enough to log.
+    unless ( $res ) {
+
+      $log->logwarn( qq[No value found for "parget $k $prog" after successful run of "$prog"!] );
+      # XXX return from sub instead?
+      next;
+    }
+
     $res =~ s/^\s+//;
     $res =~ s/\s+$//;
     $result{$k} = [ map {Astro::Coords::Angle->new( $_, units => 'rad') } split(/\s+/,$res) ];
   }
 
-  for my $corner (qw/ tl br tr bl / ) {
+  for my $corner ( @corner ) {
 
-    my $parkey = "F".uc($corner);
-    $headerref->{"obsra$corner"} = $result{$parkey}->[0]->degrees;
-    $headerref->{"obsdec$corner"} = $result{$parkey}->[1]->degrees;
+    my $parkey = $par_corner{ $corner };
+    my $radec  = exists $result{ $parkey } ? $result{ $parkey } : undef;
+    defined $radec or next;
+
+    my $alt = lc $corner;
+    $headerref->{"obsra$alt"} = $radec->[0]->degrees;
+    $headerref->{"obsdec$alt"} = $radec->[1]->degrees;
   }
 
   # and the base position (easier to just ask SMURF rather than opening the file) but
