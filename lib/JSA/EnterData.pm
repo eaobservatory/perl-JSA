@@ -2894,10 +2894,9 @@ sub calc_radec {
   my @corner     = qw[ TL BR TR BL ];
   my %par_corner = map {; $_ => 'F' . $_ } @corner;
 
-  my %result =
-    ( 'REFLAT' => undef,
-      'REFLON' => undef,
-    );
+  my %result = (  'REFLAT' => undef,
+                  'REFLON' => undef,
+                );
 
   my $prog = _basename( $command[0] );
 
@@ -2927,7 +2926,7 @@ sub calc_radec {
     defined $radec or next;
 
     my $alt = lc $corner;
-    $headerref->{"obsra$alt"} = $radec->[0]->degrees;
+    $headerref->{"obsra$alt"}  = $radec->[0]->degrees;
     $headerref->{"obsdec$alt"} = $radec->[1]->degrees;
   }
 
@@ -2938,9 +2937,9 @@ sub calc_radec {
 
   my $tracksys =
     $self->_find_header( 'headers' => $headerref,
-                          'name' => 'TRACKSYS',
-                          'value' => 1,
-                          'test' => 'true',
+                          'name'   => 'TRACKSYS',
+                          'value'  => 1,
+                          'test'   => 'true',
                         );
 
   my %state;
@@ -2973,11 +2972,11 @@ sub calc_radec {
 
     # convert to radians
     $result{REFLON} = Astro::Coords::Angle::Hour->new( $result{REFLON}, units => 'sex', range => '2PI' )->degrees;
-    $result{REFLAT} = Astro::Coords::Angle->new( $result{REFLAT}, units => 'sex', range => 'PI' )->degrees;
+    $result{REFLAT} = Astro::Coords::Angle->new( $result{REFLAT}      , units => 'sex', range => 'PI'  )->degrees;
 
   }
 
-  $headerref->{obsra} = $result{REFLON};
+  $headerref->{obsra}  = $result{REFLON};
   $headerref->{obsdec} = $result{REFLAT};
 
   return 1;
