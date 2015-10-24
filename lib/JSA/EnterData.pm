@@ -581,8 +581,8 @@ I<insert_observations> method) for a date (see also I<date> method) or
 given list of files (see I<files> method).
 
 Date can be given to the method, or can be set via I<new()> or
-I<date()> method.  Current date is used if no date has been explicitly
-set.  File paths are fetched from database unless otherwise specified.
+I<date()> method. Current date is used if no date has been explicitly
+set.
 
   # Insert either for the set or current date; ignores given files if
   # any; disk is searched.
@@ -596,16 +596,6 @@ set.  File paths are fetched from database unless otherwise specified.
   # there is no reason to.
   $enter->prepare_and_insert( 'given-files' => 1 );
 
-  # Insert for a set or current date & gets file paths from database
-  # for the date; ignores given files.
-  $enter->prepare_and_insert( 'skip-db-path' => 0 );
-
-  # Insert for Jun 25 2008 & gets file paths from database for the
-  # date (disk is not searched); ignores given files.
-  $enter->prepare_and_insert( 'date' => '20080625',
-                              'skip-db-path' => 0
-                              );
-
 =cut
 
 {
@@ -616,17 +606,15 @@ set.  File paths are fetched from database unless otherwise specified.
 
     my ( $self, %arg ) = @_;
 
-    my $key_db_path  = 'skip-db-path';
     my $key_use_list = 'given-files';
 
-    my ( $date, $db_path, $use_list ) =
-      @arg{( 'date', $key_db_path, $key_use_list )};
+    my ( $date, $use_list ) =
+      @arg{( 'date', $key_use_list )};
 
     # Format date first before getting it back.
     $self->date( $date ) if defined $date ;
     $date = $self->date;
 
-    $arg{ $key_db_path }  = 1 unless defined $db_path;
     $arg{ $key_use_list } = 0 unless defined $use_list;
 
     if ( defined $old_date && $date->ymd ne $old_date->ymd ) {
@@ -670,7 +658,7 @@ set.  File paths are fetched from database unless otherwise specified.
                                       'date' => $date,
                                       map
                                       { ( $_ => $arg{ $_ } ) }
-                                      ( $key_db_path, $key_use_list )
+                                      ( $key_use_list )
                                     );
 
       next
