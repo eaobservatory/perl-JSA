@@ -303,6 +303,7 @@ Tell if an observation is FTS-2 or POL-2 type by recipe.
                                               REDUCE_FTS_POINTING
                                               REDUCE_FTS_SCAN
                                               REDUCE_FTS_ZPD
+                                              REDUCE_POL_SCAN
                                               REDUCE_POL_STARE
                                               REDUCE_DREAMSTARE
                                             );
