@@ -1967,7 +1967,7 @@ sub prepare_update_hash {
     my @unique_val =
       map $row->{ $_ }, @unique_key;
 
-    $self->_debug_text( \@unique_key , \@unique_val );
+    $self->_show_debug( \@unique_key , \@unique_val );
 
     my $ref = $dbh->selectall_arrayref( $sql, { Columns=>{} }, @unique_val )
       or $log->logdie( "Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n" );
@@ -2014,7 +2014,7 @@ sub prepare_update_hash {
     for my $key ( sort keys %{$indb} ) {
 
       $self->verbosity() > 1
-        and $self->_debug_text( qq[testing field: $key] );
+        and $self->_show_debug( qq[testing field: $key] );
 
       next
         # since that will update automatically
@@ -2026,7 +2026,7 @@ sub prepare_update_hash {
 
       next if ! ( defined $old || defined $new );
 
-      $self->verbosity() and $self->_debug_text( qq[continuing with $key] );
+      $self->verbosity() and $self->_show_debug( qq[continuing with $key] );
 
       my %test =
         ( 'start' => exists $start{ $key },
@@ -2050,7 +2050,7 @@ sub prepare_update_hash {
       if ( defined $new && ! defined $old ) {
 
         $differ{$key} = $new;
-        $self->_debug_text( qq[$key = ] . $new );
+        $self->_show_debug( qq[$key = ] . $new );
         next;
       }
 
@@ -2059,7 +2059,7 @@ sub prepare_update_hash {
       if ( ! defined $new && defined $old) {
 
         $differ{$key} = undef;
-        $self->_debug_text( qq[$key = ] . '<undef>' );
+        $self->_show_debug( qq[$key = ] . '<undef>' );
         next;
       }
 
@@ -2071,13 +2071,13 @@ sub prepare_update_hash {
           $new = _find_extreme_value( %test,
                                       'new>old' => _compare_dates( $new, $old )
                                     );
-          $self->_debug_text( qq[  possible new value for $key = ] . $new );
+          $self->_show_debug( qq[  possible new value for $key = ] . $new );
         }
 
         if ( $new ne $old ) {
 
           $differ{ $key } = $new;
-          $self->_debug_text( qq[$key = ] . $new );
+          $self->_show_debug( qq[$key = ] . $new );
         }
 
         next;
@@ -2090,7 +2090,7 @@ sub prepare_update_hash {
         if ( $key =~ $tau_val && $new != $old ) {
 
           $differ{$key} = $new;
-          $self->_debug_text( qq[$key = ] . $new );
+          $self->_show_debug( qq[$key = ] . $new );
         }
         elsif ( $in_range ) {
 
@@ -2099,7 +2099,7 @@ sub prepare_update_hash {
           if ( $new != $old ) {
 
             $differ{ $key } = $new if $new != $old;
-            $self->_debug_text( qq[$key = ] . $new );
+            $self->_show_debug( qq[$key = ] . $new );
           }
         }
         else {
@@ -2111,13 +2111,13 @@ sub prepare_update_hash {
             if ($diff > 0.000001) {
 
               $differ{$key} = $new;
-              $self->_debug_text( qq[$key = ] . $new );
+              $self->_show_debug( qq[$key = ] . $new );
             }
           }
           elsif ( $new != $old ) {
 
             $differ{$key} = $new;
-            $self->_debug_text( qq[$key = ] . $new );
+            $self->_show_debug( qq[$key = ] . $new );
           }
         }
 
@@ -2128,11 +2128,11 @@ sub prepare_update_hash {
       if ( $new ne $old ) {
 
         $differ{ $key } = $new;
-        $self->_debug_text( qq[$key = ] . $new );
+        $self->_show_debug( qq[$key = ] . $new );
       }
     }
 
-    $self->_debug_text( qq[differences to update: ] . keys %differ );
+    $self->_show_debug( qq[differences to update: ] . keys %differ );
 
     push @update_hash,
             { 'differ' => { %differ },
@@ -2217,8 +2217,10 @@ sub update_hash {
           $_,
           ( !$self->debug && $self->load_header_db
               ? q[ ? ]
-              : # debug version with unquoted values
-                ( 'DEBUG: need to be reimplemented.' )
+              : # debug version with unquoted values.
+                # XXX should show the change per value instead of repeating the
+                #     whole set of change for each header/column.
+                $self->_debug_text( $change )
           );
       }
       @sorted;
@@ -2658,6 +2660,9 @@ sub extract_column_headers {
   my ( $hdrhash, $table, $columns, $dict ) =
     map { $args{ $_ } } qw[ headers table columns dict ];
 
+  $self->_print_text( ">Processing table: $table\n" )
+    if $self->debug;
+
   my %values;
 
   for my $header (sort { lc $a cmp lc $b } keys %$hdrhash) {
@@ -2675,12 +2680,14 @@ sub extract_column_headers {
       my $alias = $dict->{ $alt_head };
       $values{$alias} = $hdrhash->{$header};
 
-      $self->_print_text( "Mapped header [$header] to column [$alias]\n" )
+      $self->_print_text( "  MAPPED header [$header] to column [$alias]\n" )
         if $self->debug;
     }
 
-    $self->_print_text( "Could not find alias for header [$header].  Skipped.\n" )
-      if $self->debug and ! exists $values{ $alt_head };
+    $self->_print_text( "  Could not find alias for header [$header].  Skipped.\n" )
+      if $self->debug
+      && $self->verbosity > 1
+      && ! exists $values{ $alt_head };
   }
 
   return \%values;
@@ -2806,7 +2813,7 @@ sub skip_obs_calc {
                         )
                         or next;
 
-    $self->_debug_text( qq[Matched "$name" with $test{ $name }; obs may be skipped.] );
+    $self->_show_debug( qq[Matched "$name" with $test{ $name }; obs may be skipped.] );
     return 1;
   }
 
@@ -3721,6 +3728,17 @@ sub _print_text {
   return;
 }
 
+sub _show_debug {
+
+  my ( $self, @text ) = @_;
+
+  my $text = $self->_debug_text( @text )
+    or return ;
+
+  print $text ;
+  return;
+}
+
 sub _debug_text {
 
   my ( $self, @text ) = @_;
@@ -3728,15 +3746,6 @@ sub _debug_text {
   $self->debug() && scalar @text
     or return;
 
-  my %show_ref =
-    ( 'SCALAR' => sub { ${ $_[0] } // '<undef>' },
-      'ARRAY'  => sub { join ', ' , map $_ // '<undef>' , @{ $_[0] } },
-      'HASH'   => sub { join '; ',
-                          map
-                          join( ': ', $_ // '<undef>' , $_[0]->{ $_} // '<undef>' ),
-                          keys %{ $_[0] }
-                      }
-    );
   my @data;
   for my $t ( @text ) {
 
@@ -3745,26 +3754,20 @@ sub _debug_text {
       push @data, '<undef>';
       next;
     }
-    if ( Scalar::Util::blessed( $t ) ) {
+    if ( Scalar::Util::blessed( $t )
+          || ref $t
+        ) {
 
       require Data::Dumper;
       push @data, Data::Dumper->Dump( $t );
       next;
     }
-    if ( ref $t eq 'SCALAR'
-          || ref $t eq 'ARRAY'
-          || ref $t eq 'HASH'
-        ) {
-
-      push @data, $show_ref{ ref $t }->( $t );
-      next;
-    }
     push @data, $t;
   }
 
-  print join "\n", @data;
-  $text[-1] =~ m{\n$}s or print "\n";
-  return;
+  $text[-1] =~ m{\n$}s or $data[-1] .= "\n" ;
+
+  return join "\n" , @data ;
 }
 
 # JSA::DB::TableTransfer object, to be created as needed.
