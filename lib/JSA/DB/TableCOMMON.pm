@@ -28,7 +28,7 @@ sub column_names {
         obsgeo_z obsid obsnum obsra obsrabl obsrabr obsratl obsratr obs_type
         ocscfg origin
         pol_conn pol_mode project
-        recipe release_date rmtagent rotafreq
+        recipe release_date req_mintau req_maxtau rmtagent rotafreq
         sam_mode scan_crd scan_dy scan_pa scan_pat scan_vel seedaten seedatst
         seeingen seeingst standard startidx status steptime survey sw_mode
         tau225en tau225st taudaten taudatst tausrc telescop
@@ -61,6 +61,7 @@ sub range_start_columns {
         frlegtst
         hststart humstart
         msstart
+        req_mintau
         seedatst seeingst seqstart
         tau225st taudatst
         wnddirst wndspdst wvmdatst wvmtaust
@@ -78,6 +79,7 @@ sub range_end_columns {
         frlegten
         hstend humend
         msend
+        req_maxtau
         seedaten seeingen seqend
         tau225en taudaten
         wnddiren wndspden wvmdaten wvmtauen
