@@ -110,11 +110,10 @@ sub try_command
 
   my $cmd_run = join ' ', @com;
 
-  $self->verbose()
-    and print qq[# Command to be run: $cmd_run\n];
+  my $log = Log::Log4perl->get_logger( '' );
+  $log->debug( qq[# Command to be run: $cmd_run\n] );
 
   my ( $stdout, $stderr, $rc );
-  my $log = Log::Log4perl->get_logger( '' );
   try {
 
     ( $stdout, $stderr, $rc ) =
