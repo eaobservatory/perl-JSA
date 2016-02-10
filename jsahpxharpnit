@@ -149,15 +149,14 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       next;
     }
 
-    # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
-    # ACSIS and the DAS.
-    unless (
-                ( $instrume eq 'SCUBA-2' &&
-                      ( $obstype eq 'SCIENCE' ||
-                        $obstype eq 'POINTING' ) ) ||
-                ( $backend eq 'ACSIS' && $obstype eq 'SCIENCE' ) ||
-                ( $backend eq 'DAS'   && $obstype eq 'SCIENCE' )
-           ) {
+    # Skip E&C observations.
+    if ( $hdr->{'PROJECT'} =~ /EC/i ) {
+      log_message("Observation is from an E&C project so skipping for HPX nit processing\n");
+      next;
+    }
+
+    # We process SCIENCE for ACSIS.
+    unless ( $backend eq 'ACSIS' && $obstype eq 'SCIENCE' ) {
       next;
     }
 
