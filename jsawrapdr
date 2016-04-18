@@ -229,9 +229,7 @@ pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
 if ($version) {
-  my $rev = '$Id: racover.pl 14421 2007-09-05 02:37:29Z agarwal $ ';
   print "jsawrapdr - CADC compliant wrapper for JSA data processing\n";
-  print " Source code revision: $rev\n";
   exit;
 }
 

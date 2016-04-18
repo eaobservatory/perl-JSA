@@ -283,9 +283,7 @@ use Error;
 use warnings;
 use strict;
 
-use vars qw/$VERSION/;
-
-'$Revision: 11161 $ ' =~ /.*:\s(.*)\s\$/ && ($VERSION = $1);
+our $version = '0.03';
 
 # flush method added to the base class
 use base qw/ Error::Simple /;
