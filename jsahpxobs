@@ -254,15 +254,15 @@ if( scalar( @{$grp->obs} ) == 0 ) {
         unless defined $obsidss;
 
       if (exists $JUNK_OBSIDSS{$obsidss}) {
-	log_message( "Subsystem $obsidss will not be processed in any way\n");
-	next;
+        log_message( "Subsystem $obsidss will not be processed in any way\n");
+        next;
       }
 
       my $subsyshdr = $subsys->hdrhash;
 
       if ((defined $filter) and ($filter ne $subsyshdr->{'FILTER'})) {
-	log_message( "Subsystem $obsidss skipped due to filter selection\n");
-	next;
+        log_message( "Subsystem $obsidss skipped due to filter selection\n");
+        next;
       }
 
       # Get all the files, stripped of path

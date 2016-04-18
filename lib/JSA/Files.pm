@@ -46,10 +46,10 @@ our $DEBUG = 0;
 # List of support product types as found in ASN_TYPE FITS header
 # along with corresponding names found in filenames.
 my %PRODUCT_TYPES = (
-	     night => 'nit',
-	     public => 'pub',
-	     obs => 'obs',
-	     project => 'pro',
+        night => 'nit',
+        public => 'pub',
+        obs => 'obs',
+        project => 'pro',
 );
 
 # invert it

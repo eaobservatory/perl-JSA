@@ -198,8 +198,8 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       my %obsidss_current = %current;
 
       if (exists $JUNK_OBSIDSS{$obsidss}) {
-	log_message( "Subsystem $obsidss will not be processed in any way\n");
-	next;
+        log_message( "Subsystem $obsidss will not be processed in any way\n");
+        next;
       }
 
       my $subsyshdr = $subsys->hdrhash;
@@ -212,7 +212,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       # of observations, but we only want jsawrapdr to save the obs products.
 
       assign_to_group( $instrume, $subsys->obsid, $frameclass, undef,
-		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
+                       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
                        'hpx-tmp', $task, $obsinfo, 1, 'obs' );
     }
   }

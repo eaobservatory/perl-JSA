@@ -267,15 +267,15 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       my %obsidss_current = %current;
 
       if (exists $JUNK_OBSIDSS{$obsidss}) {
-	log_message( "Subsystem $obsidss will not be processed in any way\n");
-	next;
+        log_message( "Subsystem $obsidss will not be processed in any way\n");
+        next;
       }
 
       if (exists $BAD_OBSIDSS{$obsidss}) {
-	log_message( "Subsystem $obsidss should not be included in group processing\n" );
-	next if $mode ne "night";
-	$obsidss_not_in_group = 1;
-	$obsidss_current{mode} = "obs";
+        log_message( "Subsystem $obsidss should not be included in group processing\n" );
+        next if $mode ne "night";
+        $obsidss_not_in_group = 1;
+        $obsidss_current{mode} = "obs";
       }
 
       my $subsyshdr = $subsys->hdrhash;
@@ -283,7 +283,7 @@ if( scalar( @{$grp->obs} ) == 0 ) {
       adjust_header_freq($subsyshdr);
 
       assign_to_group( $instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
-		       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
+                       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
                        undef, $task, create_obsinfo_hash($obs, $subsyshdr), 0, undef );
     }
   }

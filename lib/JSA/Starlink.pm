@@ -95,20 +95,20 @@ sub check_star_env {
 
     # if that envrinment variable exists and the directory exists we are okay
     if (exists $ENV{$env} && -d $ENV{$env}) {
-	# everything is okay
+        # everything is okay
     } else {
-	# Try to find the requested directory.
-	my $dir = $appname;
-	$dir =~ s/_dir$//i;
-	$dir = lc( $dir );
+        # Try to find the requested directory.
+        my $dir = $appname;
+        $dir =~ s/_dir$//i;
+        $dir = lc( $dir );
 
-	my $testdir = File::Spec->catfile($StarConfig{"Star_Bin"}, $dir);
+        my $testdir = File::Spec->catfile($StarConfig{"Star_Bin"}, $dir);
 
-	throw JSA::Error::BadEnv("$dir directory could not be found in Starlink software directory tree." )
-	    unless -d $testdir;
+        throw JSA::Error::BadEnv("$dir directory could not be found in Starlink software directory tree." )
+            unless -d $testdir;
 
-	# if we get here then that directory is okay so set the environment
-	$ENV{$env} = $testdir;
+        # if we get here then that directory is okay so set the environment
+        $ENV{$env} = $testdir;
     }
 
     # check for the command

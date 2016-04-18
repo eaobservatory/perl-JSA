@@ -368,7 +368,7 @@ sub write_log_file {
   if (-d $logdir) {
     if (open( my $logfh, ">", $outfile ) ) {
       for my $msg (all_messages()) {
-	print $logfh $msg;
+        print $logfh $msg;
       }
       close $logfh;
     }

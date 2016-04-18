@@ -30,7 +30,7 @@ JSA::Error - Exception handling in an object orientated manner.
     {
         # its a fatal error
         my $Error = shift;
-     	  orac_exit_normally($Error);
+        orac_exit_normally($Error);
     }
     otherwise 
     {
@@ -113,10 +113,10 @@ initialized with the arguments that are passed to it's
 constructor. The elements that are used by, or are retrievable by the
 C<JSA::Error> class are listed below, other classes may add to these.
 
-	-file
-	-line
-	-text
-	-value
+    -file
+    -line
+    -text
+    -value
 
 If C<-file> or C<-line> are not specified in the constructor arguments
 then these will be initialized with the file name and line number
@@ -148,7 +148,7 @@ Create a new C<JSA::Error> object and returns it. This is defined for
 syntactic sugar, eg
 
     record JSA::Error::AuthenticationFail ( $message, JSA__ABORT )
-	and return;
+        and return;
 
 =back
 
