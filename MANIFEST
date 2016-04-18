@@ -1,5 +1,4 @@
 Build.PL
-cadc_drcopy.pl
 convert_dr_files
 dpCapture
 dpRetrieve
