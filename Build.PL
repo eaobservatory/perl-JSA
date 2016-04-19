@@ -36,7 +36,7 @@ my $build = Module::Build->new
    dist_version => '0.03',
    script_files => [ qw/
                          dpRetrieve jsawrapdr dpCapture convert_dr_files jsasubmit manual_submit
-                         jsaerrors jsahpxobs jsahpxharpnit
+                         jsahpxobs jsahpxharpnit
                        / ],
    meta_merge => {
                resources =>  {
