@@ -356,7 +356,7 @@ unless ($skipdp) {
     # dpRetrieve has fetched.
     my %existing_files = scan_dir();
 
-    retrieve_data($id, $inputs, 1);
+    retrieve_data($inputs, 1);
 
     # Check for gzipped SDF files.
     my %gzipped_sdf = scan_dir(qr/\.sdf\.gz$/);
@@ -557,7 +557,7 @@ if ($cleanup eq 'cadc') {
 
 log_listing('post-cleanup', '.') if $debugxfer;
 
-capture_products($id, $persist, $transdir, 'JCMT', 0);
+capture_products($persist, $transdir, 0);
 
 log_listing('transdir', $transdir) if $transdir && $debugxfer;
 

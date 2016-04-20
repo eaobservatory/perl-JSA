@@ -63,10 +63,9 @@ in the path.
 =cut
 
 sub retrieve_data {
-    my ($id, $inputs, $show_output) = @_;
+    my ($inputs, $show_output) = @_;
 
     my ($dprstdout, $dprstderr, $extat) = run_command("dpRetrieve",
-                                                      "--id=$id",
                                                       "--inputs=$inputs");
 
     log_command("dpRetrieve", $dprstdout, $dprstderr) if $show_output;
@@ -218,7 +217,7 @@ Call dpCapture with the correct arguments.
 =cut
 
 sub capture_products {
-    my ($id, $persist, $transdir, $archive, $show_output) = @_;
+    my ($persist, $transdir, $show_output) = @_;
 
     my @args;
     if ($persist) {
@@ -229,11 +228,9 @@ sub capture_products {
         push @args, "--transdir", $transdir;
     }
 
-    push @args, '--archive=' . $archive;
+    log_message("\n*** calling dpCapture " . ( join " ", @args ) . "\n");
 
-    log_message("\n*** calling dpCapture --id=$id " . ( join " ", @args ) . "\n");
-
-    my ($dpcstdout, $dpcstderr, $dpcstatus) = run_command("dpCapture", "--id=$id", @args);
+    my ($dpcstdout, $dpcstderr, $dpcstatus) = run_command("dpCapture", @args);
 
     log_command("dpCapture", $dpcstdout, $dpcstderr) if $show_output;
 }
