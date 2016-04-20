@@ -281,7 +281,7 @@ else {
     }
 
     # Add the jobs to the local JSA processing system.
-    add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $only_info, $debug);
+    add_jsa_proc_jobs(\%groups, $mode, $priority, $only_info, $debug);
 }
 
 write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $debug;

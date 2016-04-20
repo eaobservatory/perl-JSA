@@ -219,7 +219,7 @@ else {
         }
     }
 
-    add_jsa_proc_jobs(\%groups, {}, 'obs', $priority, $only_info, $debug);
+    add_jsa_proc_jobs(\%groups, 'obs', $priority, $only_info, $debug);
 }
 
 write_log_file('jsasubmit-hpx-harp-nit', $ut, $project) unless $debug;
