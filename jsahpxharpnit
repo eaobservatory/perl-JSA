@@ -78,7 +78,7 @@ use warnings;
 use JSA::Submission qw/
     %JUNK_OBSIDSS
     adjust_header adjust_header_freq assign_to_group
-    determine_frame_class determine_resource_requirement
+    determine_frame_class
     echo_messages find_observations get_obsidss
     log_message
     prepare_archive_db send_log_email
@@ -179,7 +179,6 @@ else {
         # Prepare the group as if it is night mode, because we need
         # assign_to_group to generate a night-style association ID.
         $current{'mode'} = 'night';
-        $current{'dprecipe'} = determine_resource_requirement($obs);
 
         # All observations are processed with the same recipe.
         $current{'drparams'} = 'REDUCE_SCIENCE_LEGACY';

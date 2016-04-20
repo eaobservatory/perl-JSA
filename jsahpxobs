@@ -88,7 +88,6 @@ use warnings;
 
 use JSA::Submission qw/
     %JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
-    determine_resource_requirement
     echo_messages find_observations log_message
     prepare_archive_db send_log_email
     write_log_file/;
@@ -222,8 +221,6 @@ else {
             next;
         }
 
-        $current{'dprecipe'} = determine_resource_requirement($obs);
-
         # All observations are processed with the same recipe
         # which has hard-wired parameters. No special tweaking because
         # we know that it is a calibrator or a blank field
@@ -266,7 +263,6 @@ else {
             my %group = (
                 files => \@files,
                 mode => 'obs',
-                dprecipe => $current{'dprecipe'},
                 obsinfolist => [$obsinfo],
                 task => $task,
             );

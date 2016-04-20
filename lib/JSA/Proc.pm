@@ -42,10 +42,6 @@ DR parameters.
 
 Mode to use for processing.
 
-=item dprecipe
-
-DP recipe to use for this group.
-
 =back
 
 If the C<$add_info_only> option is set then instead of adding jobs, observation

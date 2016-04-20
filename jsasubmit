@@ -82,7 +82,7 @@ use JSA::CADC_Copy;
 use JSA::Submission qw/
     %DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
     adjust_header adjust_header_freq assign_to_group
-    determine_frame_class determine_resource_requirement
+    determine_frame_class
     echo_messages find_observations get_obsidss
     log_message obs_is_fts2_or_pol2_RECIPE
     prepare_archive_db send_log_email
@@ -218,8 +218,6 @@ else {
                 next;
             }
         }
-
-        $current{'dprecipe'} = determine_resource_requirement($obs);
 
         # Set up recipe parameters and recipe overrides.
         # We only do this for non-calibrator science observations

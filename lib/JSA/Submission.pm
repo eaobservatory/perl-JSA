@@ -272,16 +272,6 @@ sub assign_to_group {
     $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
     $groups->{$group}{'task'} = $task;
     push @{$groups->{$group}{'obsinfolist'}}, $obsinfo;
-    # Only set if either we have no previous value for dprecipe or if the
-    # previous value is lower than the current value (so this observation
-    # needs more resources than a previous group member)
-    if (defined $current{dprecipe}) {
-        if (! exists $groups->{$group}{dprecipe}
-              || (exists $groups->{$group}{dprecipe}
-                  && $groups->{$group}{dprecipe} < $current{dprecipe})) {
-            $groups->{$group}{dprecipe} = $current{dprecipe};
-        }
-    }
 
     return $group;
 }
