@@ -11,7 +11,7 @@ build_requires:
 configure_requires:
   Module::Build: 0.3
 dynamic_config: 1
-generated_by: 'Module::Build version 0.4007, CPAN::Meta::Converter version 2.120630'
+generated_by: 'Module::Build version 0.4003, CPAN::Meta::Converter version 2.120921'
 license: open_source
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -20,9 +20,6 @@ name: JSA
 provides:
   JSA::CADC_Copy:
     file: lib/JSA/CADC_Copy.pm
-    version: 0
-  JSA::CADC_DP:
-    file: lib/JSA/CADC_DP.pm
     version: 0
   JSA::Command:
     file: lib/JSA/Command.pm
@@ -54,6 +51,9 @@ provides:
   JSA::EnterData::ACSIS:
     file: lib/JSA/EnterData/ACSIS.pm
     version: 0
+  JSA::EnterData::Assoc:
+    file: lib/JSA/EnterData/Assoc.pm
+    version: 0.01
   JSA::EnterData::DAS:
     file: lib/JSA/EnterData/DAS.pm
     version: 0
@@ -63,9 +63,15 @@ provides:
   JSA::EnterData::SCUBA2:
     file: lib/JSA/EnterData/SCUBA2.pm
     version: 0
+  JSA::EnterData::StarCommand:
+    file: lib/JSA/EnterData/StarCommand.pm
+    version: 0.03
+  JSA::EnterData::TileList:
+    file: lib/JSA/EnterData/TileList.pm
+    version: 0.02
   JSA::Error:
     file: lib/JSA/Error.pm
-    version: 11161
+    version: 0
   JSA::Error::BadArgs:
     file: lib/JSA/Error.pm
     version: 0
@@ -114,6 +120,9 @@ provides:
   JSA::Headers::CADC:
     file: lib/JSA/Headers/CADC.pm
     version: 0
+  JSA::Headers::FITS:
+    file: lib/JSA/Headers/FITS.pm
+    version: 0
   JSA::Headers::Starlink:
     file: lib/JSA/Headers/Starlink.pm
     version: 0
@@ -125,6 +134,9 @@ provides:
     version: 0
   JSA::Logging:
     file: lib/JSA/Logging.pm
+    version: 0
+  JSA::Proc:
+    file: lib/JSA/Proc.pm
     version: 0
   JSA::QA:
     file: lib/JSA/QA.pm
@@ -147,12 +159,18 @@ provides:
   JSA::Starlink:
     file: lib/JSA/Starlink.pm
     version: 0
+  JSA::Submission:
+    file: lib/JSA/Submission.pm
+    version: 0
   JSA::Verbosity:
     file: lib/JSA/Verbosity.pm
     version: 0
   JSA::WrapDR:
     file: lib/JSA/WrapDR.pm
     version: 0.03
+  JSA::WriteList:
+    file: lib/JSA/WriteList.pm
+    version: 0.01
 recommends:
   DBD::Sybase: 0
 requires:
@@ -176,6 +194,6 @@ requires:
   URI: 0
   perl: v5.8.0
 resources:
-  license: http://opensource.org/licenses/gpl-license.php
+  license: http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
   repository: git://github.com/eaobservatory/perl-JSA.git
 version: 0.03

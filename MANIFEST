@@ -7,7 +7,6 @@ jsahpxobs
 jsasubmit
 jsawrapdr
 lib/JSA/CADC_Copy.pm
-lib/JSA/CADC_DP.pm
 lib/JSA/Command.pm
 lib/JSA/Convert.pm
 lib/JSA/Datetime.pm
@@ -48,6 +47,7 @@ t/1_compile.t
 t/dpretrieve.t
 t/jsa-files.t
 t/qa.t
+t/release_date.t
 testdata/a20080217_00006_01_0001.sdf
 testdata/a20080217_00006_01_rsp.sdf
 testdata/a20080217_00058_01_0001.sdf
