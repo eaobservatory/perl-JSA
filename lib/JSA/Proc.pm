@@ -23,10 +23,30 @@ our @EXPORT_OK = qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 =item add_jsa_proc_jobs(\%groups, $mode, $priority, $add_info_only, $debug)
 
-Adds processing jobs to the JSA local processing system.  Takes a reference
-to a hash containing the jobs to be run locally.
-This should be of the same form as that for the
-JSA::Submission::submit_jobs subroutine.
+Adds processing jobs to the JSA local processing system.
+C<\%groups> is a reference to a hash holding groups and information about them.
+Keys are the group association id string.
+Values are hash references containing keys:
+
+=over 4
+
+=item files
+
+Array of files for this group.
+
+=item drparams
+
+DR parameters.
+
+=item mode
+
+Mode to use for processing.
+
+=item dprecipe
+
+DP recipe to use for this group.
+
+=back
 
 If the C<$add_info_only> option is set then instead of adding jobs, observation
 info is added to jobs which currently lack it.
