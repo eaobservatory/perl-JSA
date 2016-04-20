@@ -25,13 +25,9 @@ disables emailing.
 
 Print help information.
 
-=item B<--local>
+=item B<--add-info>
 
-Submit jobs locally rather than to CADC.
-
-=item B<--local-add-info>
-
-Update existing local jobs without observation information.
+Update existing jobs without observation information.
 
 =item B<-man>
 
@@ -89,7 +85,7 @@ use JSA::Submission qw/
     determine_frame_class determine_resource_requirement
     echo_messages find_observations get_obsidss
     log_message obs_is_fts2_or_pol2_RECIPE
-    prepare_archive_db send_log_email submit_jobs
+    prepare_archive_db send_log_email
     write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
@@ -103,7 +99,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-    $queue, $local, $local_only_info, $task );
+    $queue, $only_info, $task);
 my $status = GetOptions(
     "help"      => \$help,
     "man"       => \$man,
@@ -114,13 +110,9 @@ my $status = GetOptions(
     "debug"     => \$debug,
     "noemail"   => \$noemail,
     "queue=s"   => \$queue,
-    'local'     => \$local,
     'task=s'    => \$task,
-    'local-add-info' => \$local_only_info,
+    'add-info'  => \$only_info,
 );
-
-# If asked to update local info, do not try to submit anything to CADC.
-$local = 1 if $local_only_info;
 
 pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
@@ -145,17 +137,13 @@ echo_messages($noemail || $debug);
 $project = uc($project) if defined $project;
 my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsasubmit');
 
-my $atCADC = ($mode eq 'night' and not $local)
-           ? JSA::CADC_Copy::at_cadc($ut)
-           : undef;
-
 if (scalar(@{$grp->obs}) == 0) {
     log_message("No observations were retrieved from the database.\n");
 }
 else {
     log_message(scalar(@{$grp->obs}) . " observations were retrieved from the database.\n\n");
 
-    # Group information hash for submit_jobs().
+    # Group information hash for add_jsa_proc_jobs.
     my %groups;
 
     foreach my $obs ($grp->obs) {
@@ -284,19 +272,12 @@ else {
         }
     }
 
-    unless ($local) {
-        submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug);
-        add_jsa_proc_jobs({}, \%groups, $mode, $priority, 0, $debug);
-    }
-    else {
-        add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $local_only_info,
-                          $debug);
-    }
+    add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $only_info, $debug);
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $debug;
 
-send_log_email('CADC Processing', $ut, $project)
+send_log_email('JSA Processing', $ut, $project)
     unless $noemail || $debug;
 
 exit;

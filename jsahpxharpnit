@@ -25,9 +25,9 @@ disables emailing.
 
 Print help information.
 
-=item B<--local-add-info>
+=item B<--add-info>
 
-Update existing local jobs without observation information.
+Update existing jobs without observation information.
 
 =item B<-man>
 
@@ -95,7 +95,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-    $queue, $task, $local_only_info);
+    $queue, $task, $only_info);
 my $status = GetOptions(
     "help"      => \$help,
     "man"       => \$man,
@@ -105,8 +105,8 @@ my $status = GetOptions(
     "version"   => \$version,
     "debug"     => \$debug,
     "noemail"   => \$noemail,
-    "queue=s"     => \$queue,
-    'local-add-info' => \$local_only_info,
+    "queue=s"   => \$queue,
+    'add-info'  => \$only_info,
     'task=s'    => \$task,
 );
 
@@ -219,12 +219,12 @@ else {
         }
     }
 
-    add_jsa_proc_jobs(\%groups, {}, 'obs', $priority, $local_only_info, $debug);
+    add_jsa_proc_jobs(\%groups, {}, 'obs', $priority, $only_info, $debug);
 }
 
 write_log_file('jsasubmit-hpx-harp-nit', $ut, $project) unless $debug;
 
-send_log_email('CADC HPX HARP Night Processing', $ut, $project)
+send_log_email('JSA HPX HARP Night Processing', $ut, $project)
     unless $noemail || $debug;
 
 exit;

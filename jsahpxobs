@@ -30,14 +30,9 @@ Filter to select.
 
 Print help information.
 
-=item B<--local>
+=item B<--add-info>
 
-Submit all jobs locally rather than to CADC regardless of expected
-chunking.
-
-=item B<--local-add-info>
-
-Update existing local jobs without observation information.
+Update existing jobs without observation information.
 
 =item B<-man>
 
@@ -94,9 +89,8 @@ use warnings;
 use JSA::Submission qw/
     %JUNK_OBSIDSS obs_is_fts2_or_pol2_RECIPE
     determine_resource_requirement
-    determine_s2_hpx_chunking
     echo_messages find_observations log_message
-    prepare_archive_db send_log_email submit_jobs
+    prepare_archive_db send_log_email
     write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
@@ -112,7 +106,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-    $queue, $filter, $local_only, $local_only_info, $task,
+    $queue, $filter, $only_info, $task,
     $not_moving_obsid_file);
 my $status = GetOptions(
     "help"      => \$help,
@@ -124,15 +118,11 @@ my $status = GetOptions(
     "debug"     => \$debug,
     "noemail"   => \$noemail,
     'filter=s'  => \$filter,
-    "queue=s"     => \$queue,
-    'local'     => \$local_only,
-    'local-add-info' => \$local_only_info,
+    "queue=s"   => \$queue,
+    'add-info'  => \$only_info,
     'task=s'    => \$task,
     'not_moving_obsid=s' => \$not_moving_obsid_file,
 );
-
-# If asked to update local info, do not try to submit anything to CADC.
-$local_only = 1 if $local_only_info;
 
 pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
@@ -168,11 +158,8 @@ if (scalar(@{$grp->obs}) == 0) {
 else {
     log_message(scalar(@{$grp->obs}) . " observations were retrieved from the database.\n\n");
 
-    # Group information hash for submit_jobs().
+    # Group information hash for add_jsa_proc_jobs().
     my %groups;
-    # Equivalent hash for jobs which must be processed locally due to
-    # chunking concerns.
-    my %groups_local;
 
     foreach my $obs ($grp->obs) {
         my $hdr = $obs->hdrhash;
@@ -289,26 +276,17 @@ else {
                   if defined $current{$k};
             }
 
-            if ($local_only or determine_s2_hpx_chunking($subsys)) {
-                $groups_local{$group} = \%group;
-            }
-            else {
-                $groups{$group} = \%group;
-            }
+            $groups{$group} = \%group;
         }
     }
 
-    # Submit jobs to CADC, but only if we found some non-chunking jobs.
-    submit_jobs(\%groups, undef, $mode, $priority, $queue, $debug) if %groups;
-
     # Add the jobs to the local JSA processing system.
-    add_jsa_proc_jobs(\%groups_local, \%groups, $mode, $priority,
-                      $local_only_info, $debug);
+    add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $only_info, $debug);
 }
 
 write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $debug;
 
-send_log_email('CADC HPX SCUBA-2 Obs Processing', $ut, $project)
+send_log_email('JSA HPX SCUBA-2 Obs Processing', $ut, $project)
     unless $noemail || $debug;
 
 exit;
