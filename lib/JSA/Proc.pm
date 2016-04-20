@@ -42,6 +42,19 @@ DR parameters.
 
 Mode to use for processing.
 
+=item recpars
+
+Recipe parameters file name.
+
+=item obsinfolist
+
+List of observation information hashes,
+e.g. created with C<create_obsinfo_hash>.
+
+=item task
+
+Processing task name.
+
 =back
 
 If the C<$add_info_only> option is set then instead of adding jobs, observation
