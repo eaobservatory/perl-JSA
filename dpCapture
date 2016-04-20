@@ -156,7 +156,7 @@ for my $f (sort keys %files) {
 
         }
         else {
-          print "\tWould ingest file $f\n";
+            print "\tWould persist file $f\n";
         }
     }
 }
