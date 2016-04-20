@@ -19,7 +19,7 @@ use JSA::Headers qw/get_orac_instrument/;
 use JSA::Logging qw/log_message log_command/;
 
 use parent qw/Exporter/;
-our @EXPORT_OK = qw/prepare_environment prepare_environment_cadc
+our @EXPORT_OK = qw/prepare_environment
                     retrieve_data determine_instrument
                     run_pipeline capture_products
                     clean_directory_final clean_directory_pre_capture
@@ -53,28 +53,6 @@ sub prepare_environment {
     # Set ADAM_USER to a temp directory
     my $adamuser = File::Temp->newdir();
     $ENV{ADAM_USER} = "$adamuser";
-}
-
-=item prepare_environment_cadc
-
-Configure parts of the environment that depend on CADC environment variables.
-=cut
-
-sub prepare_environment_cadc {
-    # Running at CADC so have a stab at setting up logging.
-    # Directory should be created by dpRetrieve.
-    if (!exists $ENV{ORAC_LOGDIR}
-            && exists $ENV{CADC_LOG_DIR}) {
-        $ENV{ORAC_LOGDIR} = $ENV{CADC_LOG_DIR};
-    }
-
-    # Check to see if there's a CADC_THREADS environment variable
-    # telling us how many threads to use. If it's not set, we will
-    # assume we can use whatever we want and won't set the env
-    # variable.
-    if (exists $ENV{CADC_THREADS} && defined $ENV{CADC_THREADS}) {
-        $ENV{SMURF_THREADS} = $ENV{CADC_THREADS};
-    }
 }
 
 =item retrieve_data
