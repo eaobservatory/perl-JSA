@@ -3,8 +3,8 @@ package JSA::EnterData::SCUBA2;
 use strict;
 use warnings;
 
-use Carp qw[ carp ];
-use List::Util qw[ first ];
+use Carp qw/carp/;
+use List::Util qw/first/;
 
 use base 'JSA::EnterData::Instrument';
 
@@ -14,17 +14,17 @@ JSA::EnterData::SCUBA2 - SCUBA2 specific methods.
 
 =head1 SYNOPSIS
 
-  # Create new object, with specific header dictionary.
-  my $scuba2 = JSA::EnterData::SCUBA2->new
+    # Create new object, with specific header dictionary.
+    my $scuba2 = new JSA::EnterData::SCUBA2();
 
-  my $name = $scuba2->name;
+    my $name = $scuba2->name;
 
-  my @cmd = $scuba2->get_bound_check_command;
-  system( @cmd ) == 0
-    or die "Problem with running bound check command for $name.";
+    my @cmd = $scuba2->get_bound_check_command;
+    system(@cmd) == 0
+        or die "Problem with running bound check command for $name.";
 
-  # Use table in a SQL later.
-  my $table = $scuba2->table;
+    # Use table in a SQL later.
+    my $table = $scuba2->table;
 
 
 =head1 DESCRIPTION
@@ -42,18 +42,17 @@ methods in order to be called from L<JSA::EnterData>.
 
 Constructor, returns an I<JSA::EnterData::SCUBA2> object.
 
-  $scuba2 = JSA::EnterData::SCUBA2->new;
+    $scuba2 = new JSA::EnterData::SCUBA2();
 
 Currently, no extra arguments are handled.
 
 =cut
 
 sub new {
+    my ($class, %args) = @_;
 
-  my ( $class, %args ) = @_;
-
-  my $obj = $class->SUPER::new( %args ) ;
-  return bless $obj, $class;
+    my $obj = $class->SUPER::new(%args) ;
+    return bless $obj, $class;
 }
 
 =item B<calc_freq>
@@ -63,8 +62,7 @@ Does nothing currently.
 =cut
 
 sub calc_freq {
-
-  my ( $self ) = @_;
+  my ($self) = @_;
 
   return;
 }
@@ -74,28 +72,27 @@ sub calc_freq {
 Returns a list of command and its argument to be executed to
 check/find the bounds.
 
-  @cmd = $scuba2->get_bound_check_command;
+    @cmd = $scuba2->get_bound_check_command;
 
-  system( @cmd ) == 0
-    or die "Problem running the bound check command";
+    system(@cmd) == 0
+        or die "Problem running the bound check command";
 
 =cut
 
 sub get_bound_check_command {
+    my ($self, $fh, $pos_angle) = @_;
 
-  my ( $self, $fh, $pos_angle ) = @_;
-
-  # Turn off autogrid; only rotate raster maps. Just need bounds.
-  return
-    ( '/star/bin/smurf/makemap',
-      "in=^$fh",
-      'system=ICRS',
-      'out=!',
-      'pixsize=1',
-      'msg_filter=quiet',
-      ( defined $pos_angle ? "crota=$pos_angle" : () ),
-      'method=REBIN',
-      'reset'
+    # Turn off autogrid; only rotate raster maps. Just need bounds.
+    return (
+        '/star/bin/smurf/makemap',
+        "in=^$fh",
+        'system=ICRS',
+        'out=!',
+        'pixsize=1',
+        'msg_filter=quiet',
+        (defined $pos_angle ? "crota=$pos_angle" : ()),
+        'method=REBIN',
+        'reset',
     );
 }
 
@@ -104,11 +101,13 @@ sub get_bound_check_command {
 
 Returns the name of the instrument involved.
 
-  $name = $scuba2->name;
+    $name = $scuba2->name;
 
 =cut
 
-sub name { return 'SCUBA-2' ; }
+sub name {
+    return 'SCUBA-2';
+}
 
 
 =item B<name_is_scuba2>
@@ -116,9 +115,9 @@ sub name { return 'SCUBA-2' ; }
 Returns a truth value indicating if the given string matches some variation of
 "SCUBA-2".
 
-  #  Prints "matched".
-  print 'matched'
-    if $scuba2->name_is_scuba2( 'scuba2' ) ;
+    #  Prints "matched".
+    print 'matched'
+        if $scuba2->name_is_scuba2('scuba2');
 
 Purpose of it is to reduce the number of times to reproduce same regular
 expression test.
@@ -127,10 +126,9 @@ expression test.
 
 # There could be a better place for this method than here.
 sub name_is_scuba2 {
+  my ($class, $name) = @_;
 
-  my ( $class, $name ) = @_;
-
-  my $re = qr{^scuba-?2$}i;
+  my $re = qr/^scuba-?2$/i;
 
   return $name =~ $re;
 }
@@ -140,11 +138,13 @@ sub name_is_scuba2 {
 
 Returns the database table related to the instrument.
 
-  $table = $scuba2->table;
+    $table = $scuba2->table;
 
 =cut
 
-sub table { return 'SCUBA2'; }
+sub table {
+    return 'SCUBA2';
+}
 
 
 =item B<raw_basename_regex>
@@ -152,26 +152,25 @@ sub table { return 'SCUBA2'; }
 Returns the regex to match base file name, with array, date and run
 number captured ...
 
-  qr/(s[48][a-d])
-      (\d{8})
-      _
-      (\d{5})
-      _\d{4}[.]sdf
-    /x;
+    qr/(s[48][a-d])
+        (\d{8})
+        _
+        (\d{5})
+        _\d{4}[.]sdf
+      /x;
 
-  $re = JSA::EnterData::SCUBA2->raw_basename_regex();
+    $re = JSA::EnterData::SCUBA2->raw_basename_regex();
 
 =cut
 
 sub raw_basename_regex {
-
-  return
-    qr{ (s[48][a-d])  # array,
-        (\d{8})       # date,
-        _
-        (\d{5})       # run number.
-        _\d{4}[.]sdf
-      }x;
+    return
+        qr{ (s[48][a-d])  # array,
+            (\d{8})       # date,
+            _
+            (\d{5})       # run number.
+            _\d{4}[.]sdf
+          }x;
 }
 
 
@@ -180,11 +179,13 @@ sub raw_basename_regex {
 Returns the parent directory of a raw file, without array, date, &
 run number components.
 
-  $root = JSA::EnterData::SCUBA2->raw_parent_dir();
+    $root = JSA::EnterData::SCUBA2->raw_parent_dir();
 
 =cut
 
-sub raw_parent_dir { return '/jcmtdata/raw/scuba2'; }
+sub raw_parent_dir {
+    return '/jcmtdata/raw/scuba2';
+}
 
 
 =item B<make_raw_paths>
@@ -192,39 +193,35 @@ sub raw_parent_dir { return '/jcmtdata/raw/scuba2'; }
 Given a list of base file names, returns a list of (unverified)
 absolute paths.
 
-  my @path = JSA::EnterData::SCUBA2->make_raw_paths( @basename );
+    my @path = JSA::EnterData::SCUBA2->make_raw_paths(@basename);
 
 =cut
 
 sub make_raw_paths {
+    my ($self, @base) = @_;
 
-  my ( $self, @base ) = @_;
+    return unless scalar @base;
 
-  return unless scalar @base;
+    my $re   = $self->raw_basename_regex();
+    my $root = $self->raw_parent_dir();
 
-  my $re   = $self->raw_basename_regex();
-  my $root = $self->raw_parent_dir();
+    require File::Spec;
 
-  require File::Spec;
+    my @path;
+    foreach my $name (@base) {
+        my ($array, $date, $run) = ($name =~ $re);
+        next unless $array && $date && $run;
 
-  my @path;
-  for my $name ( @base ) {
+        push @path, File::Spec->catfile($root, $array, $date, $run, $name);
+    }
 
-    my ( $array, $date, $run ) = ( $name =~ $re );
-    next
-      unless $array && $date && $run;
-
-    push @path,
-      File::Spec->catfile( $root, $array, $date, $run, $name );
-  }
-  return @path;
+    return @path;
 }
 
 
 BEGIN {
-
-  my $obsidss_re = qr{^ obsidss $}xi;
-  my $subarray_re = qr{^ subarray (?:_[a-d])? $}xi;
+    my $obsidss_re = qr/^ obsidss $/xi;
+    my $subarray_re = qr/^ subarray (?:_[a-d])? $/xi;
 
 =item B<transform_header>
 
@@ -233,81 +230,74 @@ headers grouped by subarray.  The returned headers have subheaders
 with subarray appended, "obsid_subsysnr" field filled in (see
 I<transform_subheader> method).
 
-  @grouped = $scuba2->transform_header( \%header );
+    @grouped = $scuba2->transform_header(\%header);
 
 =cut
 
-  sub transform_header {
+    sub transform_header {
+        my ($self, $header) = @_;
 
-    my ( $self, $header ) = @_;
+        $self->append_array_column($header);
 
-    $self->append_array_column( $header );
+        my @fields = keys %{$header};
 
-    my @fields = keys %{ $header };
+        my $header_val = sub {
+            my ($filter) = @_;
+            return (map {/$filter/ ? $header->{$_} : ()} @fields)[0];
+        };
 
-    my $header_val =
-      sub {
-        my ( $filter ) = @_;
-        return ( map { /$filter/ ? $header->{ $_ } : () } @fields )[0];
-      };
+        my $header_obsidss = $header_val->($obsidss_re);
 
-    my $header_obsidss = $header_val->( $obsidss_re );
+        my $subh = exists $header->{'SUBHEADERS'}
+                 ? $header->{'SUBHEADERS'}
+                 : ();
 
-    my $subh =
-      exists $header->{'SUBHEADERS'}
-      ? $header->{'SUBHEADERS'}
-      : ();
+        for my $s (@{$subh}) {
+            $self->append_array_column($s);
 
-    for my $s ( @{ $subh } ) {
+            $s->{'obsid_subsysnr'} ||= $s->{'OBSIDSS'} || $header_obsidss;
+        }
 
-      $self->append_array_column( $s );
+        my %new;
+        for my $k (@fields) {
+            next if lc $k eq 'subheaders';
+            $new{$k} = $header->{$k};
+        }
 
-      $s->{'obsid_subsysnr'} ||= $s->{'OBSIDSS'} || $header_obsidss;
+        my $skip;
+        # Don't skip darks if it is a noise or a flat field, as shutter remains
+        # closed for those.
+        for my $key (qw/OBS-TYPE OBS_TYPE/) {
+            next unless exists $header->{$key};
+
+            $skip = $header->{$key} !~ /\b(?: noise | flat.?field )/xi;
+
+            last;
+        }
+
+        # Special handling for /date.(obs|end)/ & /ms(start|end)/.
+        $self->push_extreme_start_end(\%new, $subh);
+
+        $self->push_date_obs_end(\%new, $subh, $skip);
+
+        $self->push_range_headers_to_main(\%new, $subh, $skip);
+
+        #@{$subh} = $self->merge_by_obsidss($subh);
+
+        my $grouped = $self->group_by_subarray(
+            $subh, $header_val->($subarray_re));
+
+        my @new;
+        for my $sa (keys %{$grouped}) {
+            push @new, {%{$grouped->{$sa}} , %new};
+        }
+
+        return (\%new , \@new);
     }
-
-    my %new;
-    for my $k ( @fields ) {
-
-      next if lc $k eq 'subheaders';
-      $new{ $k } = $header->{ $k };
-    }
-
-    my $skip;
-    # Don't skip darks if it is a noise or a flat field, as shutter remains
-    # closed for those.
-    for my $key ( qw[ OBS-TYPE OBS_TYPE ] ) {
-
-      next unless exists $header->{ $key };
-
-      $skip = $header->{ $key } !~ m{\b(?: noise | flat.?field )}xi;
-      last;
-    }
-
-    # Special handling for /date.(obs|end)/ & /ms(start|end)/.
-    $self->push_extreme_start_end( \%new, $subh );
-
-    $self->push_date_obs_end( \%new, $subh, $skip );
-
-    $self->push_range_headers_to_main( \%new, $subh, $skip );
-
-    #@{ $subh } = $self->merge_by_obsidss( $subh );
-
-    my $grouped =
-      $self->group_by_subarray( $subh, $header_val->( $subarray_re ) );
-
-    my @new;
-    for my $sa ( keys %{ $grouped } ) {
-
-      push @new, { %{ $grouped->{ $sa } } , %new };
-    }
-
-    return ( \%new , \@new );
-  }
 }
 
 BEGIN {
-
-  my @seq = qw[ SEQSTART SEQEND ];
+  my @seq = qw/SEQSTART SEQEND/;
 
 =item B<get_end_subheaders>
 
@@ -317,45 +307,40 @@ last, based on C<SEQSTART> and C<SEQEND> respectively.
 It optionally
 takes a truth value to indicate if to skip darks.
 
-  ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders );
+    ($start, $end) = $scuba2->get_end_subheaders(\@subheaders);
 
-  # Skip darks.
-  ( $start, $end ) = $scuba2->get_end_subheaders( \@subheaders, 1 );
+    # Skip darks.
+    ($start, $end) = $scuba2->get_end_subheaders(\@subheaders, 1);
 
 =cut
 
-  sub get_end_subheaders {
+    sub get_end_subheaders {
+        my ($self, $subheaders, $skip_dark) = @_;
 
-    my ( $self, $subheaders, $skip_dark ) = @_;
+        my ($init, %start, %end);
+        foreach my $h (@{$subheaders}) {
+            next if $skip_dark
+                 && $self->_is_dark( $h );
 
-    my ( $init, %start, %end );
-    for my $h ( @{ $subheaders } ) {
+            my %h = %{$h};
 
-      next
-        if $skip_dark
-        && $self->_is_dark( $h );
+            next unless exists $h{$seq[0]}
+                     && exists $h{$seq[1]};
 
-      my %h = %{ $h };
+            my ($k_start, $k_end) = map {$h{$_}} @seq;
 
-      next
-        unless exists $h{ $seq[0] }
-        && exists $h{ $seq[1] };
+            unless ($init) {
+                %end = %start = %h;
+                $init ++;
+                next;
+            }
 
-      my ( $k_start, $k_end ) = map { $h{ $_ } } @seq;
+            %start = %h if defined $k_start && $start{$seq[0]} >  $k_start;
+            %end   = %h if defined $k_end   &&   $end{$seq[1]} <= $k_end;
+        }
 
-      unless ( $init ) {
-
-        %end = %start = %h;
-        $init++;
-        next;
-      }
-
-      %start = %h if defined $k_start && $start{ $seq[0] } >  $k_start;
-      %end   = %h if defined $k_end   && $end{   $seq[1] } <= $k_end;
+        return ({%start}, {%end});
     }
-
-    return ( { %start }, { %end } );
-  }
 
 =item B<push_extreme_start_end>
 
@@ -363,41 +348,33 @@ Given a header hash reference and an subheader array reference, copies
 the first true-value field in a subheader hash reference to the main
 header.
 
-  $scuba2->push_extreme_start_end( \%header, \@subheader );
+    $scuba2->push_extreme_start_end(\%header, \@subheader);
 
 For *START fields, search starts from the front; for *END, from the
 end.  For the list of fields see I<_find_first_field>.
 
 =cut
 
-  sub push_extreme_start_end {
+    sub push_extreme_start_end {
+        my ($self, $head, $subheaders) = @_;
 
-    my ( $self, $head, $subheaders ) = @_;
+        return unless $subheaders
+                   && scalar @{$subheaders};
 
-    return
-      unless $subheaders
-      && scalar @{ $subheaders };
+        my @subh = grep {exists $_->{$seq[0]} && exists $_->{$seq[1]}}
+                        @{$subheaders}
+            or return;
 
-    my @subh =
-      grep
-      { exists $_->{ $seq[0] } && exists $_->{ $seq[1] } } @{ $subheaders }
-      or return ;
+        my @start = sort {$a->{$seq[0]} <=> $b->{$seq[0]}} @subh;
 
-    my @start =
-      sort { $a->{ $seq[0] } <=> $b->{ $seq[0] } }
-      @subh;
+        my @end = sort {$b->{$seq[1]} <=> $a->{$seq[1]}} @subh;
 
-    my @end =
-      sort { $b->{ $seq[1] } <=> $a->{ $seq[1] } }
-      @subh;
+        my %new;
+        $self->_find_first_field($head, \@start, \%new);
+        $self->_find_first_field($head, \@end, \%new, my $end = 1);
 
-    my %new;
-    $self->_find_first_field( $head, \@start, \%new );
-    $self->_find_first_field( $head, \@end, \%new, my $end = 1 );
-
-    return
-      $self->push_header( $head, { %new } );
-  }
+        return $self->push_header($head, {%new});
+    }
 
 =item B<push_range_headers_to_main>
 
@@ -405,31 +382,30 @@ Given a header & a subheader hash references, moves range-type fields
 from the subheader into the main header.  It optionally takes a truth
 value to indicate if to skip darks.
 
-  $scuba2->push_range_headers_to_main( $header, $_ )
-    for @{ $header->{'SUBHEADERS'} };
+    $scuba2->push_range_headers_to_main($header, $_)
+        for @{$header->{'SUBHEADERS'}};
 
 Currently, the fields being moved are ...
 
-  ATSTART
-  BKLEGTST BPSTART
-  FRLEGTST
-  HSTSTART HUMSTART
-  SEEDATST SEEINGST SEQSTART
-  TAU225ST TAUDATST
-  WNDDIRST WNDSPDST WVMDATST WVMTAUST
+    ATSTART
+    BKLEGTST BPSTART
+    FRLEGTST
+    HSTSTART HUMSTART
+    SEEDATST SEEINGST SEQSTART
+    TAU225ST TAUDATST
+    WNDDIRST WNDSPDST WVMDATST WVMTAUST
 
-  ATEND
-  BKLEGTEN BPEND
-  FRLEGTEN
-  HSTEND HUMEND
-  SEEDATEN SEEINGEN SEQEND
-  TAU225EN TAUDATEN
-  WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
+    ATEND
+    BKLEGTEN BPEND
+    FRLEGTEN
+    HSTEND HUMEND
+    SEEDATEN SEEINGEN SEQEND
+    TAU225EN TAUDATEN
+    WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
 
 =cut
 
-  my @start_rest =
-    qw[
+    my @start_rest = qw[
         ATSTART
         BKLEGTST BPSTART
         FRLEGTST
@@ -440,8 +416,7 @@ Currently, the fields being moved are ...
         WNDDIRST WNDSPDST WVMDATST WVMTAUST
     ];
 
-  my @end_rest =
-    qw[
+    my @end_rest = qw[
         ATEND
         BKLEGTEN BPEND
         FRLEGTEN
@@ -450,25 +425,24 @@ Currently, the fields being moved are ...
         SEEDATEN SEEINGEN SEQEND
         TAU225EN TAUDATEN
         WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
-      ];
+    ];
 
-  my $start_re = join '|' , @start_rest;
-  my $end_re = join '|', @end_rest;
-  $_ = qr{(?:$_)}ix for $start_re, $end_re;
+    my $start_re = join '|' , @start_rest;
+    my $end_re = join '|', @end_rest;
+    $_ = qr/(?:$_)/ix for $start_re, $end_re;
 
-  sub push_range_headers_to_main {
+    sub push_range_headers_to_main {
+        my ($self, $header, $subhead, $skip_dark) = @_;
 
-    my ( $self, $header, $subhead, $skip_dark ) = @_;
+        return if 1 >= scalar @{$subhead};
 
-    return if 1 >= scalar @{ $subhead };
+        my ($start, $end) = $self->get_end_subheaders($subhead, $skip_dark);
 
-    my ( $start, $end ) = $self->get_end_subheaders( $subhead, $skip_dark );
+        $self->push_header($header, $start, $start_re) if $start;
+        $self->push_header($header, $end, $end_re) if $end;
 
-    $self->push_header( $header, $start, $start_re ) if $start;
-    $self->push_header( $header, $end, $end_re ) if $end;
-
-    return;
-  }
+        return;
+    }
 
 =item B<_find_first_field>
 
@@ -477,71 +451,60 @@ copies the I<first> field existing in a subheader (value of which
 evalutes to true) to the storage hash reference. It takes an optional
 truth value to select the list of field names.  Default list is ...
 
-  AMSTART
-  AZSTART
-  ELSTART
+    AMSTART
+    AZSTART
+    ELSTART
 
 If the optional value is true, then list consists of ...
 
-  AMEND
-  AZEND
-  ELEND
+    AMEND
+    AZEND
+    ELEND
 
 
-  # For all the fields in default list, copy to C<%save>.
-  $scuba2->_find_first_field( \@subheader_a, \%save, );
+    # For all the fields in default list, copy to C<%save>.
+    $scuba2->_find_first_field(\@subheader_a, \%save,);
 
-  # Select alternative list.
-  $scuba2->_find_first_field( \@subheader_b, \%save, 1 );
+    # Select alternative list.
+    $scuba2->_find_first_field(\@subheader_b, \%save, 1);
 
 =cut
 
-  my @extreme_start =
-    qw[
+    my @extreme_start = qw/
         AMSTART
         AZSTART
         ELSTART
-      ];
+    /;
 
-  my @extreme_end =
-    qw[
+    my @extreme_end = qw/
         AMEND
         AZEND
         ELEND
-      ];
+    /;
 
-  sub _find_first_field {
+    sub _find_first_field {
+        my ($self, $head, $subheaders, $save, $choose_end) = @_;
 
-    my ( $self, $head, $subheaders, $save, $choose_end ) = @_;
-    return
-      unless $subheaders
-      && scalar @{ $subheaders };
+        return unless $subheaders
+                   && scalar @{$subheaders};
 
-    my @field = ! $choose_end ? @extreme_start : @extreme_end;
+        my @field = ! $choose_end ? @extreme_start : @extreme_end;
 
-    my $saved;
-    SUBHEADER:
-    for my $sub ( @{ $subheaders } ) {
+        my $saved;
 
-      FIELD:
-      for my $f ( @field ) {
+        SUBHEADER: foreach my $sub (@{$subheaders}) {
+            FIELD: foreach my $f (@field) {
+                next FIELD unless exists $sub->{$f}
+                               && defined $sub->{$f};
 
-        next FIELD
-          unless exists $sub->{ $f }
-          && defined $sub->{ $f }
-          ;
+                $save->{$f} =  $sub->{$f};
+                $saved ++;
+            }
+            last if $saved;
+        }
 
-        $save->{ $f } =  $sub->{ $f };
-        $saved++;
-      }
-      last if $saved;
+        return $self->_find_in_main_header($head, $save, \@field);
     }
-
-    return
-      $self->_find_in_main_header( $head, $save, \@field );
-  }
-
-
 }
 
 =item B<_find_in_main_header>
@@ -550,36 +513,31 @@ Purpose is to save the headers/fields found in main header after
 failing to find headers/fields in C<SUBHEADERS> hash reference.  Only
 plain vlaues or C<ARRAY> types (as defined by L<ref>) are handled.
 
-  $self->_find_in_main_header( \%header, \%save, \@field_names );
+    $self->_find_in_main_header(\%header, \%save, \@field_names);
 
 =cut
 
 sub _find_in_main_header {
+    my ($self, $head, $save, $fields) = @_;
 
-  my ( $self, $head, $save, $fields ) = @_;
+    # Search in main header now if not found in sub headers.
+    for my $f (@{$fields}) {
+        next if exists $save->{$f}
+             || ! exists $head->{$f};
 
-  # Search in main header now if not found in sub headers.
-  for my $f ( @{ $fields } ) {
+        my $val = $head->{$f};
 
-    next
-      if exists $save->{ $f }
-      || ! exists $head->{ $f };
+        if (ref $val && ref $val ne 'ARRAY') {
+            carp(sprintf
+                'Do not know how to handle %s value of type %s in header.',
+                $f, ref $val);
+            next;
+        }
 
-    my $val = $head->{ $f };
-
-    if ( ref $val && ref $val ne 'ARRAY' ) {
-
-      carp( sprintf 'Do not know how to handle %s value of type %s in header.',
-            $f,
-            ref $val
-          );
-      next;
+        $save->{$f} = first {$_} ref $val ? @{$val} : ($val);
     }
 
-    $save->{ $f } = first { $_ } ref $val ? @{ $val } : ( $val );
-  }
-
-  return;
+    return;
 }
 
 =item B<push_date_obs_end>
@@ -588,7 +546,7 @@ Given a main header hash reference and an array reference of
 subheaders, copies C<DATE-OBS> & C<DATE-END> fields from "darks"
 (subheaders) to the main header.
 
-  $scuba2->push_date_obs_end( \%header, \@subheader );
+    $scuba2->push_date_obs_end(\%header, \@subheader);
 
 At least two darks are expected.  For definition of dark, see
 I<_is_dark>.
@@ -596,34 +554,29 @@ I<_is_dark>.
 =cut
 
 sub push_date_obs_end {
+    my ($self, $header, $subheaders, $skip_dark) = @_;
 
-  my ( $self, $header, $subheaders, $skip_dark ) = @_;
+    return unless $subheaders
+               && scalar @{$subheaders};
 
-  return
-    unless $subheaders
-    && scalar @{ $subheaders };
+    my ($start, $end) = ('DATE-OBS', 'DATE-END');
+    my (@start, @end);
 
-  my ( $start, $end ) = ( 'DATE-OBS', 'DATE-END' );
-  my ( @start, @end );
-  for my $sub ( @{ $subheaders } ) {
+    foreach my $sub (@{$subheaders}) {
+        my ($s, $e) = map {exists $sub->{$_} ? $sub->{$_} : ()} ($start, $end);
 
-    my ( $s, $e ) =
-      map { exists $sub->{ $_ } ? $sub->{ $_ } : () } ( $start, $end );
+        push @start, $s if $s;
+        push @end,   $e if $e;
+    }
 
-    push @start, $s if $s;
-    push @end,   $e if $e;
-  }
+    my (%new, $alt_end);
+    ($new{$start}, $alt_end) = (sort @start)[0, -1];
+    $new{$end}   = (sort @end)[-1];
+    for ($new{ $end}) {
+        $_ = $alt_end unless defined $_;
+    }
 
-  my ( %new, $alt_end );
-  ( $new{ $start }, $alt_end ) = ( sort @start )[0,-1];
-  $new{ $end }   = ( sort @end )[-1];
-  for ( $new{ $end } ) {
-
-    $_ = $alt_end unless defined $_;
-  }
-
-  return
-    $self->push_header( $header, { %new } );
+    return $self->push_header($header, {%new});
 }
 
 =item B<push_header>
@@ -632,58 +585,50 @@ It is a general purpose method to copy fields to given header hash
 reference from another given hash reference.  It optionally takes a
 regular expression to filter out the keys in of subheader.
 
-  $scuba2->push_header( \%header,
-                          { 'DATE-OBS' => '20091003T00:00:00',
-                            'DATE-END' => '20091003T11:11:11'
-                          }
-                      );
+    $scuba2->push_header(\%header,
+                         {'DATE-OBS' => '20091003T00:00:00',
+                          'DATE-END' => '20091003T11:11:11'
+                         });
 
 
-  # Copy only DATE* fields.
-  $scuba2->push_header( \%header,
-                        { 'DATE-OBS' => '20091003T00:00:00',
+    # Copy only DATE* fields.
+    $scuba2->push_header(\%header,
+                         { 'DATE-OBS' => '20091003T00:00:00',
                           'DATE-END' => '20091003T11:11:11',
                           'AMSTART'  => '20091003T01:00:00'
-                        },
-                        'DATE'
-                      );
+                         },
+                         'DATE');
 
 =cut
 
 sub push_header {
+    my ($self, $header, $sub, $re) = @_;
 
-  my ( $self, $header, $sub, $re ) = @_;
+    foreach my $key (keys %{$sub}) {
+        next if $re && $key !~ /$re/;
 
-  for my $key ( keys %{ $sub } ) {
+        if (exists $header->{$key}
+                && defined $header->{$key}
+                && ! defined $sub->{$key}) {
+            delete $sub->{ $key };
+            next;
+        }
 
-    next if $re && $key !~ m/$re/;
-
-    if ( exists $header->{ $key }
-          && defined $header->{ $key }
-          && ! defined $sub->{ $key }
-        ) {
-
-      delete $sub->{ $key };
-      next;
+        $header->{$key} = $sub->{$key};
+        delete $sub->{$key};
     }
 
-    $header->{ $key } = $sub->{ $key };
-    delete $sub->{ $key };
-  }
-
-  return;
+    return;
 }
 
 # If shutter field is '1.0', it is open|not dark (else, it is '0.0' & is closed|dark).
 sub _is_dark {
+    my ($class, $subhead) = @_;
 
-  my ( $class, $subhead ) = @_;
+    return unless exists $subhead->{'SHUTTER'}
+               && defined $subhead->{'SHUTTER'};
 
-  return
-    unless exists $subhead->{'SHUTTER'}
-    && defined $subhead->{'SHUTTER'};
-
-  return ! ( $subhead->{'SHUTTER'} + 0 );
+    return ! ($subhead->{'SHUTTER'} + 0);
 }
 
 =item B<group_by_subarray>
@@ -694,65 +639,57 @@ subheaders & optional subarray type.
 
 Throws L<JSA::Error> exception if a subarray type cannot be determined.
 
- $grouped =
-  $scuba2->group_by_subarray( $header->{'SUBHEADERS'}, 's4' );
+    $grouped = $scuba2->group_by_subarray($header->{'SUBHEADERS'}, 's4');
 
 =cut
 
 sub group_by_subarray {
+    my ($self, $subheaders, $header_arr) = @_;
 
-  my ( $self, $subheaders, $header_arr ) = @_;
+    return unless $subheaders
+               && scalar @{$subheaders};
 
-  return
-    unless $subheaders
-    && scalar @{ $subheaders };
+    my $group = {};
 
-  my $group = {};
+    my $array_re = qr/^( s[48] .? )$/ix;
 
-  my $array_re = qr{^( s[48] .? )$}ix;
+    my $array = $header_arr;
 
-  my $array = $header_arr;
+    my $int_key = 'INT_TIME';
 
-  my $int_key = 'INT_TIME';
+    foreach my $sub (@{$subheaders}) {
+        my @keys = keys %{$sub};
 
-  for my $sub ( @{ $subheaders } ) {
+        unless ($header_arr) {
+            for (@keys) {
+                next if -1 == index lc $_, 'subarray';
 
-    my @keys = keys %{ $sub };
+                ($array) = ($sub->{$_} =~ $array_re)
+                    and last;
+            }
+        }
 
-    unless ( $header_arr ) {
-      for ( @keys ) {
+        unless ($array) {
+            throw JSA::Error
+              sprintf "Failed to find subarray type. (Subheaders:\n%s)",
+                      _dump($subheaders);
+        }
 
-        next if -1 == index lc $_, 'subarray';
 
-        ( $array ) = ( $sub->{ $_ } =~ $array_re )
-          and last;
-      }
+        foreach (@keys) {
+            # Collect fields unless already exist (except for integration time) ...
+            unless ($_ eq $int_key) {
+                $group->{$array}{$_} ||= $sub->{$_};
+            }
+
+            # ... for integration time, sum all of them.
+            else {
+                $group->{$array}{$_} += $sub->{$_};
+            }
+        }
     }
 
-    unless ( $array ) {
-
-      throw JSA::Error
-        sprintf "Failed to find subarray type. (Subheaders:\n%s)",
-        _dump( $subheaders );
-    }
-
-
-    for ( @keys ) {
-
-      # Collect fields unless already exist (except for integration time) ...
-      unless ( $_ eq $int_key ) {
-
-        $group->{ $array }{ $_ } ||= $sub->{ $_ };
-      }
-      # ... for integration time, sum all of them.
-      else {
-
-        $group->{ $array }{ $_ } += $sub->{ $_ };
-      }
-    }
-  }
-
-  return $group;
+    return $group;
 }
 
 =item B<merge_by_obsidss>
@@ -763,40 +700,34 @@ C<obsid_subsysnr>, given an array reference of subheaders.
 Throws L<JSA::Error> exception if a hash reference is missing
 C<obsid_subsys>.
 
- @grouped = $scuba2->merge_by_obsidss( $header->{'SUBHEADERS'} );
+   @grouped = $scuba2->merge_by_obsidss($header->{'SUBHEADERS'});
 
 =cut
 
 sub merge_by_obsidss {
+    my ($self, $subh) = @_;
 
-  my ( $self, $subh ) = @_;
+    return $subh unless $subh
+                     && scalar @{$subh};
 
-  return $subh
-    unless $subh
-    && scalar @{ $subh };
+    my (%obsidss, @order);
+    my $key_re = qr/^ OBSID (?:_SUBSYS(?:NR)? | SS ) $/xi;
 
-  my ( %obsidss, @order );
-  my $key_re = qr{^ OBSID (?:_SUBSYS(?:NR)? | SS ) $}xi;
+    for my $href (@{$subh}) {
+        my $key = (grep {$_ =~ $key_re ? $_ : ()} keys %{$href})[0]
+            or next;
 
-  for my $href ( @{ $subh } ) {
+        my $id = $href->{$key};
+        my $old = $obsidss{$id};
 
-    my $key =
-      ( grep { $_ =~ $key_re ? $_ : () } keys %{ $href } )[0]
-      or next;
+        push @order, $id
+            unless exists $obsidss{$id};
 
-    my $id = $href->{ $key };
-    my $old = $obsidss{ $id };
+        %{$obsidss{$id}} = ((defined $old ? %{$old} : ()),
+                            %{$href});
+    }
 
-    push @order, $id
-      unless exists $obsidss{ $id };
-
-    %{ $obsidss{ $id } } =
-      ( ( defined $old ? %{ $old } : () ),
-        %{ $href }
-      );
-  }
-
-  return [ @obsidss{ @order } ];
+    return [@obsidss{@order}];
 }
 
 =item B<_fill_headers_obsid_subsys>
@@ -817,45 +748,42 @@ the fields with C<_[a-d]> as appropriate.
 Throws L<JSA::Error> exception if a matching C<SUBARRAY> field value
 not found.
 
- $scuba2->append_array_column( $subheader );
+   $scuba2->append_array_column($subheader);
 
 =cut
 
 sub append_array_column {
+    my ($self, $header) = @_;
 
-  my ( $self, $header ) = @_;
+    return unless $header->{'SUBARRAY'} ;
 
-  return unless  $header->{'SUBARRAY'} ;
-
-  # Table column names suffixed by with [a-d].
-  my @variation =
-    qw[ ARRAYID
+    # Table column names suffixed by with [a-d].
+    my @variation = qw/
+        ARRAYID
         DETBIAS
         FLAT
         PIXHEAT
         SUBARRAY
-      ];
+    /;
 
-  my $subarray_col = qr{([a-d])}i;
-  my ( $col ) = $header->{'SUBARRAY'} =~ $subarray_col
-    or throw JSA::Error "No match found for subarray";
+    my $subarray_col = qr/([a-d])/i;
+    my ($col) = $header->{'SUBARRAY'} =~ $subarray_col
+        or throw JSA::Error "No match found for subarray";
 
-  for my $field ( @variation ) {
+    foreach my $field (@variation) {
+        next unless exists $header->{$field};
 
-    next unless exists $header->{ $field };
+        my $alt = join '_', $field, $col;
 
-    my $alt = join '_', $field, $col;
+        $header->{$alt} = $header->{$field};
 
-    $header->{ $alt } = $header->{ $field };
-
-    # Need to change subarray_[a-d] to a bit value.
-    if ( $field eq 'SUBARRAY' ) {
-
-      $header->{ $alt } = $header->{ $alt } ? 1 : 0;
+        # Need to change subarray_[a-d] to a bit value.
+        if ($field eq 'SUBARRAY') {
+            $header->{$alt} = $header->{$alt} ? 1 : 0;
+        }
     }
-  }
 
-  return;
+    return;
 }
 
 
@@ -864,57 +792,50 @@ sub append_array_column {
 Fills in the headers for C<FILES> database table, given a headers hash
 reference and an L<OMP::Info::Obs> object.
 
-  $scuba2->fill_headers_FILES( \%header, $obs );
+    $scuba2->fill_headers_FILES(\%header, $obs);
 
 It needs to be called after L<fill_headers_FILES/JSA::EnterData>.
 
 =cut
 
 sub fill_headers_FILES {
+    my ($self, $header, $obs) = @_;
 
-  my ( $self, $header, $obs ) = @_;
+    # Add 'nsubscan' field.
+    my $nsub = () = $header->{'NSUBSCAN'};
 
-  # Add 'nsubscan' field.
-  my $nsub = () = $header->{'NSUBSCAN'};
+    my @file = @{$header->{'file_id'}};
 
-  my @file = @{ $header->{'file_id'} };
+    if ($nsub < scalar @file) {
+        $header->{'nsubscan'} =
+            [map {/_(\d+)[.]sdf$/ ? 0 + $1 : ()} @{$header->{'file_id'}}];
 
-  if ( $nsub < scalar @file ) {
-
-    $header->{'nsubscan'} =
-      [ map { /_(\d+)[.]sdf$/ ? 0 + $1 : ()  } @{ $header->{'file_id'} } ];
-
-  }
-
-  if ( ! exists $header->{'obsid_subsysnr'} ) {
-
-    if ( exists $header->{'OBSIDSS'} ) {
-
-      $header->{'obsid_subsysnr'} = $header->{'OBSIDSS'};
     }
-    elsif ( exists $header->{'SUBHEADERS'} ) {
 
-      for my $subh ( @{ $header->{'SUBHEADERS'} } ) {
-
-        push @{ $header->{'obsid_subsysnr'} }, $subh->{'OBSIDSS'};
-      }
+    unless (exists $header->{'obsid_subsysnr'}) {
+        if (exists $header->{'OBSIDSS'}) {
+            $header->{'obsid_subsysnr'} = $header->{'OBSIDSS'};
+        }
+        elsif (exists $header->{'SUBHEADERS'}) {
+            foreach my $subh (@{$header->{'SUBHEADERS'}}) {
+                push @{$header->{'obsid_subsysnr'}}, $subh->{'OBSIDSS'};
+            }
+        }
     }
-  }
 
-  # Add 'subsysnr' field.
-  my $parse = qr{^ s([48]) [a-d] }xi;
+    # Add 'subsysnr' field.
+    my $parse = qr/^ s([48]) [a-d] /xi;
 
-  for my $i ( 0 .. scalar @file - 1 ) {
+    for my $i (0 .. scalar @file - 1) {
+        next if $header->{'subsysnr'}[$i];
 
-    next if $header->{'subsysnr'}[ $i ];
+        (my $wavelen) = $file[$i] =~ $parse
+            or next;
 
-    ( my $wavelen ) =
-      $file[ $i ] =~ $parse or next;
+        $header->{'subsysnr'}[$i] = "${wavelen}50";
+    }
 
-    $header->{'subsysnr'}[ $i ] = "${wavelen}50";
-  }
-
-  return;
+    return;
 }
 
 
@@ -923,130 +844,117 @@ sub fill_headers_FILES {
 Fills in the I<max_subscan> for C<SCUBA2> database table, given a
 headers hash reference and an L<OMP::Info::Obs> object.
 
-  $inst->fill_max_subscan( \%header, $obs );
+    $inst->fill_max_subscan(\%header, $obs);
 
 =cut
 
 sub fill_max_subscan {
+    my ($self, $header, $obs) = @_;
 
-  my ( $self, $header, $obs ) = @_;
+    my $max_k      = 'max_subscan';
+    my $subh_k     = 'SUBHEADERS';
+    my $subar_k    = 'SUBARRAY';
+    my $wavelen_re = qr/^(s[48])[a-d]/;
 
-  my $max_k      = 'max_subscan';
-  my $subh_k     = 'SUBHEADERS';
-  my $subar_k    = 'SUBARRAY';
-  my $wavelen_re = qr/^(s[48])[a-d]/;
+    my $id_k = _find_obsidss_key($header);
+    my $a_subheader = exists $header->{$subh_k};
 
-  my $id_k = _find_obsidss_key( $header );
-  my $a_subheader = exists $header->{ $subh_k };
-
-  # Collect files from obs & from database.
-  my %file;
-  for my $f ( _collect_files_from_obs_db( $header, $obs ) ) {
-
-    my ( $type ) = ( $f =~ $wavelen_re )[0] or next;
-    push @{ $file{ $type } } , $f;
-  }
-
-  # OBSIDSS key is in main header which means only one type of
-  # subarray were present.
-  if ( $id_k || ! $a_subheader ) {
-
-    $header->{ $max_k } = scalar map { @{ $_ } } values %file;
-    return;
-  }
-
-  for my $sh ( @{ $header->{ $subh_k } } ) {
-
-    next unless exists $sh->{ $subar_k };
-
-    my $subar = $sh->{ $subar_k };
-    for my $type ( keys %file ) {
-
-      # Just match on wavelength, not actual subarray.
-      next unless $subar =~ m/^$type/;
-
-      $sh->{ $max_k } = scalar @{ $file{ $type } };
+    # Collect files from obs & from database.
+    my %file;
+    foreach my $f (_collect_files_from_obs_db($header, $obs)) {
+        my ($type) = ($f =~ $wavelen_re)[0] or next;
+        push @{$file{$type}} , $f;
     }
-  }
 
-  return;
+    # OBSIDSS key is in main header which means only one type of
+    # subarray were present.
+    if ($id_k || ! $a_subheader) {
+        $header->{$max_k} = scalar map {@{$_}} values %file;
+        return;
+    }
+
+    foreach my $sh (@{$header->{$subh_k}}) {
+        next unless exists $sh->{$subar_k};
+
+        my $subar = $sh->{$subar_k};
+
+        foreach my $type (keys %file) {
+            # Just match on wavelength, not actual subarray.
+            next unless $subar =~ /^$type/;
+
+            $sh->{$max_k} = scalar @{$file{$type}};
+        }
+    }
+
+    return;
 }
 
 sub _dump {
+    my (@thing) = @_;
 
-  my ( @thing ) = @_;
+    require Data::Dumper;
 
-  require Data::Dumper;
+    local $Data::Dumper::Sortkeys = 1;
+    local $Data::Dumper::Indent = 1;
+    local $Data::Dumper::Deepcopy = 1;
 
-  local $Data::Dumper::Sortkeys = 1;
-  local $Data::Dumper::Indent = 1;
-  local $Data::Dumper::Deepcopy = 1;
-
-  return
-    Data::Dumper::Dumper( \@thing );
+    return Data::Dumper::Dumper(\@thing);
 }
 
 sub _find_obsidss_key {
+    my ( $href ) = @_;
 
-  my ( $href ) = @_;
+    foreach my $k (qw/OBSIDSS OBSID_SUBSYSNR/) {
+        return $k    if exists $href->{$k};
+        return lc $k if exists $href->{lc $k};
+    }
 
-  for my $k ( qw[ OBSIDSS OBSID_SUBSYSNR ] ) {
-
-    return $k    if exists $href->{ $k };
-    return lc $k if exists $href->{ lc $k };
-  }
-
-  return;
+    return;
 }
 
 sub _collect_files_from_obs_db {
+    my ($header, $obs) = @_;
 
-  my ( $header, $obs ) = @_;
+    my @idss;
+    my $idss_k = _find_obsidss_key($header);
 
-  my @idss;
-  my $idss_k = _find_obsidss_key( $header );
-  if ( $idss_k ) {
-
-    push @idss, $header->{ $idss_k };
-  }
-  elsif ( exists $header->{'SUBHEADERS'} ) {
-
-    for my $sub ( @{ $header->{'SUBHEADERS'} } ) {
-
-      $idss_k = _find_obsidss_key( $sub ) or next;
-      push @idss, $sub->{ $idss_k };
+    if ($idss_k) {
+        push @idss, $header->{ $idss_k };
     }
-  }
-  my @file_db  = _db_files_for_obsidss( @idss );
+    elsif (exists $header->{'SUBHEADERS'}) {
+        foreach my $sub (@{$header->{'SUBHEADERS'}}) {
+            $idss_k = _find_obsidss_key($sub) or next;
+            push @idss, $sub->{$idss_k};
+        }
+    }
 
-  my %file;
-  @file{ ( @file_db,  $obs->simple_filename ) } = ();
+    my @file_db  = _db_files_for_obsidss(@idss);
 
-  return sort keys %file;
+    my %file;
+    @file{(@file_db, $obs->simple_filename)} = ();
+
+    return sort keys %file;
 }
 
 sub _db_files_for_obsidss {
+    my (@obsidss) = @_;
 
-  my ( @obsidss ) = @_;
+    return unless scalar @obsidss;
 
-  return unless scalar @obsidss;
+    my $where = sprintf 'obsid_subsysnr IN (%s)', join ', ' , ('?') x 1;
 
-  my $where =
-    sprintf 'obsid_subsysnr IN (%s)', join ', ' , ('?') x 1;
+    my %seen;
+    my @oid = grep {! $seen{$_} ++} @obsidss;
 
-  my %seen;
-  my @oid = grep { ! $seen{ $_ }++ } @obsidss;
+    require JSA::DB;
+    my $db    = new JSA::DB('name' => __PACKAGE__);
+    my $files = $db->select_loop('table'    => 'FILES',
+                                 'columns'  => ['file_id'],
+                                 'where'    => [$where],
+                                 'values'   => [@oid])
+        or return;
 
-  require JSA::DB;
-  my $db    = JSA::DB->new( 'name' => __PACKAGE__ );
-  my $files = $db->select_loop( 'table'    => 'FILES',
-                                'columns' => [ 'file_id' ],
-                                'where'   => [ $where ],
-                                'values'  => [ @oid ],
-                              )
-                              or return;
-
-  return map { $_->{'file_id'} } @{ $files };
+    return map {$_->{'file_id'}} @{ $files };
 }
 
 
@@ -1085,4 +993,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

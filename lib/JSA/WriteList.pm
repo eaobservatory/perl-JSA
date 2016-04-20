@@ -1,15 +1,16 @@
 package JSA::WriteList;
 
-use strict; use warnings;
+use strict;
+use warnings;
 
 our $VERSION = '0.01';
 
 use Exporter 'import';
-our @EXPORT_OK = qw[ write_list clear_list ];
+our @EXPORT_OK = qw/write_list clear_list/;
 
-use Carp       ();
+use Carp ();
 
-use JSA::Error qw[ :try ];
+use JSA::Error qw/:try/;
 
 =pod
 
@@ -19,11 +20,11 @@ JSA::WriteList - Functions to write a list to a temporary file.
 
 =head1 SYNOPSIS
 
-  use JSA::WriteList qw( write_list clear_list );
+    use JSA::WriteList qw/write_list clear_list/;
 
-  $file = write_list( $save, [ '/tmp/one' , '/tmp/two' ] );
-  # . . .
-  clear_list();
+    $file = write_list($save, ['/tmp/one', '/tmp/two']);
+    # . . .
+    clear_list();
 
 =head1 DESCRIPTION
 
@@ -40,58 +41,53 @@ Writes a given array reference of files to a given file; returns a
 true value on success.  On error, throws L<JSA::Error>. If C<close()>
 fails, then it C<croak>s (see L<Carp>).
 
-  $ok = write_list( $path, [ '/tmp/one' , '/tmp/two' ] );
+    $ok = write_list($path, ['/tmp/one', '/tmp/two']);
 
 =item B<clear_list>
 
 Removes the file gievn earlier. On success, returns a true value; on
 error, prints a warning & returns nothing.
 
-  clear_list();
+    clear_list();
 
 =cut
 
 {
-  my ( $path );
-  sub write_list {
+    my ($path);
 
-    my ( $save, $files ) = @_;
+    sub write_list {
+        my ($save, $files) = @_;
 
-    undef $path;
+        undef $path;
 
-    open my $fh, '>', $save
-      or throw JSA::Error::FatalError( qq[Cannot write to $save: $!] );
+        open my $fh, '>', $save
+            or throw JSA::Error::FatalError("Cannot write to $save: $!");
 
-    my $err;
-    for my $i ( 0 .. $#{ $files } ) {
+        my $err;
+        for my $i (0 .. $#{$files}) {
+            unless (print $fh $files->[$i] . "\n") {
+                $err = sprintf "%s (lines written so far: %d)" , $! , $i;
+                last;
+            }
+        }
 
-      unless ( print $fh $files->[ $i ] . "\n" ) {
+        close($fh)
+            or Carp::croak("Could not close $path: $!");
 
-        $err = sprintf "%s (lines written so far: %d)" , $! , $i;
-        last;
-      }
+        throw JSA::Error::FatalError("Error writing to $save: $err") if $err;
+
+        $path = $save;
+        return 1;
     }
 
-    close( $fh )
-      or Carp::croak( qq[Could not close $path: $!] );
+    sub clear_list {
+        if (defined $path && -e $path && ! unlink($path)) {
+            Carp::carp("Could not remove $path: $!");
+            return;
+        }
 
-    $err
-      and throw JSA::Error::FatalError( qq[Error writing to $save: $err] );
-
-    $path = $save;
-    return 1;
-  }
-
-  sub clear_list {
-
-    if ( defined $path && -e $path && ! unlink( $path ) ) {
-
-      Carp::carp( qq[Could not remove $path: $!] );
-      return;
+        return 1;
     }
-
-    return 1;
-  }
 }
 
 
@@ -122,4 +118,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

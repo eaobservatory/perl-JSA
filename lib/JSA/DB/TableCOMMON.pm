@@ -1,15 +1,16 @@
 package  JSA::DB::TableCOMMON;
 
-use strict; use warnings;
+use strict;
+use warnings;
 
 my $_name = 'COMMON';
 
-sub table { return $_name; }
+sub table {
+    return $_name;
+}
 
 sub column_names {
-
-  return
-    qw[
+    return qw/
         agentid align_dx align_dy alt_obs amend amstart atend atstart azend
         azstart
         backend bklegten bklegtst bpend bpstart
@@ -34,26 +35,22 @@ sub column_names {
         tau225en tau225st taudaten taudatst tausrc telescop
         uaz uel utdate
         wnddiren wnddirst wndspden wndspdst wvmdaten wvmdatst wvmtauen wvmtaust
-    ];
+    /;
 }
 
 sub date_columns {
-
-  return
-    qw[
+    return qw/
         date_obs date_end
         hststart hstend
         release_date
         taudatst taudaten
         wvmdatst wvmdaten
         seedatst seedaten
-      ];
+    /;
 }
 
 sub range_start_columns {
-
-  return
-    qw[
+    return qw/
         amstart atstart azstart
         bklegtst bpstart
         date_obs
@@ -65,13 +62,11 @@ sub range_start_columns {
         seedatst seeingst seqstart
         tau225st taudatst
         wnddirst wndspdst wvmdatst wvmtaust
-    ];
+      /;
 }
 
 sub range_end_columns {
-
-  return
-    qw[
+    return qw/
         amend atend azend
         bklegten bpend
         date_end
@@ -83,32 +78,26 @@ sub range_end_columns {
         seedaten seeingen seqend
         tau225en taudaten
         wnddiren wndspden wvmdaten wvmtauen
-      ];
+      /;
 }
 
 sub range_columns {
-
-  my %range;
-  @range{ range_start_columns() } = range_end_columns();
-  return %range;
+    my %range;
+    @range{range_start_columns()} = range_end_columns();
+    return %range;
 }
 
 =item B<unique_keys>
 
 Returns list of columns to uniquely identify a row.
 
-  @keys = JSA::DB::TableCOMMON->unique_keys();
+    @keys = JSA::DB::TableCOMMON->unique_keys();
 
 =cut
 
 sub unique_keys {
-
- return
-    qw[ obsid
-      ];
+   return qw/obsid/;
 }
 
 
 1;
-
-

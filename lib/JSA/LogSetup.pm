@@ -8,20 +8,20 @@ JSA::LogSetup - Setup a default log configuration for Log::Log4perl
 
 =head1 SYNOPSIS
 
-  use JSA::LogSetup qw[ get_config logfile ];
+    use JSA::LogSetup qw/get_config logfile/;
 
 Pass default configuration to L<Log::Log4perl> ...
 
-  logfile( '/log/file/path' );
-  Log::Log4perl->init( get_config() );
+    logfile('/log/file/path');
+    Log::Log4perl->init(get_config());
 
 Note that changes made to config after this point via L<Log::Log4perl>
 will not be reflected back when I<&get_config> is called again.
 
-  $log = Log::Log4perl->get_logger( '' );
+    $log = Log::Log4perl->get_logger('');
 
-  # See Log::Log4perl for details.
-  $log->error( 'Oops,', ' an error happened: ', $error_text );
+    # See Log::Log4perl for details.
+    $log->error('Oops,', ' an error happened: ', $error_text);
 
 
 
@@ -39,11 +39,11 @@ L<Log::Log4perl>).
 
 Following functions can be imported into caller's namespace...
 
-  get_config
-  get_dumper
-  hashref_to_dumper
-  logfile
-  make_logfile
+    get_config
+    get_dumper
+    hashref_to_dumper
+    logfile
+    make_logfile
 
 Nothing is exported by default.
 
@@ -51,16 +51,16 @@ Nothing is exported by default.
 
 use strict; use warnings;
 
-use Exporter qw[ import ];
-our @EXPORT_OK =
-  qw[ get_config
-      logfile
-      make_logfile
-      get_dumper
-      hashref_to_dumper
-      set_default_format
-      set_message_format
-    ];
+use Exporter qw/import/;
+our @EXPORT_OK = qw/
+    get_config
+    logfile
+    make_logfile
+    get_dumper
+    hashref_to_dumper
+    set_default_format
+    set_message_format
+/;
 
 use Carp ();
 use DateTime;
@@ -77,14 +77,15 @@ my $_log_basename = 'default.log';
 my $_log_file_key = 'log4perl.appender.log.filename';
 my $_log_fmt_key  = 'log4perl.appender.log.layout.ConversionPattern';
 
-my %_config =
-  ( 'log4perl.rootLogger' => 'DEBUG, log',
+my %_config = (
+    'log4perl.rootLogger'           => 'DEBUG, log',
 
-    'log4perl.appender.log'        => 'Log::Log4perl::Appender::File',
-    $_log_file_key                 => undef,
-    'log4perl.appender.log.mode'   => 'append',
-    'log4perl.appender.log.layout' => 'PatternLayout',
-  );
+    'log4perl.appender.log'         => 'Log::Log4perl::Appender::File',
+    $_log_file_key                  => undef,
+    'log4perl.appender.log.mode'    => 'append',
+    'log4perl.appender.log.layout'  => 'PatternLayout',
+);
+
 set_default_format();
 
 =over 2
@@ -94,31 +95,33 @@ set_default_format();
 Returns the default configuration as a hash reference, suitable for
 direct consumption by L<Log::Log4perl>.
 
-  Log::Log4perl->init( get_config() );
+    Log::Log4perl->init(get_config());
 
 Some of the configuration defaults are ...
 
-  level      - debug
+    level      - debug
 
-  directory  - /jac_logs/jsa (or /tmp if missing)
+    directory  - /jac_logs/jsa (or /tmp if missing)
 
-  file       - /jac_logs/jsa/default.log.<host>.<user>.<yyyy:mm:dd>
-               (appended, not overwritten)
+    file       - /jac_logs/jsa/default.log.<host>.<user>.<yyyy:mm:dd>
+                 (appended, not overwritten)
 
-  log format - %H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n, or ...
-                 %H : host
-                 %p : log level
-                 %P : process-id
-                 %d : date-time
-                 %F : file name
-                 %L : line number
-                 %M : sub name (if available)
-                 %n : newline
-                 %m : message
+    log format - %H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n, or ...
+                   %H : host
+                   %p : log level
+                   %P : process-id
+                   %d : date-time
+                   %F : file name
+                   %L : line number
+                   %M : sub name (if available)
+                   %n : newline
+                   %m : message
 
 =cut
 
-sub get_config { return { %_config }; }
+sub get_config {
+    return {%_config};
+}
 
 =item B<set_default_format>
 
@@ -128,11 +131,10 @@ C<%H %p %P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n>.
 =cut
 
 sub set_default_format {
+    $_config{$_log_fmt_key} =
+        '%H %5p %6P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n';
 
-  $_config{ $_log_fmt_key } =
-    '%H %5p %6P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n';
-
-  return;
+    return;
 }
 
 =item B<set_default_format>
@@ -143,11 +145,10 @@ C<%d{yyyyMMdd-hhmm:ss}%n  %m%n>.
 =cut
 
 sub set_message_format {
+    $_config{$_log_fmt_key} =
+        '%d{yyyyMMdd-hhmm:ss}%n  %m%n';
 
-  $_config{ $_log_fmt_key } =
-    '%d{yyyyMMdd-hhmm:ss}%n  %m%n';
-
-  return;
+    return;
 }
 
 =item B<get_dumper>
@@ -155,7 +156,7 @@ sub set_message_format {
 Returns code reference which would call &L<Data::Dumper>::Dumper,
 passing it given list of elements.
 
-  print get_dumper( [ 2, 3 ], [ 4, 6 ] )->();
+    print get_dumper([2, 3], [4, 6])->();
 
 
 Note the following variables are set before I<&Dumper> is called ...
@@ -169,17 +170,15 @@ See L<Data::Dumper> for details.
 =cut
 
 sub get_dumper {
+    my (@in) = @_;
 
-  my ( @in ) = @_;
-
-  return
-    sub { require Data::Dumper;
-          local $Data::Dumper::Sortkeys = 1;
-          local $Data::Dumper::Indent = 1;
-          local $Data::Dumper::Deepcopy = 1;
-          return
-            Data::Dumper::Dumper( @in );
-        };
+    return sub {
+        require Data::Dumper;
+        local $Data::Dumper::Sortkeys = 1;
+        local $Data::Dumper::Indent = 1;
+        local $Data::Dumper::Deepcopy = 1;
+        return Data::Dumper::Dumper(@in);
+    };
 }
 
 =item B<hashref_to_dumper>
@@ -187,35 +186,35 @@ sub get_dumper {
 Returns I<&get_dumper> output, and passes given arguments in a hash
 reference.
 
-  $log->debug( hashref_to_dumper( 'a' => 3, 'b' => 5 ) );
+    $log->debug(hashref_to_dumper('a' => 3, 'b' => 5));
 
 This is syntactic sugar to avoid calling I<&get_dumper> as ...
 
-  $log->debug( get_dumper( { 'a' => 3, 'b' => 5 } ) );
+    $log->debug(get_dumper({'a' => 3, 'b' => 5 }));
 
 =cut
 
-sub hashref_to_dumper { return get_dumper( { @_ } ); }
+sub hashref_to_dumper {
+    return get_dumper({@_});
+}
 
 =item B<logfile>
 
 Returns the log file name if no arguments are specified.
 
-  $file = logfile();
+    $file = logfile();
 
 Otherwise, sets the log file to the given value.
 
-  logfile( '/log/file/path' );
+    logfile('/log/file/path');
 
 =cut
 
 sub logfile {
+    return $_config{$_log_file_key} unless scalar @_;
 
-  return $_config{ $_log_file_key }
-    unless scalar @_;
-
-  $_config{ $_log_file_key } = $_[0];
-  return;
+    $_config{$_log_file_key} = $_[0];
+    return;
 }
 
 =item B<make_logfile>
@@ -229,15 +228,13 @@ returns a file path based on current date (in UTC -10 time zone).
 When possible, I<the log directory and log file are made group
 writable>.
 
-  # Sets log file to '/jac_logs/jsa/201201/20/enterdata' for date of
-  # Jan 12 2012.
-  logfile( make_logfile( 'enterdata' ) );
+    # Sets log file to '/jac_logs/jsa/201201/20/enterdata' for date of
+    # Jan 12 2012.
+    logfile(make_logfile('enterdata'));
 
-  # Keep log file elsewhere; '/tmp/201201/20/enterdata' in this case.
-  logfile( make_logfile( 'enterdata',
-                          'dir' => '/tmp'
-                        )
-          );
+    # Keep log file elsewhere; '/tmp/201201/20/enterdata' in this case.
+    logfile(make_logfile('enterdata',
+                         'dir' => '/tmp'));
 
 Optional hash key-values are ...
 
@@ -280,159 +277,144 @@ Do not create sub directories in format C<yyyymm/dd> by default.
 =cut
 
 {
-  my %made;
+    my %made;
 
-  sub make_logfile {
+    sub make_logfile {
+        my ($base, %opt) = @_;
 
-    my ( $base, %opt ) = @_;
+        # A directory has been already specified; nothing sane to do.
+        return $base if $base && $base =~ /\//;
 
-    # A directory has been already specified; nothing sane to do.
-    $base && $base =~ m[/]
-      and return $base;
+        unless ($base) {
+            $base = $_log_basename;
 
-    unless ( $base ) {
+            Carp::carp(sprintf "No base name given to make log file path; using '%s' instead.\n",
+                               $base);
+        }
 
-      $base = $_log_basename;
+        my $dir = $opt{'dir'} || $_log_dir;
 
-      Carp::carp( sprintf qq[No base name given to make log file path; using '%s' instead.\n],
-                    $base
-                );
+        my $track = join '#', $dir, $base,
+            map {join '=', $_ , defined $opt{$_} ? $opt{$_} : 'undef'}
+            sort keys %opt;
+
+        return $made{$track}
+            if $made{$track} && ! $opt{'force-new'};
+
+        my $date = DateTime->now('time_zone' => '-1000');
+
+        $base = join '.', $base, _make_base_parts($date, $dir, %opt);
+
+        my $path;
+
+        unless ($opt{'skip-date-dir'}) {
+            $path = _make_per_day_logfile($date, $dir, $base)
+        }
+        else {
+            _make_group_writable($dir);
+            $path = File::Spec->catfile($dir, $base)
+        }
+
+        _make_group_writable($path);
+
+        return $made{$track} = $path;
     }
-
-    my $dir = $opt{'dir'} || $_log_dir;
-
-    my $track = join '#', $dir, $base,
-                  map
-                  { join '=', $_ , defined $opt{ $_ } ? $opt{ $_ } : 'undef' }
-                  sort keys %opt;
-
-    return $made{ $track }
-      if $made{ $track } && ! $opt{'force-new'};
-
-    my $date = DateTime->now( 'time_zone' => '-1000' );
-
-    $base = join '.', $base, _make_base_parts( $date, $dir, %opt );
-
-    my $path;
-    if ( ! $opt{'skip-date-dir'} ) {
-
-      $path = _make_per_day_logfile( $date, $dir, $base )
-    }
-    else {
-
-      _make_group_writable( $dir );
-      $path = File::Spec->catfile( $dir, $base )
-    }
-    _make_group_writable( $path );
-
-    return $made{ $track } = $path;
-  }
 }
 
 sub _make_base_parts {
+    my ($dt, $dir, %opt) = @_;
 
-  my ( $dt, $dir , %opt ) = @_;
+    # Use effective or real user id.
+    my $user = getpwuid( $> ) || getpwuid( $< ) || 'unknown-user';
 
-  # Use effective or real user id.
-  my $user = getpwuid( $> ) || getpwuid( $< ) || 'unknown-user';
+    my $time = join '-',
+        map {$dt->$_( ':' )} ('ymd', $opt{'add-time'} ? 'hms' : ());
 
-  my $time =
-    join '-',
-      map { $dt->$_( ':' ) } ( 'ymd', $opt{'add-time'} ? 'hms' : () )
-      ;
-
-  return
-    ( Net::Domain::hostname(),
-      $user,
-      $time,
-      ( $opt{'add-dir'} && $dir ? _path_as_base( $dir )  : () ),
-      ( $opt{'add-pid'}         ? $$               : () ),
-      ( $opt{'add-random'}      ? _random_string() : () )
+    return (
+        Net::Domain::hostname(),
+        $user,
+        $time,
+        ($opt{'add-dir'} && $dir ? _path_as_base($dir)  : ()),
+        ($opt{'add-pid'}         ? $$                   : ()),
+        ($opt{'add-random'}      ? _random_string()     : ())
     );
 }
 
 sub _random_string {
+    my ($size) = @_;
 
-  my ( $size ) = @_;
+    $size ||= 8;
 
-  $size ||= 8;
+    my @source = ('a' .. 'z' , 'A' .. 'Z' , 0 .. 9);
+    my $out = '';
+    $out .= $source[rand @source] while length $out < $size;
 
-  my @source = ( 'a' .. 'z' , 'A' .. 'Z' , 0 .. 9 );
-  my $out = '';
-  $out .= $source[ rand @source ] while length $out < $size;
-
-  return $out;
+    return $out;
 }
 
 sub _path_as_base {
+    my ($in) = @_;
 
-  my ( $in ) = @_;
-
-  $in =~ s{[/ ]+}/=/g;
-  return $in;
+    $in =~ s/[\/ ]+/=/g;
+    return $in;
 }
 
 sub _make_per_day_logfile {
+    my ($date, $parent_dir, $basename) = @_;
 
-  my ( $date, $parent_dir, $basename ) = @_;
+    require File::Path;
+    # Get make_path() changes.
+    import File::Path 2.08;
 
-  require File::Path;
-  # Get make_path() changes.
-  import File::Path 2.08;
+    my ($y, $m, $d) = map {sprintf '%02d', $date->$_()} ('year', 'month', 'day');
 
-  my ( $y, $m, $d ) = map { sprintf '%02d', $date->$_() } ( 'year', 'month', 'day' );
+    # Directory tree is something like /parent/201201/12 for date of Jan 12, 2012.
+    my $dir = File::Spec->catfile($parent_dir,
+                                  join('', $y, $m),
+                                  $d);
 
-  # Directory tree is something like /parent/201201/12 for date of Jan 12, 2012.
-  my $dir = File::Spec->catfile( $parent_dir,
-                                  join( '', $y, $m ),
-                                  $d
-                                );
+    # umask is take into account for the final permissions.
+    File::Path::make_path($dir, {
+        'verbose' => 0,
+        'mode'    => 0777,
+        'owner'   => 'jcmtarch',
+        'group'   => 'jcmt_data',
+    });
 
-  # umask is take into account for the final permissions.
-  File::Path::make_path( $dir,
-                          { 'verbose' => 0,
-                            'mode'    => 0777,
-                            'owner'   => 'jcmtarch',
-                            'group'   => 'jcmt_data',
-                          }
-                        );
-  # Regardless of umask, make directory at least user & group writable.
-  _make_group_writable( $dir );
+    # Regardless of umask, make directory at least user & group writable.
+    _make_group_writable($dir);
 
-  return File::Spec->catfile( $dir, $basename );
+    return File::Spec->catfile($dir, $basename);
 }
 
 sub _make_group_writable {
+    my ( @file ) = @_;
 
-  my ( @file ) = @_;
+    require Fcntl;
+    import Fcntl ':mode';
 
-  require Fcntl;
-  import Fcntl ':mode';
+    my $sys_log_re = _get_sys_log_re();
 
-  my $sys_log_re = _get_sys_log_re();
+    # For file (0664).
+    my $default = S_IRUSR() | S_IWUSR() | S_IRGRP() | S_IWGRP() | S_IROTH();
 
-  # For file (0664).
-  my $default = S_IRUSR() | S_IWUSR() | S_IRGRP() | S_IWGRP() | S_IROTH();
+    for my $file (@file) {
+        next unless $file =~ $sys_log_re;
 
-  for my $file ( @file ) {
+        my $mode = $default;
+        # Adjust for directory (0775).
+        $mode |= S_IXUSR() | S_IXGRP() | S_IXOTH() if -d $file;
 
-    next unless $file =~ $sys_log_re;
+        chmod $mode, $file;
+    }
 
-    my $mode = $default;
-    # Adjust for directory (0775).
-    -d $file and $mode |= S_IXUSR() | S_IXGRP() | S_IXOTH();
-
-    chmod $mode, $file;
-  }
-
-  return;
+    return;
 }
 
 # Only care about system wide, multi user usable file paths.
 sub _get_sys_log_re {
-
-  my $re = qr[^/(?: jac_log | tmp\b )]x;
-  return $re;
+    my $re = qr/^\/(?: jac_log | tmp\b )/x;
+    return $re;
 }
 
 
@@ -481,4 +463,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

@@ -8,9 +8,9 @@ JSA::LogInitialize - Initialize a Log::Log4perl object
 
 =head1 SYNOPSIS
 
-  use JSA::LogInitialize qw[ init_logger ];
+    use JSA::LogInitialize qw/init_logger/;
 
-  init_logger( '/log/file/path' );
+    init_logger('/log/file/path');
 
 
 =head1 DESCRIPTION
@@ -26,7 +26,7 @@ criterion; e.g. every 24 hours with date being part of file name.
 
 Following functions can be imported into caller's namespace...
 
-  init_logger
+    init_logger
 
 Nothing is exported by default.
 
@@ -34,10 +34,8 @@ Nothing is exported by default.
 
 use strict; use warnings;
 
-use Exporter qw[ import ];
-our @EXPORT_OK =
-  qw[ init_logger
-    ];
+use Exporter qw/import/;
+our @EXPORT_OK = qw/init_logger/;
 
 use Log::Log4perl;
 use Log::Log4perl::Level 'L4P';
@@ -45,24 +43,23 @@ use Log::Log4perl::Level 'L4P';
 use JSA::LogSetup ();
 
 {
-  my %done;
-  sub init_logger {
+    my %done;
+    sub init_logger {
+        my ($name, %opt) = @_;
 
-    my ( $name, %opt ) = @_;
+        my $path = JSA::LogSetup::make_logfile($name, %opt);
 
-    my $path = JSA::LogSetup::make_logfile( $name, %opt );
+        return $path if exists $done{$path};
 
-    return $path if exists $done{ $path };
+        JSA::LogSetup::logfile($path);
+        Log::Log4perl->init(JSA::LogSetup::get_config());
 
-    JSA::LogSetup::logfile( $path );
-    Log::Log4perl->init( JSA::LogSetup::get_config() );
+        my $log = Log::Log4perl->get_logger('');
+        $log->level($opt{'level'} || $L4P::WARN);
 
-    my $log = Log::Log4perl->get_logger( '' );
-    $log->level( $opt{'level'} || $L4P::WARN );
-
-    undef $done{ $path };
-    return $path;
-  }
+        undef $done{$path};
+        return $path;
+    }
 }
 
 
@@ -78,13 +75,12 @@ Returns the log file name given a suitable name (see
 C<&JSA::LogSetup::make_logfile>), initializes the C<Log::Log4perl>
 object (see the module pod on how to use the object).
 
-  printf "Log file is %s\n" , init_logger( 'basename-or-path' );
+    printf "Log file is %s\n", init_logger('basename-or-path');
 
 It also takes optional arguments to specify log level (see
 C<Log::Log4perl::Level>), and to pass the rest to
 C<&JSA::LogSetup::make_logfile>. If no log level is specified,
 C<$Log::Log4perl::WARN> is used.
-
 
 =cut
 
@@ -129,4 +125,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

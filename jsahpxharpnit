@@ -6,7 +6,7 @@ jsahpxharpnit - Submit a HARP HEALPix job to the CADC GridEngine for JSA process
 
 =head1 SYNOPSIS
 
-  jsahpxharpnit -ut 20080705
+    jsahpxharpnit -ut 20080705
 
 =head1 DESCRIPTION
 
@@ -70,22 +70,23 @@ Print version information.
 =cut
 
 
-use JAC::Setup qw/ omp sybase /;
+use JAC::Setup qw/omp sybase/;
 
 use strict;
 use warnings;
 
-use JSA::Submission qw/%JUNK_OBSIDSS
-                       adjust_header adjust_header_freq assign_to_group
-                       determine_frame_class determine_resource_requirement
-                       echo_messages find_observations get_obsidss
-                       log_message
-                       prepare_archive_db send_log_email
-                       write_log_file/;
+use JSA::Submission qw/
+    %JUNK_OBSIDSS
+    adjust_header adjust_header_freq assign_to_group
+    determine_frame_class determine_resource_requirement
+    echo_messages find_observations get_obsidss
+    log_message
+    prepare_archive_db send_log_email
+    write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 use OMP::Info::Obs;
-use OMP::Constants qw/ :obs /;
+use OMP::Constants qw/:obs/;
 
 use Getopt::Long;
 use Pod::Usage;
@@ -93,131 +94,132 @@ use Pod::Usage;
 prepare_archive_db();
 
 # Handle command-line options.
-my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-     $queue, $task, $local_only_info );
-my $status = GetOptions( "help"      => \$help,
-                         "man"       => \$man,
-                         "project=s" => \$project,
-                         "ut=s"      => \$ut,
-                         "priority=i"=> \$priority,
-                         "version"   => \$version,
-                         "debug"     => \$debug,
-                         "noemail"   => \$noemail,
-                         "queue=s"     => \$queue,
-                         'local-add-info' => \$local_only_info,
-                         'task=s'    => \$task,
-                       );
+my ($help, $man, $project, $ut, $version, $priority, $noemail, $debug,
+    $queue, $task, $local_only_info);
+my $status = GetOptions(
+    "help"      => \$help,
+    "man"       => \$man,
+    "project=s" => \$project,
+    "ut=s"      => \$ut,
+    "priority=i"=> \$priority,
+    "version"   => \$version,
+    "debug"     => \$debug,
+    "noemail"   => \$noemail,
+    "queue=s"     => \$queue,
+    'local-add-info' => \$local_only_info,
+    'task=s'    => \$task,
+);
 
-pod2usage( 1 ) if $help;
-pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+pod2usage(1) if $help;
+pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
-if( $version ) {
-  print "Submit a HPX observation job to the CADC GridEngine for JSA processing.\n";
-  print " Source code revision: 0.01\n";
-  exit;
+if ($version) {
+    print "Submit a HPX observation job to the CADC GridEngine for JSA processing.\n";
+    print " Source code revision: 0.01\n";
+    exit;
 }
 
 die 'Task name must be given' unless defined $task;
 
 die 'This script should not be used in project mode'
-  unless defined $ut;
+    unless defined $ut;
 
 echo_messages($noemail || $debug);
 
 $project = uc($project) if defined $project;
 my (undef, $grp) = find_observations($ut, $project, $priority, 'jsahpxharpnit');
 
-if( scalar( @{$grp->obs} ) == 0 ) {
-  log_message( "No observations were retrieved from the database.\n");
-} else {
-  log_message( scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n");
+if (scalar(@{$grp->obs}) == 0) {
+    log_message("No observations were retrieved from the database.\n");
+}
+else {
+    log_message(scalar(@{$grp->obs}) . " observations were retrieved from the database.\n\n");
 
-  # Group information hash for add_jsa_proc_jobs().
-  my %groups;
+    # Group information hash for add_jsa_proc_jobs().
+    my %groups;
 
-  foreach my $obs ( $grp->obs ) {
+    foreach my $obs ($grp->obs) {
+        my $hdr = $obs->hdrhash;
 
-    my $hdr = $obs->hdrhash;
+        my $obstype = uc( $hdr->{'OBS_TYPE'} );
+        my $instrume = uc( $hdr->{'INSTRUME'} );
+        my $backend = uc( $hdr->{'BACKEND'} );
 
-    my $obstype = uc( $hdr->{'OBS_TYPE'} );
-    my $instrume = uc( $hdr->{'INSTRUME'} );
-    my $backend = uc( $hdr->{'BACKEND'} );
+        # This script is only for HARP.
+        if ($instrume ne 'HARP') {
+            log_message( "Instrument $instrume currently not supported for HPX nit processing\n");
+            next;
+        }
 
-    # This script is only for HARP.
-    if ($instrume ne 'HARP') {
-      log_message( "Instrument $instrume currently not supported for HPX nit processing\n");
-      next;
+        # Skip E&C observations.
+        if ($hdr->{'PROJECT'} =~ /EC/i) {
+            log_message("Observation is from an E&C project so skipping for HPX nit processing\n");
+            next;
+        }
+
+        # We process SCIENCE for ACSIS.
+        unless ($backend eq 'ACSIS' && $obstype eq 'SCIENCE') {
+            next;
+        }
+
+        adjust_header($hdr);
+
+        my $frameclass = determine_frame_class($obs);
+
+        # Current default values for this observation in group handling and
+        # recipe submission
+        my %current;
+
+        # If the data are not good then do not include them.
+        if ($obs->status != OMP__OBS_GOOD ) {
+            log_message("Observation is not good and so will not be processed\n");
+            next;
+        }
+
+        # Prepare the group as if it is night mode, because we need
+        # assign_to_group to generate a night-style association ID.
+        $current{'mode'} = 'night';
+        $current{'dprecipe'} = determine_resource_requirement($obs);
+
+        # All observations are processed with the same recipe.
+        $current{'drparams'} = 'REDUCE_SCIENCE_LEGACY';
+
+        # Placeholder for addition of recpars once they are added to ORAC-DR.
+        # $current{'recpars'} = '???.ini';
+
+        my @subsystems = $obs->subsystems;
+
+        for my $subsys (@subsystems) {
+            my @all_obsidss = $subsys->obsidss;
+            my $obsidss = $all_obsidss[0];
+
+            die "Error determining an OBSIDSS for an observation. Can not proceed\n"
+                unless defined $obsidss;
+
+            # local copies
+            my %obsidss_current = %current;
+
+            if (exists $JUNK_OBSIDSS{$obsidss}) {
+                log_message( "Subsystem $obsidss will not be processed in any way\n");
+                next;
+            }
+
+            my $subsyshdr = $subsys->hdrhash;
+
+            adjust_header_freq($subsyshdr);
+
+            my $obsinfo = create_obsinfo_hash($obs, $subsyshdr);
+
+            # Override mode to "obs".  ORAC-DR will still be processing groups
+            # of observations, but we only want jsawrapdr to save the obs products.
+
+            assign_to_group($instrume, $subsys->obsid, $frameclass, undef,
+                            $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
+                            'hpx-tmp', $task, $obsinfo, 1, 'obs');
+        }
     }
 
-    # Skip E&C observations.
-    if ( $hdr->{'PROJECT'} =~ /EC/i ) {
-      log_message("Observation is from an E&C project so skipping for HPX nit processing\n");
-      next;
-    }
-
-    # We process SCIENCE for ACSIS.
-    unless ( $backend eq 'ACSIS' && $obstype eq 'SCIENCE' ) {
-      next;
-    }
-
-    adjust_header($hdr);
-
-    my $frameclass = determine_frame_class($obs);
-
-    # Current default values for this observation in group handling and
-    # recipe submission
-    my %current;
-
-    # If the data are not good then do not include them.
-    if ($obs->status != OMP__OBS_GOOD ) {
-      log_message("Observation is not good and so will not be processed\n");
-      next;
-    }
-
-    # Prepare the group as if it is night mode, because we need
-    # assign_to_group to generate a night-style association ID.
-    $current{'mode'} = 'night';
-    $current{'dprecipe'} = determine_resource_requirement($obs);
-
-    # All observations are processed with the same recipe.
-    $current{'drparams'} = 'REDUCE_SCIENCE_LEGACY';
-
-    # Placeholder for addition of recpars once they are added to ORAC-DR.
-    # $current{'recpars'} = '???.ini';
-
-    my @subsystems = $obs->subsystems;
-
-    for my $subsys (@subsystems) {
-      my @all_obsidss = $subsys->obsidss;
-      my $obsidss = $all_obsidss[0];
-
-      die "Error determining an OBSIDSS for an observation. Can not proceed\n"
-        unless defined $obsidss;
-
-      # local copies
-      my %obsidss_current = %current;
-
-      if (exists $JUNK_OBSIDSS{$obsidss}) {
-        log_message( "Subsystem $obsidss will not be processed in any way\n");
-        next;
-      }
-
-      my $subsyshdr = $subsys->hdrhash;
-
-      adjust_header_freq($subsyshdr);
-
-      my $obsinfo = create_obsinfo_hash($obs, $subsyshdr);
-
-      # Override mode to "obs".  ORAC-DR will still be processing groups
-      # of observations, but we only want jsawrapdr to save the obs products.
-
-      assign_to_group( $instrume, $subsys->obsid, $frameclass, undef,
-                       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
-                       'hpx-tmp', $task, $obsinfo, 1, 'obs' );
-    }
-  }
-
-  add_jsa_proc_jobs(\%groups, {}, 'obs', $priority, $local_only_info, $debug);
+    add_jsa_proc_jobs(\%groups, {}, 'obs', $priority, $local_only_info, $debug);
 }
 
 write_log_file('jsasubmit-hpx-harp-nit', $ut, $project) unless $debug;

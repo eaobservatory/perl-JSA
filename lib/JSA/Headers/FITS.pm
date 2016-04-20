@@ -6,8 +6,8 @@ JSA::Headers::FITS - Functions to deal with FITS file headers.
 
 =head1 SYNOPSIS
 
-  use JSA::Headers::FITS qw/update_fits_file_fits_headers/;
-  update_fits_file_fits_headers($file, \%options);
+    use JSA::Headers::FITS qw/update_fits_file_fits_headers/;
+    update_fits_file_fits_headers($file, \%options);
 
 =head1 DESCRIPTION
 

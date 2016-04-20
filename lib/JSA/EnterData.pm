@@ -6,25 +6,24 @@ JSA::EnterData - Parse headers and store in database
 
 =head1 SYNOPSIS
 
-  # Create new object, with specific header dictionary.
-  my $enter = JSA::EnterData
-              ->new( 'dict' => '/path/to/dict' );
+    # Create new object, with specific header dictionary.
+    my $enter = new JSA::EnterData('dict' => '/path/to/dict');
 
-  # Do not actually insert into database.
-  #$enter->debug( 1 );
+    # Do not actually insert into database.
+    #$enter->debug(1);
 
-  # Upload metadata for Jun 25, 2008.
-  $enter->date( 20080625 );
+    # Upload metadata for Jun 25, 2008.
+    $enter->date(20080625);
 
-  # Fill metadata.
-  $enter->update_mode( 0 );
+    # Fill metadata.
+    $enter->update_mode(0);
 
-  $enter->prepare_and_insert;
+    $enter->prepare_and_insert;
 
-  # Fill file information.
-  $enter->update_mode( 1 );
+    # Fill file information.
+    $enter->update_mode(1);
 
-  $enter->prepare_and_insert;
+    $enter->prepare_and_insert;
 
 =head1 DESCRIPTION
 
@@ -48,22 +47,22 @@ use warnings;
 use FindBin;
 
 use File::Temp;
-use List::MoreUtils qw[ any all ];
-use List::Util qw[ min max ];
+use List::MoreUtils qw/any all/;
+use List::Util qw/min max/;
 use Log::Log4perl;
-use Scalar::Util qw[ blessed looks_like_number ];
+use Scalar::Util qw/blessed looks_like_number/;
 
 use Astro::Coords::Angle::Hour;
 
-use JSA::Headers qw/ read_jcmtstate read_wcs /;
-use JSA::Datetime qw[ make_datetime ];
+use JSA::Headers qw/read_jcmtstate read_wcs/;
+use JSA::Datetime qw/make_datetime/;
 use JSA::DB::TableCOMMON;
 use JSA::EnterData::ACSIS;
 use JSA::EnterData::DAS;
 use JSA::EnterData::SCUBA2;
 use JSA::EnterData::StarCommand;
-use JSA::Error qw[ :try ];
-use JSA::Files qw[ looks_like_rawfile ];
+use JSA::Error qw/:try/;
+use JSA::Files qw/looks_like_rawfile/;
 use JSA::WriteList ();
 use JSA::DB::TableTransfer;
 use JCMT::DataVerify;
@@ -82,94 +81,86 @@ use NDF;
 $| = 1; # Make unbuffered
 
 BEGIN {
-
-  # Make sure that bad status from SMURF triggers bad exit status
-  $ENV{ADAM_EXIT} = 1;
+    # Make sure that bad status from SMURF triggers bad exit status
+    $ENV{ADAM_EXIT} = 1;
 }
 
 {
-  my %default =
-    (
-      'date'               => undef,
-      'sybase-date-format' => '%Y-%m-%d %H:%M:%S',
+    my %default = (
+        'date'              => undef,
+        'sybase-date-format'=> '%Y-%m-%d %H:%M:%S',
 
-      'load-header-db' => 1,
+        'load-header-db'    => 1,
 
-      # $OMP::ArchiveDB::SkipDBLookup is changed.
-      'force-disk'     => 1,
-      'force-db'       => 0,
+        # $OMP::ArchiveDB::SkipDBLookup is changed.
+        'force-disk'        => 1,
+        'force-db'          => 0,
 
-      # Only table update (no insert).
-      'update-mode'    => 0,
+        # Only table update (no insert).
+        'update-mode'       => 0,
 
-      'instruments' =>
-        [ JSA::EnterData::DAS->new,
-          JSA::EnterData::ACSIS->new,
-          JSA::EnterData::SCUBA2->new,
+        'instruments'       => [
+            JSA::EnterData::DAS->new,
+            JSA::EnterData::ACSIS->new,
+            JSA::EnterData::SCUBA2->new,
         ],
 
-      # Location of data dictionary
-      # NOTE: This should go in to the OMP config system at some point
-      'dict' =>
-        '/jac_sw/archiving/jcmt/import/data.dictionary',
-        #'/home/agarwal/src/jac-git/archiving/jcmt/import/data.dictionary',
+        # Location of data dictionary
+        # NOTE: This should go in to the OMP config system at some point
+        'dict' => '/jac_sw/archiving/jcmt/import/data.dictionary',
 
-      # To make OMP::Info::Obs out of given files.
-      'files' => [],
+        # To make OMP::Info::Obs out of given files.
+        'files'             => [],
 
-      # If false, then nothing is printed (other than fatal messages).
-      # Else, messages are printed with increasing verbosity.
-      'verbosity' => 1,
+        # If false, then nothing is printed (other than fatal messages).
+        # Else, messages are printed with increasing verbosity.
+        'verbosity'         => 1,
 
-      # Debugging.  Set to true to turn on.  Debugging means interact
-      # with the database, but don't actually do any inserts, and be
-      # very verbose.
-      'debug' => 0,
+        # Debugging.  Set to true to turn on.  Debugging means interact
+        # with the database, but don't actually do any inserts, and be
+        # very verbose.
+        'debug'             => 0,
 
-      # Force processing of simulation if true.
-      'process_simulation' => 0,
+        # Force processing of simulation if true.
+        'process_simulation'=> 0,
 
-      # Update only an observation run time.
-      'update-only-obstime' => 0,
+        # Update only an observation run time.
+        'update-only-obstime'=> 0,
 
-      'update-only-inbeam' => 0,
+        'update-only-inbeam'=> 0,
 
-      'acsis-calc-radec' => 1
+        'acsis-calc-radec'  => 1
     );
 
-  #  Generate some accessor functions.
-  for my $k ( keys %default, qw[ conditional_insert ] ) {
+    #  Generate some accessor functions.
+    for my $k (keys %default, qw/conditional_insert/) {
+        next if (any {$k eq $_} (
+                # Must be given in constructor.
+                'dict',
+                # Special handling when date to set is given.
+                'date',
+                # Validate instruments before setting.
+                'instruments',
+                # Need to check for an array ref.
+                'files',
+            ))
+            ||
+            # Need to turn off the other if one is true.
+            $k =~ m/^ force-d(?: isk | b ) $/x;
 
-    next
-      if ( any { $k eq $_ }
-            ( # Must be given in constructor.
-              'dict',
-              # Special handling when date to set is given.
-              'date',
-              # Validate instruments before setting.
-              'instruments',
-              # Need to check for an array ref.
-              'files',
-            )
-          )
-          ||
-          # Need to turn off the other if one is true.
-          $k =~ m/^ force-d(?: isk | b ) $/x
-          ;
-
-    {
-      (my $sub = $k ) =~ tr/-/_/;
-      no strict 'refs';
-      *$sub = sub {
+        {
+            (my $sub = $k) =~ tr/-/_/;
+            no strict 'refs';
+            *$sub = sub {
                 my $self = shift;
 
-                return $self->{ $k } unless scalar @_;
+                return $self->{$k} unless scalar @_;
 
-                $self->{ $k } = shift;
+                $self->{$k} = shift;
                 return;
-              };
+            };
+        }
     }
-  }
 
 =item B<new>
 
@@ -237,34 +228,31 @@ In insert mode, nothing is inserted in "FILES" table.
 
 =cut
 
-  sub new {
+    sub new {
+        my ($class, %args) = @_;
 
-    my ( $class, %args ) = @_;
+        my $obj = bless {%default, %args}, $class;
 
-    my $obj = bless { %default, %args }, $class;
+        # Sanity checks.
+        $obj->_verify_dict;
 
-    # Sanity checks.
-    $obj->_verify_dict;
+        for (qw/date force-db force-disk/) {
+            (my $sub = $_) =~ tr/-/_/;
 
-    for ( qw[ date force-db force-disk ] ) {
+            die "None such sub: $sub"
+                unless $obj->can($sub);
 
-      ( my $sub = $_ ) =~ tr/-/_/;
+            $obj->$sub($obj->$sub);
+        }
 
-      die "None such sub: $sub"
-        unless $obj->can( $sub );
+        if ($obj->debug) {
+            $_->debug(1) for $obj->instruments;
+        }
 
-      $obj->$sub( $obj->$sub );
+        $obj->skip_state_setting(0);
+
+        return $obj;
     }
-
-    if ( $obj->debug ) {
-
-      $_->debug( 1 ) for $obj->instruments;
-    }
-
-    $obj->skip_state_setting( 0 );
-
-    return $obj;
-  }
 
 }
 
@@ -273,87 +261,80 @@ In insert mode, nothing is inserted in "FILES" table.
 Returns a list of instrument objects when no arguments given.  Else,
 the list of given instrument objects is accepted for further use.
 
-  # Currently set.
-  $instruments = $enter->instruments;
+    # Currently set.
+    $instruments = $enter->instruments;
 
-  # Set ACSIS as the only instrument.
-  $enter->instruments( JSA::EnterData::ACSIS->new );
+    # Set ACSIS as the only instrument.
+    $enter->instruments( JSA::EnterData::ACSIS->new );
 
 =cut
 
 sub instruments {
+    my $self = shift;
 
-  my $self = shift;
+    unless (scalar @_) {
+        my $inst = $self->{'instruments'};
+        return
+            defined $inst ? @{$inst} : () ;
+    }
 
-  unless ( scalar @_ ) {
+    foreach my $inst (@_) {
+        throw JSA::Error "Instrument '$inst' is unknown."
+            unless any {blessed $_ eq blessed $inst} (
+                JSA::EnterData::DAS->new,
+                JSA::EnterData::ACSIS->new,
+                JSA::EnterData::SCUBA2->new,
+            );
+    }
 
-    my $inst = $self->{'instruments'};
-    return
-      defined $inst ? @{ $inst } : () ;
-  }
+    $self->{'instruments'} = [@_];
 
-  for my $inst ( @_ ) {
-
-    throw JSA::Error "Instrument '$inst' is unknown."
-      unless any { blessed $_ eq blessed $inst }
-                  ( JSA::EnterData::DAS->new,
-                    JSA::EnterData::ACSIS->new,
-                    JSA::EnterData::SCUBA2->new
-                  ) ;
-  }
-
-  $self->{'instruments'} = [ @_ ];
-
-  return;
+    return;
 }
 
 =item B<debug>
 
 Returns the set truth value if no arguments given.
 
-  $debug = $enter->debug;
+    $debug = $enter->debug;
 
 Else, sets the value to turn on or off debugging; returns nothing.
 
-  $enter->debug( 0 );
+    $enter->debug(0);
 
 =item B<date>
 
 Returns the set date if no arguments given.
 
-  $date = $enter->date;
+    $date = $enter->date;
 
 Else, sets the date to date given as L<DateTime> object or as a string
 in C<yyyymmdd> format; returns nothing.  If date does not match
 expected type, then current date in local timezone is used.
 
-  $enter->date( '20251013' );
+    $enter->date('20251013');
 
 =cut
 
 sub date {
+    my $self = shift;
 
-  my $self = shift;
+    return $self->{'date'} unless scalar @_;
 
-  return $self->{'date'} unless scalar @_;
+    my $date = shift;
 
-  my $date = shift;
+    if (! $date
+            || (! ref $date && $date !~ /^\d{8}$/)
+            || (ref $date && ! $date->isa('DateTime'))) {
+        $date = DateTime->now( 'time_zone' => 'UTC' ) ;
+    }
+    elsif (! ref $date) {
+        $date = DateTime::Format::ISO8601->parse_datetime($date);
+    }
 
-  if ( ! $date
-      || ( ! ref $date && $date !~ /^\d{8}$/ )
-      || ( ref $date && ! $date->isa( 'DateTime' ) )
-     ) {
+    $self->{'date'} = $date;
 
-    $date = DateTime->now( 'time_zone' => 'UTC' ) ;
-  }
-  elsif ( ! ref $date ) {
-
-    $date = DateTime::Format::ISO8601->parse_datetime( $date );
-  }
-
-  $self->{'date'} = $date;
-
-  return;
+    return;
 }
 
 =item B<sybase_date_format>
@@ -361,40 +342,39 @@ sub date {
 Returns the set date format for Sybase database consumption if no
 arguments given.
 
-  $format = $enter->sybase_date_format;
+    $format = $enter->sybase_date_format;
 
 Else, sets the date format; returns nothing.
 
-  $enter->sybase_date_format( '%Y-%m-%d %H:%M:%S' );
+    $enter->sybase_date_format('%Y-%m-%d %H:%M:%S');
 
 =item B<force_db>
 
 Returns the truth value, when called without arguments, to indicate
 whether searching the database for data is forced.
 
-  $db = $enter->force_db;
+    $db = $enter->force_db;
 
 Else, sets the given truth value; returns nothing.  When the value is
 true, I<force-disk> is marked false (see I<new>).
 
-  $enter->force_db( 0 );
+    $enter->force_db( 0 );
 
 =cut
 
 sub force_db {
+    my $self = shift;
 
-  my $self = shift;
+    return
+        ! ($OMP::ArchiveDB::FallbackToFiles && $OMP::ArchiveDB::SkipDBLookup)
+        unless scalar @_;
 
-  return
-    ! ( $OMP::ArchiveDB::FallbackToFiles && $OMP::ArchiveDB::SkipDBLookup )
-      unless scalar @_;
+    my ($force) = @_;
 
-  my ( $force ) = @_;
+    $OMP::ArchiveDB::FallbackToFiles =
+    $OMP::ArchiveDB::SkipDBLookup = ! $force;
 
-  $OMP::ArchiveDB::FallbackToFiles =
-  $OMP::ArchiveDB::SkipDBLookup = ! $force;
-
-  return;
+    return;
 }
 
 =item B<force_disk>
@@ -402,12 +382,12 @@ sub force_db {
 Returns the truth value, when called without arguments, to indicate
 whether searching the disk for data is forced.
 
-  $disk = $enter->force_disk;
+    $disk = $enter->force_disk;
 
 Else, sets the given truth value; returns nothing.  When the value is
 true, I<force-db> is marked false (see I<new>).
 
-  $enter->force_disk( 1 );
+    $enter->force_disk(1);
 
 =cut
 
@@ -416,10 +396,10 @@ sub force_disk {
   my $self = shift;
 
   return
-    $OMP::ArchiveDB::FallbackToFiles && $OMP::ArchiveDB::SkipDBLookup
+      $OMP::ArchiveDB::FallbackToFiles && $OMP::ArchiveDB::SkipDBLookup
       unless scalar @_;
 
-  my ( $force ) = @_;
+  my ($force) = @_;
 
   # Force observation queries to query files on disk rather than the database.
   $OMP::ArchiveDB::FallbackToFiles =
@@ -434,45 +414,45 @@ sub force_disk {
 Returns the set truth value to indicate where to load in the header
 database, if no arguments given.
 
-  $load = $enter->load_header_db;
+    $load = $enter->load_header_db;
 
 Else, sets the truth value to turn on or off loading the header
 database; returns nothing.
 
-  $enter->load_header_db( 1 );
+    $enter->load_header_db(1);
 
 =item B<update_mode>
 
 Returns the set truth value if no arguments given.
 
-  $update = $enter->update_mode;
+    $update = $enter->update_mode;
 
 Else, sets the value to turn on or off update (off or on insert);
 returns nothing.  In insert mode, nothing is inserted in "FILES"
 table.
 
-  $enter->update_mode( 0 );
+    $enter->update_mode(0);
 
 =item B<update_only_obstime>
 
 Returns a truth value to indicate if to update only the times for an
 observation run if no arguments given.
 
-  print "Only date obs & end will be updated"
-    if $enter->update_only_obstime();
+    print "Only date obs & end will be updated"
+        if $enter->update_only_obstime();
 
 Else, sets the truth value if to update only observation date values;
 returns nothing.
 
-    $enter->update_only_obstime( my $only_obstime = 1 );
+    $enter->update_only_obstime(my $only_obstime = 1);
 
 =item B<update_only_inbeam>
 
 Returns a truth value to indicate if to update only the C<INBEAM> header
 values if no arguments given.
 
-  print "Only INBEAM values will be updated"
-    if $enter->update_only_inbeam();
+    print "Only INBEAM values will be updated"
+      if $enter->update_only_inbeam();
 
 Else, sets the truth value if to update only C<INBEAM> values;
 returns nothing.
@@ -484,25 +464,24 @@ returns nothing.
 Returns integer value to indicate message verbosity, if no arguments
 are given.
 
-  $ok = $enter->verbosity;
+    $ok = $enter->verbosity;
 
 Else, sets the value for later use; returns nothing.
 
-  # Silence messages.
-  $enter->verbosity( 0 );
+    # Silence messages.
+    $enter->verbosity(0);
 
 =item B<get_dict>
 
 Returns the file name for the data dictionary.
 
-  $dict_file = $enter->get_dict;
+    $dict_file = $enter->get_dict;
 
 =cut
 
 sub get_dict {
-
-  my ( $self ) = @_;
-  return $self->{'dict'};
+    my ($self) = @_;
+    return $self->{'dict'};
 }
 
 =item B<files>
@@ -510,11 +489,11 @@ sub get_dict {
 If no array reference is given, returns the array reference of file
 names.
 
-  $files = $enter->files();
+    $files = $enter->files();
 
 Else, saves the given array reference  & returns nothing.
 
-  $enter->files( [ file_list() ] );
+    $enter->files([file_list()]);
 
 Throws I<JSA::Error> exception if the given argument is not an array
 reference, or is empty.
@@ -522,44 +501,40 @@ reference, or is empty.
 =cut
 
 sub files {
+    my $self = shift @_;
 
-  my $self = shift @_;
+    return $self->{'files'}
+        unless scalar @_;
 
-  return $self->{'files'}
-    unless scalar @_;
+    my ($files) = @_;
 
-  my ( $files ) = @_;
+    throw JSA::Error 'Need a non-empty array reference.'
+        unless $files && ref $files && scalar @{ $files };
 
-  throw JSA::Error 'Need a non-empty array reference.'
-    unless $files && ref $files && scalar @{ $files };
+    my %seen;
+    my $old = $self->{'files'};
+    $self->{'files'} = [
+        grep {! $seen{$_} ++} (
+            ($old && ref $old ? @{$old} : ()),
+            @{$files}
+        )];
 
-  my %seen;
-  my $old = $self->{'files'};
-  $self->{'files'} =
-    [ grep
-      { ! $seen{ $_ }++ }
-      ( ( $old && ref $old ? @{ $old } : () ),
-        @{ $files }
-      )
-    ];
-
-  return;
+    return;
 }
 
 =item B<files_given>
 
 Returns a truth value to indicate if any files were provided to process.
 
-  $use_date = ! $enter->files_given();
+    $use_date = ! $enter->files_given();
 
 =cut
 
 sub files_given {
+    my ($self) = @_;
 
-  my ( $self ) = @_;
-
-  my $files = $self->files;
-  return  !! ( $files && scalar @{ $files } );
+    my $files = $self->files;
+    return  !! ($files && scalar @{$files});
 }
 
 =item B<process_simulation>
@@ -567,12 +542,12 @@ sub files_given {
 Returns the set truth value to indicate whether simulation processing
 is forced, if no arguments given.
 
-  $skip_sim = ! $enter->process_simulation;
+    $skip_sim = ! $enter->process_simulation;
 
 Else, sets the truth value to turn on or off simulation processing;
 returns nothing.
 
-  $enter->process_simulation( 1 );
+    $enter->process_simulation(1);
 
 =item B<prepare_and_insert>
 
@@ -584,136 +559,126 @@ Date can be given to the method, or can be set via I<new()> or
 I<date()> method. Current date is used if no date has been explicitly
 set.
 
-  # Insert either for the set or current date; ignores given files if
-  # any; disk is searched.
-  $enter->prepare_and_insert();
+    # Insert either for the set or current date; ignores given files if
+    # any; disk is searched.
+    $enter->prepare_and_insert();
 
-  # Insert for Jun 25, 2008; ignores given files if any; disk is
-  # searched.
-  $enter->prepare_and_insert( 'date' => '20080625' );
+    # Insert for Jun 25, 2008; ignores given files if any; disk is
+    # searched.
+    $enter->prepare_and_insert('date' => '20080625');
 
-  # Insert for only given files; ignores date; disk is not searched as
-  # there is no reason to.
-  $enter->prepare_and_insert( 'given-files' => 1 );
+    # Insert for only given files; ignores date; disk is not searched as
+    # there is no reason to.
+    $enter->prepare_and_insert('given-files' => 1);
 
 =cut
 
 {
-  # To keep track of already processed files.
-  my ( $old_date , %touched );
+    # To keep track of already processed files.
+    my ($old_date , %touched);
 
-  sub prepare_and_insert {
+    sub prepare_and_insert {
+        my ($self, %arg) = @_;
 
-    my ( $self, %arg ) = @_;
+        my $key_use_list = 'given-files';
 
-    my $key_use_list = 'given-files';
+        my ($date, $use_list) = @arg{('date', $key_use_list)};
 
-    my ( $date, $use_list ) =
-      @arg{( 'date', $key_use_list )};
+        # Format date first before getting it back.
+        $self->date($date) if defined $date;
+        $date = $self->date;
 
-    # Format date first before getting it back.
-    $self->date( $date ) if defined $date ;
-    $date = $self->date;
+        $arg{$key_use_list} = 0 unless defined $use_list;
 
-    $arg{ $key_use_list } = 0 unless defined $use_list;
+        if (defined $old_date && $date->ymd ne $old_date->ymd) {
+            $self->_print_text("clearing file cache\n")
+                if 1 < $self->verbosity;
 
-    if ( defined $old_date && $date->ymd ne $old_date->ymd ) {
+            undef %touched;
+        }
 
-      $self->_print_text( "clearing file cache\n" )
-        if 1 < $self->verbosity;
+        $old_date = $date;
 
-      undef %touched;
+        # Tables of interest.  All instruments reference the COMMON table, so it is
+        # first on the array.  Actual instrument table will be the second element.
+        my @tables = qw/COMMON/;
+
+        my $db = OMP::DBbackend::Archive->new;
+        my $dbh = $db->handle;
+
+        $dbh->{'syb_show_eed'} = $dbh->{'syb_show_sql'} = 1;
+
+        # The %columns hash will contain a key for each table, each key's value
+        # being an anonymous hash containing the column information.  Store this
+        # information for the COMMON table initially.
+        my $columns;
+        $columns->{$tables[0]} = $self->get_columns($tables[0], $dbh);
+
+        my %dict = $self->create_dictionary;
+
+        my ($observations, $group, $name, @files_added);
+
+        foreach my $inst ($self->instruments) {
+            $name = $inst->name;
+
+            # Retrieve observations from disk.  An Info::Obs object will be returned
+            # for each subscan in the observation.  No need to retrieve associated
+            # obslog comments. That's <no. of subsystems used> *
+            # <no. of subscans objects returned per observation>.
+            $group = $self->_get_obs_group('name' => $name,
+                                           'date' => $date,
+                                           map {($_ => $arg{ $_ })}
+                                               ($key_use_list));
+
+            next unless $group
+                     && ref $group;
+
+            my @obs = $self->_filter_header(
+                $inst,
+                [$group->obs],
+                'OBS_TYPE' => [qw/FLATFIELD/],
+            );
+
+            $self->_print_text(
+                ! $self->files_given
+                ? sprintf("Inserting data for %s. Date [%s]\n",
+                          $name, $date->ymd)
+                : "Inserting given files\n");
+
+            unless ($obs[0]) {
+                $self->_print_text( "\tNo observations found for instrument $name\n\n" );
+                next;
+            }
+
+            $tables[1] = $inst->table;
+
+            $columns->{$name} = $self->get_columns($inst->table, $dbh);
+            $columns->{FILES} = $self->get_columns('FILES', $dbh);
+
+            # Need to create a hash with keys corresponding to the observation number
+            # (an array won't be very efficient since observations can be missing and
+            # run numbers can be large). The values in this hash have to be a reference
+            # to an array of Info::Obs objects representing each subsystem. We need to
+            # construct new Obs objects based on the subsystem number.
+            # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
+
+            foreach my $obs (@obs) {
+                my @subhdrs = $obs->subsystems;
+                $observations->{$obs->runnr} = \@subhdrs;
+            }
+
+            my $added = $self->insert_observations('db' => $db,
+                                                   'instrument' => $inst,
+                                                   'columns' => $columns,
+                                                   'dict'    => \%dict,
+                                                   'obs' => $observations);
+
+            push @files_added, @{$added}
+                if $added && scalar @{$added};
+        }
+
+        return \@files_added;
     }
-
-    $old_date = $date;
-
-    # Tables of interest.  All instruments reference the COMMON table, so it is
-    # first on the array.  Actual instrument table will be the second element.
-    my @tables = qw/COMMON/;
-
-    my $db = OMP::DBbackend::Archive->new;
-    my $dbh = $db->handle;
-
-    $dbh->{'syb_show_eed'} = $dbh->{'syb_show_sql'} = 1;
-
-    # The %columns hash will contain a key for each table, each key's value
-    # being an anonymous hash containing the column information.  Store this
-    # information for the COMMON table initially.
-    my $columns;
-    $columns->{$tables[0]} = $self->get_columns( $tables[0], $dbh );
-
-    my %dict = $self->create_dictionary;
-
-    my ( $observations, $group, $name, @files_added );
-
-    for my $inst ( $self->instruments ) {
-
-      $name = $inst->name;
-
-      # Retrieve observations from disk.  An Info::Obs object will be returned
-      # for each subscan in the observation.  No need to retrieve associated
-      # obslog comments. That's <no. of subsystems used> *
-      # <no. of subscans objects returned per observation>.
-      $group = $self->_get_obs_group( 'name' => $name,
-                                      'date' => $date,
-                                      map
-                                      { ( $_ => $arg{ $_ } ) }
-                                      ( $key_use_list )
-                                    );
-
-      next
-        unless $group
-        && ref $group;
-
-      my @obs =
-        $self->_filter_header( $inst,
-                              [ $group->obs ],
-                              'OBS_TYPE' => [qw[ FLATFIELD ] ],
-                          );
-
-      $self->_print_text( ! $self->files_given
-                          ? sprintf( "Inserting data for %s. Date [%s]\n",
-                                      $name, $date->ymd
-                                    )
-                          : "Inserting given files\n"
-                        );
-
-      if (! $obs[0]) {
-
-        $self->_print_text( "\tNo observations found for instrument $name\n\n" );
-        next;
-      }
-
-      $tables[1] = $inst->table;
-
-      $columns->{$name} = $self->get_columns( $inst->table, $dbh );
-      $columns->{FILES} = $self->get_columns( 'FILES', $dbh );
-
-      # Need to create a hash with keys corresponding to the observation number
-      # (an array won't be very efficient since observations can be missing and
-      # run numbers can be large). The values in this hash have to be a reference
-      # to an array of Info::Obs objects representing each subsystem. We need to
-      # construct new Obs objects based on the subsystem number.
-      # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
-
-      for my $obs (@obs) {
-        my @subhdrs = $obs->subsystems;
-        $observations->{$obs->runnr} = \@subhdrs;
-      }
-
-      my $added = $self->insert_observations( 'db' => $db,
-                                              'instrument' => $inst,
-                                              'columns' => $columns,
-                                              'dict'    => \%dict,
-                                              'obs' => $observations,
-                                            );
-
-      push @files_added, @{ $added }
-        if $added && scalar @{ $added };
-    }
-
-    return \@files_added;
-  }
 
 =item B<insert_observations>
 
@@ -728,265 +693,233 @@ as keys, array reference of sub headers as values); a hash reference
 of columns (see I<get_columns>); and a hash reference of dictionary
 (see I<create_dictionary>).
 
-  $enter->insert_observations( 'dbhandle' => $dbh,
+    $enter->insert_observations('dbhandle' => $dbh,
                                 'instrument' => $inst,
                                 'columns' => \%cols,
                                 'dict'    => \%dict,
-                                'obs'     => \%obs,
-                              );
+                                'obs'     => \%obs);
 
 It is called by I<prepare_and_insert> method.
 
 =cut
 
-  sub insert_observations {
+    sub insert_observations {
+        my ($self, %args) = @_ ;
 
-    my ( $self, %args ) = @_ ;
+        my ($obs) = map {$args{$_}} qw/obs/;
 
-    my ( $obs ) = map { $args{ $_ } } qw[ obs ];
+        # Pass everything but observations hash reference to other subs.
+        my %pass_args = map {$_ => $args{$_}} qw/instrument db columns dict/;
 
-    # Pass everything but observations hash reference to other subs.
-    my %pass_args =
-      map { $_ => $args{ $_ } } qw[ instrument db columns dict ];
+        my @success;
 
-    my @success;
+        my %run = (
+            'inserted' => sub {
+                my ($self, %arg) = @_;
 
-    my %run =
-      ( 'inserted' =>
-          sub {
-            my ( $self, %arg ) = @_;
+                push @success, map {$_->filename} @{ $arg{'obs'} };
+                return;
+            },
 
-            push @success, map { $_->filename } @{ $arg{'obs'} };
-            return;
-          },
+            'simulation' => sub {
+                my ($self, %arg) = @_;
 
-        'simulation' =>
-          sub {
-            my ( $self, %arg ) = @_;
+                return if $self->skip_state_setting();
 
-            return if $self->skip_state_setting();
+                my $xfer  = $self->_get_xfer_unconnected_dbh();
+                $xfer->put_simulation($arg{'file-id'});
+                return;
+            },
 
-            my $xfer  = $self->_get_xfer_unconnected_dbh();
-            $xfer->put_simulation( $arg{'file-id'} );
-            return;
-          },
+            'error' => sub {
+                my ($self, %arg) = @_;
 
-        'error' =>
-          sub {
-            my ( $self, %arg ) = @_;
+                return if $self->skip_state_setting();
 
-            return if $self->skip_state_setting();
+                my $xfer  = $self->_get_xfer_unconnected_dbh();
+                $xfer->put_error($arg{'file-id'}, $arg{'comment'});
+                return;
+            },
 
-            my $xfer  = $self->_get_xfer_unconnected_dbh();
-            $xfer->put_error( $arg{'file-id'}, $arg{'comment'} );
-            return;
-          },
+            'nothing-to-do' => sub {},
+        );
 
-        'nothing-to-do' => sub {},
-      );
+        my (@sub_obs, @base);
 
-    my ( @sub_obs, @base );
-    RUN:
-    for my $runnr (sort {$a <=> $b} keys %{ $obs } ) {
+        RUN: foreach my $runnr (sort {$a <=> $b} keys %{$obs}) {
+            @sub_obs =  grep {$_} @{$obs->{$runnr}};
 
-      @sub_obs =  grep { $_ } @{ $obs->{ $runnr } };
+            @base = map {$_->simple_filename} @sub_obs;
 
-      @base = map { $_->simple_filename } @sub_obs;
+            my ($ans, $comment);
 
-      my ( $ans, $comment );
-      try {
-        ( $ans, $comment ) = $self->insert_obs_set( 'run-obs' => \@sub_obs,
-                                                    'file-id' => \@base,
-                                                    %pass_args,
-                                                  );
-      }
-      catch JSA::Error with {
+            try {
+                ($ans, $comment) = $self->insert_obs_set('run-obs' => \@sub_obs,
+                                                         'file-id' => \@base,
+                                                         %pass_args);
+            }
+            catch JSA::Error with {
+                my ($e) = @_;
 
-        my ( $e ) = @_;
-
-        $ans = 'error';
-        $comment = "$e";
-      };
-      next unless defined $ans;
-
-      if ( exists $run{ $ans } ) {
-
-        $run{ $ans }->( $self,
-                        'obs'     => \@sub_obs,
-                        'file-id' => \@base,
-                        'comment' =>  $comment,
-                      );
-      }
-      else {
-
-        throw JSA::Error::BadArgs "Do not know what to run for state '$ans'."
-      }
-    }
-
-    return \@success;
-  }
-
-  # For each observation:
-  # 1. Insert a row in the COMMON table.
-  # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
-  # 3. Insert a row in the FILES table for each subscan
-  #
-  # fails, the entire observation fails to go in to the DB.
-  sub insert_obs_set {
-
-    my ( $self, %arg ) = @_;
-
-    my ( $inst, $db, $run_obs, $files ) =
-     map { $arg{ $_ } } qw[ instrument db run-obs file-id ];
-
-    my $dbh  = $db->handle();
-    my @file = @{ $files };
-
-    my %pass_arg =
-      map { $_ => $arg{ $_ } } qw[ instrument columns dict ];
-
-    for ( @file ) {
-
-      if ( exists $touched{ $_ } ) {
-
-        $self->_print_text( "\talready processed: $_\n" )
-          if 1 < $self->verbosity;
-
-        return;
-      }
-    }
-
-    @touched{ @file } = ();
-
-    for my $obs ( @{ $run_obs } ) {
-
-      my $headers = $obs->hdrhash();
-
-      $headers = $self->munge_header_INBEAM( $headers  );
-
-      if ( $inst->can( 'fill_max_subscan' ) ) {
-
-        $inst->fill_max_subscan( $headers, $obs );
-      }
-
-      if ( $inst->can( 'transform_header' ) ) {
-
-        my ( $hash , $array ) = $inst->transform_header( $headers );
-        $obs->hdrhash( $hash );
-      }
-    }
-
-    my $common_obs = $run_obs->[0]
-      or do {
-              $self->_print_text( 'XXX First run obs is undefined|false; nothing to do.' );
-              return ( 'nothing-to-do', 'First run obs is undef|false' );
+                $ans = 'error';
+                $comment = "$e";
             };
 
-    # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
-    # does not untie).  This is so that a single element array reference when
-    # assigned to one of the keys is assigned as reference (not as the element
-    # contained with in).
-    my $common_hdrs = { %{ $common_obs->hdrhash } };
+            next unless defined $ans;
 
-    $self->_print_text( sprintf "\t[%s]... ", join ', ', @file );
-
-    if ( ! $self->process_simulation && $self->is_simulation( $common_hdrs ) ) {
-
-      $self->_print_text( "simulation data; skipping\n" );
-      return ( 'simulation', '' );
-    }
-
-    # XXX Skip badly needed data verification for scuba2 until implemented.
-    unless ( JSA::EnterData::SCUBA2->name_is_scuba2( $inst->name ) ) {
-
-      my $verify = JCMT::DataVerify->new( 'Obs' => $common_obs )
-        or do {
-                my $log = Log::Log4perl->get_logger( '' );
-                $log->logdie( _dataverify_obj_fail_text( $common_obs ) );
-              };
-
-      my %invalid = $verify->verify_headers;
-
-      for (keys %invalid) {
-
-        my $val = $invalid{$_}->[0];
-        if ( $val =~ /does not match/i ) {
-
-          $self->_print_text( "$_ : $val\n" );
-          undef $common_hdrs->{$_};
-        } elsif ( $val =~ /should not/i ) {
-
-          $self->_print_text( "$_ : $val\n" );
-          undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
+            if (exists $run{$ans}) {
+                $run{$ans}->($self,
+                             'obs'     => \@sub_obs,
+                             'file-id' => \@base,
+                             'comment' =>  $comment);
+            }
+            else {
+                throw JSA::Error::BadArgs "Do not know what to run for state '$ans'."
+            }
         }
-      }
+
+        return \@success;
     }
 
-    if ( JSA::EnterData::ACSIS->name_is_similar( $inst->name() )
-          &&
-          ! $self->skip_calc_radec( 'headers' => $common_hdrs )
-        ) {
+    # For each observation:
+    # 1. Insert a row in the COMMON table.
+    # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
+    # 3. Insert a row in the FILES table for each subscan
+    #
+    # fails, the entire observation fails to go in to the DB.
+    sub insert_obs_set {
+        my ($self, %arg) = @_;
 
-      unless ( $self->calc_radec( $inst, $common_obs, $common_hdrs ) ) {
+        my ($inst, $db, $run_obs, $files) =
+           map {$arg{$_}} qw/instrument db run-obs file-id/;
 
-        $self->_print_text( "problem while finding bounds; skipping\n" );
-        return ( 'error', $inst->name() . ': could not find bounds' );
-      }
+        my $dbh  = $db->handle();
+        my @file = @{$files};
+
+        my %pass_arg = map {$_ => $arg{$_}} qw/instrument columns dict/;
+
+        foreach (@file) {
+          if (exists $touched{$_}) {
+              $self->_print_text( "\talready processed: $_\n")
+                  if 1 < $self->verbosity;
+
+              return;
+          }
+        }
+
+        @touched{@file} = ();
+
+        for my $obs (@{$run_obs}) {
+            my $headers = $obs->hdrhash();
+
+            $headers = $self->munge_header_INBEAM($headers);
+
+            if ($inst->can('fill_max_subscan')) {
+              $inst->fill_max_subscan($headers, $obs);
+            }
+
+            if ($inst->can('transform_header')) {
+              my ($hash , $array) = $inst->transform_header($headers);
+              $obs->hdrhash($hash);
+            }
+        }
+
+        my $common_obs = $run_obs->[0]
+            or do {
+                $self->_print_text('XXX First run obs is undefined|false; nothing to do.');
+                return ('nothing-to-do', 'First run obs is undef|false');
+            };
+
+        # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
+        # does not untie).  This is so that a single element array reference when
+        # assigned to one of the keys is assigned as reference (not as the element
+        # contained with in).
+        my $common_hdrs = {%{$common_obs->hdrhash}};
+
+        $self->_print_text(sprintf "\t[%s]... ", join ', ', @file);
+
+        if (! $self->process_simulation && $self->is_simulation($common_hdrs)) {
+            $self->_print_text( "simulation data; skipping\n" );
+            return ( 'simulation', '' );
+        }
+
+        # XXX Skip badly needed data verification for scuba2 until implemented.
+        unless (JSA::EnterData::SCUBA2->name_is_scuba2($inst->name)) {
+            my $verify = JCMT::DataVerify->new('Obs' => $common_obs)
+                or do {
+                    my $log = Log::Log4perl->get_logger('');
+                    $log->logdie( _dataverify_obj_fail_text($common_obs));
+                };
+
+            my %invalid = $verify->verify_headers;
+
+            foreach (keys %invalid) {
+                my $val = $invalid{$_}->[0];
+
+                if ($val =~ /does not match/i) {
+                    $self->_print_text( "$_ : $val\n" );
+                    undef $common_hdrs->{$_};
+                }
+                elsif ($val =~ /should not/i) {
+                    $self->_print_text( "$_ : $val\n" );
+                    undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
+                }
+            }
+        }
+
+        if (JSA::EnterData::ACSIS->name_is_similar($inst->name())
+                && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
+
+            unless ($self->calc_radec($inst, $common_obs, $common_hdrs)) {
+                $self->_print_text("problem while finding bounds; skipping\n");
+                return ('error', $inst->name() . ': could not find bounds');
+            }
+        }
+
+        # COMMON table.
+        #$dbh->begin_work if $self->load_header_db;
+        $db->begin_trans() if $self->load_header_db;
+
+        $self->fill_headers_COMMON($common_hdrs, $common_obs);
+
+        my $error = $self->_modify_db_on_obsend(%pass_arg,
+                                                'dbhandle' => $dbh,
+                                                'table'    => 'COMMON',
+                                                'headers'  => $common_hdrs);
+
+        if ($dbh->err()) {
+            my $text = $dbh->errstr();
+
+            $db->rollback_trans();
+            $self->_print_error_simple_dup($text);
+
+            return ('nothing-to-do' , 'ignored duplicate insert')
+                if $self->_is_insert_dup_error( $text );
+
+            return ('error', $text);
+        }
+
+        # FILES, ACSIS, SCUBA2 tables.
+        unless ($self->update_only_obstime()
+                || $self->update_only_inbeam()) {
+            $self->add_subsys_obs(%pass_arg,
+                                  'db'  => $db,
+                                  'obs' => $run_obs)
+                or return ('error', "while adding subsys obs: $run_obs");
+        }
+
+        try {
+            $db->commit_trans() if $self->load_header_db;
+        }
+        catch Error::Simple with {
+            my ($e) = @_;
+            throw JSA::Error $e;
+        }
+
+        $self->_print_text("successful\n");
+
+        return ('inserted', '');
     }
-
-    # COMMON table.
-    #$dbh->begin_work if $self->load_header_db;
-    $db->begin_trans() if $self->load_header_db;
-
-    $self->fill_headers_COMMON( $common_hdrs, $common_obs );
-
-    my $error =
-      $self->_modify_db_on_obsend( %pass_arg,
-                                  'dbhandle' => $dbh,
-                                  'table'    => 'COMMON',
-                                  'headers'  => $common_hdrs,
-                                );
-
-    if ( $dbh->err() ) {
-
-      my $text = $dbh->errstr();
-
-      $db->rollback_trans();
-      $self->_print_error_simple_dup( $text );
-
-      return ( 'nothing-to-do' , 'ignored duplicate insert' )
-        if $self->_is_insert_dup_error( $text );
-
-      return ( 'error', $text );
-    }
-
-    # FILES, ACSIS, SCUBA2 tables.
-    unless ( $self->update_only_obstime()
-                ||
-              $self->update_only_inbeam()
-            ) {
-
-      $self->add_subsys_obs(  %pass_arg,
-                              'db'  => $db,
-                              'obs' => $run_obs,
-                            )
-        or return ( 'error', "while adding subsys obs: $run_obs" );
-    }
-
-   try {
-    $db->commit_trans() if $self->load_header_db;
-
-   }
-   catch Error::Simple with {
-
-     my ( $e ) = @_;
-     throw JSA::Error $e;
-   }
-
-    $self->_print_text( "successful\n" );
-
-    return ( 'inserted', '' );
-  }
 }
 
 =item B<skip_state_setting>
@@ -994,105 +927,91 @@ It is called by I<prepare_and_insert> method.
 Returns truth value to indicate if to skip state setting in transfer
 table, when no arguments given.  Default is not to skip.
 
-  print "Not setting state" if $enter->skip_state_setting();
+    print "Not setting state" if $enter->skip_state_setting();
 
 If a truth value is given, it is stored for later use.
 
-  $enter->skip_state_setting( 0 );
+    $enter->skip_state_setting( 0 );
 
 =cut
 
 sub skip_state_setting {
+    my $self = shift @_;
 
-  my $self = shift @_;
+    my $store = 'skip-state';
 
-  my $store = 'skip-state';
+    return $self->{$store} unless scalar @_;
 
-  return $self->{ $store } unless scalar @_;
-
-  $self->{ $store } = !! $_[0];
-  return;
+    $self->{$store} = !! $_[0];
+    return;
 }
 
 sub _filter_header {
+    my ($self, $inst, $obs, %ignore) = @_;
 
-  my ( $self, $inst, $obs, %ignore ) = @_;
+    return unless scalar @{$obs};
 
-  return
-    unless scalar @{ $obs };
+    return @{$obs}
+        if JSA::EnterData::ACSIS->name_is_similar($inst->name());
 
-  return @{ $obs }
-    if JSA::EnterData::ACSIS->name_is_similar( $inst->name() );
+    my $remove_ok = sub {
+        my ($href, $key) = @_;
 
-  my $remove_ok =
-    sub {
+        return unless exists $href->{$key}
+                   && defined $ignore{$key};
 
-      my ( $href, $key ) = @_;
+        my $present = $href->{$key};
 
-      return
-        unless exists $href->{ $key }
-        && defined $ignore{ $key };
+        return
+            defined $present
+            && any {
+                    looks_like_number($_)
+                        ? $present == $_
+                        : $present eq $_
+            } (ref $ignore{$key}
+                    ? @{$ignore{$key}}
+                    : $ignore{$key});
 
-      my $present = $href->{ $key };
-      return
-        defined $present
-        && any
-            { looks_like_number( $_ )
-                ? $present == $_
-                : $present eq $_
+        };
+
+    my @new;
+
+    OBS: foreach my $cur (@{$obs}) {
+        my $header = $cur->hdrhash;
+
+        IGNORE: foreach my $key (keys %ignore) {
+            if ($remove_ok->($header, $key)) {
+                $self->_print_text(
+                  sprintf 'Ignoring observation with %s = %s',
+                          $key, $header->{$key});
+
+                next OBS;
             }
-            ( ref $ignore{ $key }
-              ? @{ $ignore{ $key } }
-              : $ignore{ $key }
-            )
-            ;
 
-      };
+            push @new, $cur;
+            my @subhead = $header->{'SUBHEADERS'} ? @{$header->{'SUBHEADERS'}} : ();
 
-  my @new;
-  OBS:
-  for my $cur ( @{ $obs } ) {
+            next OBS unless scalar @subhead;
 
-    my $header = $cur->hdrhash;
+            my @new_sub;
 
-    IGNORE:
-    for my $key ( keys %ignore ) {
+            SUBHEAD: foreach my $sub (@subhead) {
+                if ($remove_ok->($sub, $key)) {
+                    $self->_print_text(
+                        sprintf 'Ignoring subheader with %s = %s',
+                                $key, $sub->{$key});
 
-      if ( $remove_ok->( $header, $key ) ) {
+                    next SUBHEAD;
+                }
 
-        $self->_print_text( sprintf 'Ignoring observation with %s = %s',
-                              $key, $header->{ $key }
-                          );
+                push @new_sub, $sub;
+            }
 
-        next OBS;
-      }
-
-      push @new, $cur;
-      my @subhead = $header->{'SUBHEADERS'} ? @{ $header->{'SUBHEADERS'} } : ();
-
-      next OBS
-        unless scalar @subhead;
-
-      my @new_sub;
-      SUBHEAD:
-      for my $sub ( @subhead ) {
-
-        if ( $remove_ok->( $sub, $key ) ) {
-
-          $self->_print_text( sprintf 'Ignoring subheader with %s = %s',
-                                $key, $sub->{ $key }
-                            );
-
-          next SUBHEAD;
+            $new[-1]->{'SUBHEADERS'} = [@new_sub];
         }
-
-        push @new_sub, $sub;
-      }
-      $new[-1]->{'SUBHEADERS'} = [ @new_sub ];
     }
-  }
 
-  return @new;
+    return @new;
 }
 
 =item B<_get_obs_group>
@@ -1100,129 +1019,119 @@ sub _filter_header {
 When no files are provided, returns a L<OMP::Info::ObsGroup> object
 given instrument name and date as a hash.
 
-  $obs = $enter->_get_obs_group( 'name' => 'ACSIS',
+    $obs = $enter->_get_obs_group('name' => 'ACSIS',
                                   'date' => '2009-06-09'
-                                );
+                                 );
 
 Else, returns a L<OMP::Info::ObsGroup> object created with already
 given files (see I<files> method).
 
-  $obs = $enter->_get_obs_group;
+    $obs = $enter->_get_obs_group;
 
 =cut
 
 sub _get_obs_group {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    my $xfer = $self->_get_xfer_unconnected_dbh();
 
-  my $xfer = $self->_get_xfer_unconnected_dbh();
+    my %obs = (
+        'nocomments' => 1,
+        'retainhdr'  => 1,
+        'ignorebad'  => 1,
+        'header_search' => 'files',
+    );
 
-  my %obs = ( 'nocomments' => 1,
-              'retainhdr'  => 1,
-              'ignorebad'  => 1,
-              'header_search' => 'files'
-            );
+    require OMP::FileUtils;
+    require OMP::Info::Obs;
 
-  require OMP::FileUtils;
-  require OMP::Info::Obs;
+    my @file;
 
-  my @file;
+    # OMP uses Time::Piece (instead of DateTime).
+    require Time::Piece;
 
-  # OMP uses Time::Piece (instead of DateTime).
-  require Time::Piece;
+    $self->date($args{'date'} || $self->date());
+    my $date = $self->date();
 
-  $self->date( $args{'date'} || $self->date() );
-  my $date = $self->date();
-
- unless ( $args{'given-files'} ) {
-
-    @file = OMP::FileUtils->files_on_disk( 'date' => Time::Piece->strptime( $date->ymd( '' ), '%Y%m%d' ),
-                                            'instrument' => $args{'name'}
-                                          );
- }
- else {
-
-   @file = $self->files();
- }
-
-  # Flatten 2-D array reference.
-  @file = map { ! defined $_ ? () : ref $_ ? @{ $_ } : $_ } @file;
-
-  return
-    unless scalar @file;
-
-  my @obs;
-  for my $file (  @file ) {
-
-    my $base = _basename( $file );
-
-    unless ( -r $file && -s _ ) {
-
-      my $ignored = 'Unreadable or empty file';
-
-      $self->skip_state_setting()
-        or $xfer->add_ignored( [ $base ], $ignored );
-
-      $log->warn( "$ignored: $file; skipped.\n" );
-      next;
+    unless ($args{'given-files'}) {
+        @file = OMP::FileUtils->files_on_disk(
+            'date' => Time::Piece->strptime($date->ymd(''), '%Y%m%d'),
+            'instrument' => $args{'name'});
+    }
+    else {
+        @file = $self->files();
     }
 
-    $self->skip_state_setting()
-      or $xfer->add_found( [ $base ], '' );
+    # Flatten 2-D array reference.
+    @file = map {! defined $_ ? () : ref $_ ? @{$_} : $_} @file;
 
-    my $text = '';
-    my $err;
-    try {
+    return unless scalar @file;
 
-      push @obs, OMP::Info::Obs->readfile( $file , %obs );
+    my @obs;
+    foreach my $file (@file) {
+        my $base = _basename($file);
+
+        unless (-r $file && -s _) {
+            my $ignored = 'Unreadable or empty file';
+
+            $self->skip_state_setting()
+                or $xfer->add_ignored([$base], $ignored);
+
+            $log->warn("$ignored: $file; skipped.\n");
+
+            next;
+        }
+
+        $self->skip_state_setting()
+            or $xfer->add_found([$base], '');
+
+        my $text = '';
+        my $err;
+
+        try {
+            push @obs, OMP::Info::Obs->readfile($file , %obs);
+        }
+        catch OMP::Error::ObsRead with {
+            ($err) = @_;
+
+            #throw $err
+            #  unless $err->text() =~ m/^Error reading FITS header from file/;
+            $text = 'Error during file reading when making Obs:';
+        }
+        otherwise {
+            ($err) = @_;
+
+            $text = 'Unknown Error';
+        };
+
+        if ( $err ) {
+            $text .=  ': ' . $err->text();
+
+            $self->skip_state_setting()
+                or $xfer->put_error([$base], $text);
+
+            $log->error($text);
+        }
     }
-    catch OMP::Error::ObsRead with {
 
-      ( $err ) = @_;
+    return unless scalar @obs;
 
-      #throw $err
-      #  unless $err->text() =~ m/^Error reading FITS header from file/;
-      $text = 'Error during file reading when making Obs:';
+    my @headers;
+    for my $ob (@obs) {
+        push @headers, {
+            'filename' => $ob->{'FILENAME'}->[0],
+            'header' => $ob->hdrhash,
+        };
     }
-    otherwise {
 
-      ( $err ) = @_;
+    my $merged = OMP::FileUtils->merge_dupes(@headers);
 
-      $text = 'Unknown Error';
-    };
+    @obs = OMP::Info::Obs->hdrs_to_obs('retainhdr' => $obs{'retainhdr'},
+                                       'fits'      => $merged);
 
-    if ( $err ) {
-
-      $text .=  ': ' . $err->text();
-
-      $self->skip_state_setting()
-        or $xfer->put_error( [ $base ], $text );
-
-      $log->error( $text );
-    }
-  }
-
-  return unless scalar @obs;
-
-  my @headers;
-  for my $ob ( @obs ) {
-
-    push @headers,
-      { 'filename' => $ob->{'FILENAME'}->[0],
-        'header' => $ob->hdrhash,
-      }
-  }
-
-  my $merged = OMP::FileUtils->merge_dupes( @headers );
-
-  @obs = OMP::Info::Obs->hdrs_to_obs( 'retainhdr' => $obs{'retainhdr'},
-                                      'fits'      => $merged
-                                    );
-
-  return
-    OMP::Info::ObsGroup->new( 'obs' => [ @obs ] );
+    return OMP::Info::ObsGroup->new('obs' => [@obs]);
 }
 
 
@@ -1234,9 +1143,9 @@ L<OMP::Info::Obs> object.  If optional header hash reference (see
 L<OMP::Info::Obs/hdrhash>) is not given, it will be retrieved from the
 given L<OMP::Info::Obs> object.
 
-  $skip = $enter->skip_obs( $inst, $obs );
+    $skip = $enter->skip_obs($inst, $obs);
 
-  $skip = $enter->skip_obs( $inst, $obs, $header );
+    $skip = $enter->skip_obs($inst, $obs, $header);
 
 C<JSA::Error> exception is thrown if header hash (reference) is
 undefined.
@@ -1244,19 +1153,17 @@ undefined.
 =cut
 
 sub skip_obs {
+    my ($self, $inst, $obs, $header) = @_;
 
-  my ( $self, $inst, $obs, $header ) = @_;
+    $header = $obs->hdrhash unless defined $header;
 
-  $header = $obs->hdrhash unless defined $header;
+    # Alternatively could (silently) return false.
+    throw JSA::Error "FITS headers are undefined."
+        unless defined $header;
 
-  # Alternatively could (silently) return false.
-  throw JSA::Error "FITS headers are undefined."
-    unless defined $header;
-
-  # Tests are the same which control database changes.
-  return
-       $self->is_simulation( $header )
-    || ! $self->calc_radec( $inst, $obs, $header );
+    # Tests are the same which control database changes.
+    return $self->is_simulation($header)
+        || ! $self->calc_radec($inst, $obs, $header);
 }
 
 =item B<is_simulation>
@@ -1266,50 +1173,46 @@ Returns a truth value to indicate if the given headers are of
 
 An observation is marked as simulation if ...
 
-  SIMULATE header has value of "T", or
-  OBS_TYPE header has value of "RAMP".
+    SIMULATE header has value of "T", or
+    OBS_TYPE header has value of "RAMP".
 
-  for my $obs ( ... ) {
+    for my $obs (...) {
 
-    ...
+        ...
 
-    next
-     if $enter->is_simulation( $obs->hdrhash() );
+        next if $enter->is_simulation($obs->hdrhash());
 
-    ...
-  }
+        ...
+    }
 
 =cut
 
 sub is_simulation {
+    my ($self, $header) = @_;
 
-  my ( $self, $header ) = @_;
-
-  my %sim =
-    ( # Value changed from 'T' to 1 without notice. Now deal with both.
-      'SIMULATE' => qr/^(?:[t1]|1\.0+)$/i,
-      'OBS_TYPE' => qr/^ramp$/i
+    # Value changed from 'T' to 1 without notice. Now deal with both.
+    my %sim = (
+        'SIMULATE' => qr/^(?:[t1]|1\.0+)$/i,
+        'OBS_TYPE' => qr/^ramp$/i,
     );
 
-  # "SIMULATE" is more likely to be in the main header.
-  my @order = ( 'SIMULATE', 'OBS_TYPE' );
+    # "SIMULATE" is more likely to be in the main header.
+    my @order = ('SIMULATE', 'OBS_TYPE');
 
-  for my $name ( @order ) {
+    foreach my $name (@order) {
+      my $val = $self->_find_header('headers' => $header,
+                                    'name'   => $name,
+                                    'test'   => 'defined',
+                                    'value'  => 1);
 
-    my $val =
-      $self->_find_header(  'headers' => $header,
-                            'name'   => $name,
-                            'test'   => 'defined',
-                            'value'  => 1,
-                          );
+      my $test = $sim{$name};
 
-    my $test = $sim{ $name };
-    return 1
-      if defined $val
-      && $val =~ $test;
-  }
+      return 1
+          if defined $val
+          && $val =~ $test;
+    }
 
-  return;
+    return;
 }
 
 
@@ -1329,108 +1232,95 @@ a database related error.
 
 Returns true on success, false on failure.
 
-  $ok = $enter->add_subsys_obs( 'dbhandle' => $dbh,
-                                'instrument' => $inst,
-                                'columns' => \%cols,
-                                'dict'    => \%dict,
-                                'obs'     => \%obs_per_runnr,
-                              );
+    $ok = $enter->add_subsys_obs('dbhandle' => $dbh,
+                                 'instrument' => $inst,
+                                 'columns' => \%cols,
+                                 'dict'    => \%dict,
+                                 'obs'     => \%obs_per_runnr);
 
 It is called by I<insert_observations> method.
 
 =cut
 
 sub add_subsys_obs {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    foreach my $k (qw/instrument db columns dict obs/) {
+        next if exists $args{$k} && $args{$k} && ref $args{$k};
 
-  for my $k ( qw[ instrument db columns dict obs ] ) {
-
-    next
-      if exists $args{ $k } && $args{ $k } && ref $args{ $k };
-
-    throw JSA::Error::BadArgs( qq[No suitable value given for ${k}.] );
-  }
-
-  my ( $inst, $db, $obs ) = map { $args{ $_ } } qw[ instrument db obs ];
-
-  my $dbh = $db->handle();
-
-  # Need to pass everything but observations to other subs.
-  my %pass_args =
-    map { $_ => $args{ $_ } } qw[ instrument columns dict ];
-
-  my $subsysnr = 0;
-  my $totsub = scalar @{ $obs };
-
-  for my $subsys_obs ( @{ $obs } ) {
-
-    $subsysnr++;
-    $self->_print_text( "Processing subsysnr $subsysnr of $totsub\n" );
-
-    # Obtain instrument table values from this Obs object.  Break hash tie.
-    my $subsys_hdrs = { %{ $subsys_obs->hdrhash } };
-
-    # Need to calculate the frequency information
-    $inst->calc_freq( $self, $subsys_obs, $subsys_hdrs );
-
-    my $grouped;
-    if ( $inst->can( 'transform_header' ) ) {
-
-      ( undef, $grouped ) = $inst->transform_header( $subsys_hdrs );
+        throw JSA::Error::BadArgs("No suitable value given for ${k}.");
     }
 
-    my $added_files;
-    for my $subh ( $grouped ? @{ $grouped } : $subsys_hdrs ) {
+    my ($inst, $db, $obs) = map {$args{$_}} qw/instrument db obs/;
 
-      $inst->_fill_headers_obsid_subsys( $subh, $subsys_obs->obsid );
+    my $dbh = $db->handle();
 
-      my $error;
-      unless ( $added_files ) {
+    # Need to pass everything but observations to other subs.
+    my %pass_args = map {$_ => $args{$_}} qw/instrument columns dict/;
 
-        $added_files++;
-        $self->_change_FILES( 'obs'        => $subsys_obs,
-                              'headers'    => $subsys_hdrs,
-                              'instrument' => $inst,
-                              'db'         => $db,
-                              map( { $_ => $pass_args{ $_ } }
-                                    qw[ columns dict ],
-                                  ),
-                            );
-      }
+    my $subsysnr = 0;
+    my $totsub = scalar @{$obs};
 
-      if ( $inst->can( 'merge_by_obsidss' )
-           && exists $subsys_hdrs->{'SUBHEADERS'}
-          ) {
+    foreach my $subsys_obs (@{$obs}) {
+        $subsysnr++;
+        $self->_print_text( "Processing subsysnr $subsysnr of $totsub\n" );
 
-        my $sys_sub = $subsys_hdrs->{'SUBHEADERS'};
-        my @temp = $inst->merge_by_obsidss( $sys_sub );
+        # Obtain instrument table values from this Obs object.  Break hash tie.
+        my $subsys_hdrs = {%{$subsys_obs->hdrhash}};
 
-        @{ $sys_sub } = @{ $temp[0] }
-          if scalar @temp;
-      }
+        # Need to calculate the frequency information
+        $inst->calc_freq($self, $subsys_obs, $subsys_hdrs);
 
-      $error =
-        $self->_modify_db_on_obsend(  %pass_args,
-                                      'dbhandle' => $dbh,
-                                      'table'   => $inst->table,
-                                      'headers' => $subh,
-                                    );
+        my $grouped;
+        if ($inst->can('transform_header')) {
+            (undef, $grouped) = $inst->transform_header($subsys_hdrs);
+        }
 
-      if ( $dbh->err() ) {
+        my $added_files;
+        foreach my $subh ($grouped ? @{$grouped} : $subsys_hdrs) {
+            $inst->_fill_headers_obsid_subsys($subh, $subsys_obs->obsid);
 
-        my $text = $dbh->errstr();
+            my $error;
 
-        $db->rollback_trans() if $self->load_header_db;
-        $self->_print_text( "$error\n\n" );
+            unless ($added_files) {
+                $added_files++;
 
-        return (  'error', $text );
-      }
+                $self->_change_FILES('obs'          => $subsys_obs,
+                                     'headers'      => $subsys_hdrs,
+                                     'instrument'   => $inst,
+                                     'db'           => $db,
+                                     map({$_ => $pass_args{$_}}
+                                         qw/columns dict/));
+            }
+
+            if ($inst->can('merge_by_obsidss')
+                    && exists $subsys_hdrs->{'SUBHEADERS'}) {
+
+                my $sys_sub = $subsys_hdrs->{'SUBHEADERS'};
+                my @temp = $inst->merge_by_obsidss($sys_sub);
+
+                @{$sys_sub} = @{$temp[0]}
+                    if scalar @temp;
+            }
+
+            $error = $self->_modify_db_on_obsend(%pass_args,
+                                                 'dbhandle' => $dbh,
+                                                 'table'   => $inst->table,
+                                                 'headers' => $subh);
+
+            if ($dbh->err()) {
+                my $text = $dbh->errstr();
+
+                $db->rollback_trans() if $self->load_header_db;
+                $self->_print_text("$error\n\n");
+
+                return ( 'error', $text);
+            }
+        }
+
     }
 
-  }
-
-  return 1;
+    return 1;
 }
 
 =item B<insert_hash>
@@ -1445,150 +1335,135 @@ row has an array reference the size of those arrays must be identical.
 
 In case of error, returns the value as returned by C<DBI->execute>.
 
-  $status =
-    $enter->insert_hash( 'table'     => $table,
-                          'dbhandle' => $dbh,
-                          'insert'   => \%to_insert,
-                        );
+    $status = $enter->insert_hash('table'     => $table,
+                                  'dbhandle' => $dbh,
+                                  'insert'   => \%to_insert);
 
 =cut
 
 sub prepare_insert_hash {
+    my ($self, $table, $field_values) = @_;
 
-  my ( $self, $table, $field_values ) = @_;
+    throw JSA::Error "Empty hash reference was given to insert."
+        unless scalar keys %{$field_values};
 
-  throw JSA::Error "Empty hash reference was given to insert."
-    unless scalar keys %{ $field_values };
-
-  return $self->_handle_multiple_changes( $table, $field_values );
+    return $self->_handle_multiple_changes($table, $field_values);
 }
 
 sub _handle_multiple_changes {
+    my ($self, $table, $vals) = @_;
 
-  my ( $self, $table, $vals ) = @_;
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    # Go through the hash and work out whether we have multiple inserts
+    my @have_ref;
+    my $nrows = 1;
+    foreach my $key (keys %$vals) {
+        my $ref = ref $vals->{$key}
+            or next;
 
-  # Go through the hash and work out whether we have multiple inserts
-  my @have_ref;
-  my $nrows = 1;
-  for my $key (keys %$vals) {
+        $log->logdie("Unsupported reference type in insert hash!\n")
+            unless $ref eq 'ARRAY';
 
-    my $ref = ref $vals->{$key}
-      or next;
+        my $row_count = scalar @{$vals->{$key}};
+        if (@have_ref) {
+            # count rows
+            $log->logdie("Uneven row count in insert hash ARRAY ref for key '$key'",
+                         " ($row_count != $nrows) compared to first key '$have_ref[0]'",
+                         "(table $table)\n")
+            unless $row_count == $nrows;
+        }
+        else {
+          $nrows = $row_count;
+        }
 
-    $log->logdie( "Unsupported reference type in insert hash!\n" )
-      unless $ref eq 'ARRAY';
-
-    my $row_count = scalar @{ $vals->{$key} };
-    if (@have_ref) {
-
-      # count rows
-    $log->logdie( "Uneven row count in insert hash ARRAY ref for key '$key'",
-                  " ($row_count != $nrows) compared to first key '$have_ref[0]'",
-                  "(table $table)\n"
-                )
-        unless $row_count == $nrows;
-    } else {
-
-      $nrows = $row_count;
+        push(@have_ref, $key);
     }
-    push(@have_ref, $key);
-  }
 
-  # Now create an array of insert hashes with array references unrolled
-  my @change;
-  if (!@have_ref) {
-
-    @change = ( $vals );
-  } else {
-
-    # take local copy of the array content so that we do not damage caller hash
-    my %local = map { $_ => [ @{$vals->{$_}} ] } @have_ref;
-
-    # loop over the known number of rows
-    for my $i (0..($nrows-1)) {
-
-      my %row = %$vals;
-      for my $refkey (@have_ref) {
-
-        $row{$refkey} = shift @{$local{$refkey}};
-      }
-      push( @change, \%row );
+    # Now create an array of insert hashes with array references unrolled
+    my @change;
+    if (! @have_ref) {
+        @change = ($vals);
     }
-  }
-  return [ @change ];
+    else {
+        # take local copy of the array content so that we do not damage caller hash
+        my %local = map {$_ => [@{$vals->{$_}}]} @have_ref;
+
+        # loop over the known number of rows
+        foreach my $i (0 .. ($nrows-1)) {
+            my %row = %$vals;
+
+            foreach my $refkey (@have_ref) {
+                $row{$refkey} = shift @{$local{$refkey}};
+            }
+
+            push(@change, \%row);
+        }
+    }
+
+    return [@change];
 }
 
 sub insert_hash {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    my ($table, $dbh, $insert) = @args{qw/table dbhandle insert/};
 
-  my ( $table, $dbh, $insert ) =
-    @args{ qw[ table dbhandle insert ] };
+    return $self->conditional_insert_hash(%args)
+        if $self->conditional_insert;
 
-  return $self->conditional_insert_hash( %args )
-    if $self->conditional_insert;
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    # Get the fields in sorted order (so that we can match with values)
+    # and create a template SQL statement. This can be done with the
+    # first hash from @insert_hashes
 
-  # Get the fields in sorted order (so that we can match with values)
-  # and create a template SQL statement. This can be done with the
-  # first hash from @insert_hashes
+    my @insert_hashes = @{$insert};
 
-  my @insert_hashes = @{ $insert };
+    my @fields = sort keys %{$insert_hashes[0]}; # sort required
 
-  my @fields = sort keys %{$insert_hashes[0]}; # sort required
+    my ($sql, $sth);
 
-  my ( $sql, $sth );
+    $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
+                   $table,
+                   join("\n, ", @fields),
+                   join("\n, ", ('?') x scalar @fields);
 
-  $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
-              $table,
-              join( "\n, ", @fields),
-              join( "\n, ", ('?') x scalar @fields )
-              ;
-
-  if (!$self->debug && $self->load_header_db ) {
-
-    $sth = $dbh->prepare($sql)
-      or $log->logdie( "Could not prepare sql statement for insert\n", $dbh->errstr, "\n" );
-  }
-
-  my ( @prim_key );
-  if ( any { $table eq $_ } 'FILES' ) {
-
-    my $prim_key = _get_primary_key( $table );
-    @prim_key = ref $prim_key ? @{ $prim_key } : $prim_key ;
-  }
-
-  my @file;
-  # and insert all the rows
-  for my $row (@insert_hashes) {
-
-    my @values = @{$row}{@fields}; # hash slice
-
-    if ($self->debug) {
-
-      $self->_show_insert_sql( $table, \@fields, \@values );
-      next;
+    if (! $self->debug && $self->load_header_db) {
+        $sth = $dbh->prepare($sql)
+            or $log->logdie("Could not prepare sql statement for insert\n", $dbh->errstr, "\n");
     }
 
-    next unless $self->load_header_db;
-
-    my $status = $sth->execute(@values);
-
-    if ( $table eq 'FILES' && defined $status && $status > 0
-          && ! $self->skip_state_setting()
-        ) {
-
-      push @file, $row->{'file_id'};
+    my (@prim_key);
+    if (any {$table eq $_} 'FILES') {
+        my $prim_key = _get_primary_key($table);
+        @prim_key = ref $prim_key ? @{$prim_key} : $prim_key ;
     }
 
-   return ( $status, scalar @file ? [ @file ] : () )
-     if !$status;
-  }
+    my @file;
+    # and insert all the rows
+    for my $row (@insert_hashes) {
+        my @values = @{$row}{@fields}; # hash slice
 
-  return ( undef, scalar @file ? [ @file ] : () );
+        if ($self->debug) {
+            $self->_show_insert_sql($table, \@fields, \@values);
+            next;
+        }
+
+        next unless $self->load_header_db;
+
+        my $status = $sth->execute(@values);
+
+        if ($table eq 'FILES' && defined $status && $status > 0
+                && ! $self->skip_state_setting()) {
+            push @file, $row->{'file_id'};
+        }
+
+       return ($status, scalar @file ? [@file] : ())
+           if !$status;
+    }
+
+    return (undef, scalar @file ? [@file] : ());
 }
 
 =item B<conditional_insert_hash>
@@ -1601,100 +1476,86 @@ If any of the values in C<%to_insert> are array references multiple
 rows will be inserted corresponding to the content.  If more than one
 row has an array reference the size of those arrays must be identical.
 
-  $status =
-    $enter->conditional_insert_hash( 'table' => $table,
-                                      'dbhandle' => $dbh,
-                                      'insert' => \%to_insert,
-                                    );
+    $status = $enter->conditional_insert_hash('table' => $table,
+                                              'dbhandle' => $dbh,
+                                              'insert' => \%to_insert);
 
 =cut
 
 sub conditional_insert_hash {
+    #my ($self, $table, $dbh, $insert) = @_;
+    my ($self, %args) = @_;
 
-  #my ( $self, $table, $dbh, $insert ) = @_;
-  my ( $self, %args ) = @_;
+    my ($table, $dbh, $insert) =
+      @args{qw/table dbhandle insert/};
 
-  my ( $table, $dbh, $insert ) =
-    @args{ qw[ table dbhandle insert ] };
+    $dbh->{'syb_show_eed'} = $dbh->{'syb_show_sql'} = 1;
 
-  $dbh->{'syb_show_eed'} = $dbh->{'syb_show_sql'} = 1;
+    return $self->insert_hash(%args)
+        unless $self->conditional_insert;
 
-  return $self->insert_hash( %args )
-    unless $self->conditional_insert;
+    # Get the fields in sorted order (so that we can match with values)
+    # and create a template SQL statement. This can be done with the
+    # first hash from @insert_hashes
 
-  # Get the fields in sorted order (so that we can match with values)
-  # and create a template SQL statement. This can be done with the
-  # first hash from @insert_hashes
+    my @insert_hashes = @{$insert};
 
-  my @insert_hashes = @{ $insert };
+    my @fields = sort keys %{$insert_hashes[0]}; # sort required
 
-  my @fields = sort keys %{$insert_hashes[0]}; # sort required
+    my $prim_key = _get_primary_key($table);
 
-  my $prim_key = _get_primary_key( $table );
+    # &DBI::prepare is not used for this SQL string as place holders do not work
+    # after SELECT clause, need to place the values directly.  See
+    # _make_insert_select_sql() && _fill_in_sql() methods.
+    my $sql = $self->_make_insert_select_sql('dbhandle' => $dbh,
+                                             'table'    => $table,
+                                             'primary'  => $prim_key,
+                                             'columns'  => \@fields);
 
-  # &DBI::prepare is not used for this SQL string as place holders do not work
-  # after SELECT clause, need to place the values directly.  See
-  # _make_insert_select_sql() && _fill_in_sql() methods.
-  my $sql =
-    $self->_make_insert_select_sql( 'dbhandle' => $dbh,
-                                    'table'    => $table,
-                                    'primary'  => $prim_key,
-                                    'columns'  => \@fields,
-                                  );
+    my ($err, @prim_key, @affected);
+    @prim_key = ref $prim_key ? @{$prim_key} : ($prim_key);
 
-  my ( $err, @prim_key, @affected );
-  @prim_key = ref $prim_key ? @{ $prim_key } : ( $prim_key ) ;
+    my ($sum, @file);
+    foreach my $row (@insert_hashes) {
+        my @values = @{$row}{@fields};
 
-  my ( $sum, @file );
-  for my $row (@insert_hashes) {
+        if ($self->debug) {
+            $self->_show_insert_sql($table, \@fields, \@values);
+            next;
+        }
 
-    my @values = @{$row}{@fields};
+        last unless $self->load_header_db;
 
-    if ($self->debug) {
+        my $format = join ' , ',
+            $self->_get_cols_format('dbhandle' => $dbh,
+                                     'table'   => $table,
+                                     'columns' => \@fields,
+                                     'values'  => \@values);
 
-      $self->_show_insert_sql( $table, \@fields, \@values );
-      next;
+        my $tmp = sprintf $sql, $format;
+
+        my $filled = sprintf $tmp,
+            $self->_quote_vals('dbhandle' => $dbh,
+                               'table'   => $table,
+                               'columns' => \@fields,
+                               'values'  => \@values);
+
+        my @prim_val = map {$row->{$_}} @prim_key;
+
+        my $affected = $dbh->do($filled,
+                                $prim_key ? (undef, @prim_val) : ());
+
+        if ($table eq 'FILES' && $affected && $affected > 0
+                && ! $self->skip_state_setting()) {
+            push @file, $row->{'file_id'};
+        }
+
+        return ($sum, scalar @file ? [@file] : ()) unless $affected;
+
+        $sum += $affected;
     }
 
-    last unless $self->load_header_db;
-
-    my $format =
-      join q[ , ],
-        $self->_get_cols_format( 'dbhandle' => $dbh,
-                                  'table'   => $table,
-                                  'columns' => \@fields,
-                                  'values'  => \@values,
-                                );
-    my $tmp = sprintf $sql, $format;
-    my $filled =
-      sprintf $tmp,
-        $self->_quote_vals( 'dbhandle' => $dbh,
-                            'table'   => $table,
-                            'columns' => \@fields,
-                            'values'  => \@values,
-                          );
-
-    my @prim_val = map { $row->{ $_ } } @prim_key;
-
-    my $affected = $dbh->do( $filled,
-                              $prim_key
-                              ? ( undef, @prim_val )
-                              : ()
-                            );
-
-    if ( $table eq 'FILES' && $affected && $affected > 0
-          && ! $self->skip_state_setting()
-        ) {
-
-      push @file, $row->{'file_id'};
-    }
-
-    return ( $sum, scalar @file ? [ @file ] : () ) unless $affected;
-
-    $sum += $affected;
-  }
-
-  return ( $sum, scalar @file ? [ @file ] : () );
+    return ($sum, scalar @file ? [@file] : ());
 }
 
 =item B<_make_insert_select_sql>
@@ -1702,58 +1563,51 @@ sub conditional_insert_hash {
 Returns a SQL INSERT query string (to be first processed by
 C<sprintf>, see I<_fill_in_sql>), given a hash of ...
 
-  table - table name,
-  columns - array reference of ordered column names, and
-  primary - primary key name.
+    table - table name,
+    columns - array reference of ordered column names, and
+    primary - primary key name.
 
 Purpose of the generated INSERT query string is to avoid adding
 duplicate row by checking if the primary key already does not exist.
 
-  $string =
-    $self->_make_insert_select_sql( 'table' => $table_name,
-                                    'columns' => [ @column_names ],
-                                    'primary' => $key,
-                                  );
+    $string = $self->_make_insert_select_sql('table' => $table_name,
+                                             'columns' => [ @column_names ],
+                                             'primary' => $key);
 
 The string returned has a DBI placeholder only for primary key value.
 (In DBD::Sybase, possibly within Sybase ASE 15 itself, placeholders
 are not allowed after "SELECT" clause.) Something like ...
 
-  INSERT INTO <table>
-    SELECT %s, %s, ...
-    WHERE NOT EXISTS
-      ( SELECT 1 FROM <table> WHERE <primary key> = ? )
+    INSERT INTO <table>
+      SELECT %s, %s, ...
+      WHERE NOT EXISTS
+        (SELECT 1 FROM <table> WHERE <primary key> = ?)
 
 =cut
 
 sub _make_insert_select_sql {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    my ($dbh, $table, $cols, $primary) =
+        @args{qw/dbhandle table columns primary/};
 
-  my ( $dbh, $table, $cols, $primary ) =
-    @args{qw[ dbhandle table columns primary ]};
+    throw JSA::Error::BadArgs "No primary keys given."
+        unless defined $primary;
 
-  throw JSA::Error::BadArgs "No primary keys given."
-    unless defined $primary;
+    my @primary = ref $primary ? @{$primary} : ($primary);
 
-  my @primary = ref $primary ? @{ $primary } : ( $primary );
+    my $where = '';
 
-  my $where = '';
-  for my $k ( @primary ) {
+    foreach my $k (@primary) {
+      $where .= ($where ? ' AND ' : ' ') . " $k = ? ";
+    }
 
-    $where .= ( $where ? ' AND ' : ' ' )
-            . qq[ $k = ? ]
-            ;
-  }
-
-  return
-    sprintf q[ INSERT INTO %s (%s) SELECT %%s ]
-          . q[ WHERE NOT EXISTS ( SELECT 1 FROM %s WHERE %s ) ],
-          $table,
-          join( q[ , ], @{ $cols } ),
-          $table,
-          $where
-          ;
+    return sprintf ' INSERT INTO %s (%s) SELECT %%s '
+                   . ' WHERE NOT EXISTS ( SELECT 1 FROM %s WHERE %s ) ',
+                   $table,
+                   join(' , ', @{$cols}),
+                   $table,
+                   $where;
 }
 
 =item B<_fill_in_sql>
@@ -1762,13 +1616,11 @@ Returns a given format string substituted with given row values (as an
 array reference), in addition to a valid database handle, table name,
 and column names (as an array reference) in a hash.
 
-  $filled =
-    $self->_fill_in_sql( 'sql' => $sql_string,
-                          'dbhandle' => $dbh,
-                          'table' => $table,
-                          'columns' => [ @column_name ]
-                          'values' => [ @value ],
-                        );
+    $filled = $self->_fill_in_sql('sql' => $sql_string,
+                                  'dbhandle' => $dbh,
+                                  'table' => $table,
+                                  'columns' => [@column_name]
+                                  'values' => [@value]);
 
 This is a workaround for lack of support of place holders in subquery
 (for the values to be SELECT'd; see definition of
@@ -1777,126 +1629,114 @@ I<_make_insert_select_sql> method).
 =cut
 
 sub _fill_in_sql {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
-
-  return
-    sprintf $args{'sql'}, $self->_quote_vals( %args );
+    return sprintf $args{'sql'}, $self->_quote_vals(%args);
 }
 
 {
-  my ( %types, %val_format, $num_re );
+    my (%types, %val_format, $num_re);
 
-  sub _init_num_regex {
+    sub _init_num_regex {
+      $num_re = qr/\b ( decimal | boolean | float | real | (?:tiny|big)? int | bit )/xi
+          unless $num_re;
 
-    $num_re = qr{\b ( decimal | boolean | float | real | (?:tiny|big)? int | bit )}xi
-      unless $num_re;
+      return;
+    }
 
-    return;
-  }
+    sub _init_val_format {
+        %val_format = (
+            'int'       => '%d',
+            'tinyint'   => '%d',
+            'bigint'    => '%d',
+            'bit'       => '%d',
+            'boolean'   => '%d',
+            'decimal'   => '%0.16f',
+            'float'     => '%0.16f',
+            'real'      => '%0.16f',
+            ''          => '%s',
+            undef       => '%s',
+            'char'      => '%s',
+            'varchar'   => '%s',
+          )
 
-  sub _init_val_format {
+          unless scalar keys %val_format;
 
-    %val_format =
-      ( 'int'     => '%d',
-        'tinyint' => '%d',
-        'bigint'  => '%d',
-        'bit'     => '%d',
-        'boolean' => '%d',
-        'decimal' => '%0.16f',
-        'float'   => '%0.16f',
-        'real'    => '%0.16f',
-        ''        => '%s',
-        undef     => '%s',
-        'char'    => '%s',
-        'varchar' => '%s',
-      )
-      unless scalar keys %val_format;
+        return;
+    }
 
-    return;
-  }
+    sub _get_format {
+        my ($type) = @_;
 
-  sub _get_format {
+        _init_num_regex();
+        _init_val_format();
 
-    my ( $type ) = @_;
+        no warnings 'uninitialized';
+        return $val_format{($type =~ $num_re)[0]};
+    }
 
-    _init_num_regex();
-    _init_val_format();
+    sub _get_types {
+        my ($self, $dbh, $table) = @_;
 
-    no warnings 'uninitialized';
-    return $val_format{ ( $type =~ $num_re )[0] };
-  }
+        return $types{$table}
+            if $types{$table};
 
-  sub _get_types {
+        return $types{$table} = $self->get_columns($table, $dbh);
+    }
 
-    my ( $self, $dbh, $table ) = @_;
+    sub _get_cols_format {
+        my ($self, %args) = @_;
 
-    return $types{ $table }
-      if $types{ $table };
+        my ($dbh, $table, $cols, $vals) =
+            @args{qw/dbhandle table columns values/};
 
-    return
-      $types{ $table } = $self->get_columns( $table, $dbh )
-  }
+        my $size = scalar @{$cols};
 
-  sub _get_cols_format {
+        my $types = $self->_get_types($dbh, $table);
 
-    my ( $self, %args ) = @_;
+        my @format;
+        for (my $i = 0; $i < $size; $i++) {
+            push @format, _get_format($types->{$cols->[$i]});
 
-    my ( $dbh, $table, $cols, $vals ) =
-      @args{qw[ dbhandle table columns values ]};
+            if ($vals && '%s' ne $format[$i]) {
+                my $v = $vals->[ $i ];
 
-    my $size = scalar @{ $cols };
+                $format[ $i ] = '%s'
+                    if ! defined $v
+                    || ($v && $v =~ /\bNULL\b/i);
+            }
+        }
 
-    my $types = $self->_get_types( $dbh, $table );
+        return @format;
+    }
 
-    my @format;
-    for ( my $i = 0; $i < $size; $i++ ) {
+    sub _quote_vals {
+      my ($self, %args) = @_;
 
-      push @format,
-        _get_format( $types->{ $cols->[ $i ] } );
+      my ($dbh, $table, $values) = @args{qw/dbhandle table values/};
+      my $size = scalar @{$values};
 
-      if ( $vals && '%s' ne $format[ $i ] ) {
+      my $types = $self->_get_types($dbh, $table);
 
-        my $v = $vals->[ $i ];
+      # Handle number type values (for consumption in Sybase ASE 15.0) outside of
+      # &DBI::quote as it puts quotes around such values.
+      _init_num_regex();
 
-        $format[ $i ] = '%s'
-          if ! defined $v
-          || ( $v && $v =~ m/\bNULL\b/i )
-          ;
+      my @val;
+
+      for (my $i = 0; $i < $size; $i++) {
+          my $val = $values->[$i];
+          my $type = $types->{$args{'columns'}->[$i]};
+
+          push @val, ! defined $val
+                        ? 'NULL'
+                        : $type =~ /$num_re/
+                            ? $val
+                            : $dbh->quote($val, $type);
       }
+
+      return @val;
     }
-    return @format;
-  }
-
-  sub _quote_vals {
-
-    my ( $self, %args ) = @_;
-
-    my ( $dbh, $table, $values ) = @args{qw[ dbhandle table values ]};
-    my $size = scalar @{ $values };
-
-    my $types = $self->_get_types( $dbh, $table );
-
-    # Handle number type values (for consumption in Sybase ASE 15.0) outside of
-    # &DBI::quote as it puts quotes around such values.
-    _init_num_regex();
-
-    my @val;
-    for ( my $i = 0; $i < $size; $i++ ) {
-
-      my $val = $values->[ $i ];
-      my $type = $types->{ $args{'columns'}->[ $i ] };
-
-      push @val,
-        ! defined $val
-        ? 'NULL'
-        : $type =~ m/$num_re/
-          ? $val
-          : $dbh->quote( $val, $type )
-          ;
-    }
-    return @val;
-  }
 }
 
 =item B<update_hash>
@@ -1905,358 +1745,317 @@ Given a table name, a DBI database handle and a hash reference,
 retrieve the current data values based on OBSID or OBSID_SUBSYSNR,
 decide what has changed and update the values.
 
-  $enter->update_hash( $table, $dbh, \%to_update );
+    $enter->update_hash($table, $dbh, \%to_update);
 
 No-op for files table at the present time.
 
 =cut
 
 sub prepare_update_hash {
+    my ($self, $table, $dbh, $field_values) = @_;
 
-  my ( $self, $table, $dbh, $field_values ) = @_;
+    return if $table eq 'FILES';
 
-  return if $table eq 'FILES';
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    # work out which key uniquely identifies the row
+    my $unique_key = _get_primary_key($table);
 
-  # work out which key uniquely identifies the row
-  my $unique_key = _get_primary_key( $table );
-
-  unless ( $unique_key ) {
-
-    $log->logdie( "No unique keys found for table name: '$table'\n" );
-  }
-  my @unique_key = ref $unique_key ? @{ $unique_key } : $unique_key ;
-
-  my $rows = $self->_handle_multiple_changes( $table, $field_values );
-
-  # run a query with this unique value (but on FILES table more than
-  # one entry can be returned - we trap that because FILES for the minute
-  # should not need updating
-
-  my $sql = 'select * ';
-
-  my ( %start, %end );
-  if ( $table eq 'COMMON' ) {
-
-    my %col_date;
-    @col_date{ JSA::DB::TableCOMMON::date_columns() } = ();
-
-    my %range = JSA::DB::TableCOMMON::range_columns();
-    @start{ keys %range } = ();
-    @end{ values %range } = ();
-
-    $sql = 'select '
-            . join ', ',
-                map
-                { ! exists $col_date{ $_ }
-                  ? $_
-                  : qq[CONVERT( VARCHAR, $_, 23 ) AS $_]
-                }
-                JSA::DB::TableCOMMON::column_names()
-                ;
-  }
-
-  $sql .=
-    " from $table where "
-    . join ' AND ', map { qq[ $_ = ? ] } @unique_key;
-
-  my @update_hash;
-  for my $row ( @{ $rows } ) {
-
-    my @unique_val =
-      map $row->{ $_ }, @unique_key;
-
-    $self->_show_debug( \@unique_key , \@unique_val );
-
-    my $ref = $dbh->selectall_arrayref( $sql, { Columns=>{} }, @unique_val )
-      or $log->logdie( "Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n" );
-
-    $log->logdie( "Only retrieved partial dataset: ", $dbh->errstr, "\n" )
-      if $dbh->err;
-
-    # how many rows
-    my $count = scalar @{ $ref };
-
-    0 == $count
-      and throw JSA::Error::DBError
-            "Can only update if the row exists previously!\n";
-
-    $log->logdie( "Should not be possible to have more than one row. Got $count\n" )
-      if $count > 1;
-
-    my $indb = $ref->[0];
-
-    my %differ;
-    my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
-    my $am_pm_end = qr/\d\d[APM]$/;
-
-    my $obs_date_re = qr{\bDATE.(?:OBS|END)\b}i;
-
-    my $inbeam_re = qr{\b INBEAM \b}xi;
-
-    # Allowed to be set undef if key from $field_values is missing, say as a
-    # result of external header munging.
-    my $miss_ok = _or_regex( qw/ INBEAM /,
-                              _suffix_start_end_headers( qw/ SEEING SEEDAT / )
-                            ) ;
-
-    my $tau_val = qr{\b(?:WVMTAU|TAU225)(?:ST|EN)\b}i;
-
-    my $only_obstime =
-      $table eq 'COMMON'
-      && $self->update_only_obstime();
-
-    my $only_inbeam =
-      $table eq 'COMMON'
-      && $self->update_only_inbeam();
-
-    for my $key ( sort keys %{$indb} ) {
-
-      $self->verbosity() > 1
-        and $self->_show_debug( qq[testing field: $key] );
-
-      next
-        # since that will update automatically
-        if $key eq 'last_modified'
-        || ( $key !~ $miss_ok && ! exists $field_values->{$key} );
-
-      my $new = $field_values->{$key};
-      my $old = $indb->{$key};
-
-      next if ! ( defined $old || defined $new );
-
-      $self->verbosity() and $self->_show_debug( qq[continuing with $key] );
-
-      my %test =
-        ( 'start' => exists $start{ $key },
-          'end'   => exists $end{ $key },
-          'old'   => $old,
-          'new'   => $new,
-        );
-      my $in_range = any { $test{ $_ } } (qw[ start end ]);
-
-      next
-        if $only_inbeam
-        && $key !~ $inbeam_re
-        ;
-
-      next
-        if $only_obstime
-        && $key !~ $obs_date_re
-        ;
-
-      # Not defined currently - inserting new value.
-      if ( defined $new && ! defined $old ) {
-
-        $differ{$key} = $new;
-        $self->_show_debug( qq[$key = ] . $new );
-        next;
-      }
-
-      # Defined in DB but undef in new version - not expecting this but assume
-      # this means a null.
-      if ( ! defined $new && defined $old) {
-
-        $differ{$key} = undef;
-        $self->_show_debug( qq[$key = ] . '<undef>' );
-        next;
-      }
-
-      # Dates.
-      if ( $new =~ $ymd_start && ( $old =~ $ymd_start || $old =~ $am_pm_end ) ) {
-
-        if ( $in_range ) {
-
-          $new = _find_extreme_value( %test,
-                                      'new>old' => _compare_dates( $new, $old )
-                                    );
-          $self->_show_debug( qq[  possible new value for $key = ] . $new );
-        }
-
-        if ( $new ne $old ) {
-
-          $differ{ $key } = $new;
-          $self->_show_debug( qq[$key = ] . $new );
-        }
-
-        next;
-      }
-
-      if (looks_like_number($new)) {
-
-        # Override range check for tau values as there is no relation between start
-        # & end values; these are weather dependent.
-        if ( $key =~ $tau_val && $new != $old ) {
-
-          $differ{$key} = $new;
-          $self->_show_debug( qq[$key = ] . $new );
-        }
-        elsif ( $in_range ) {
-
-          $new = _find_extreme_value( %test, 'new>old' => $new > $old );
-
-          if ( $new != $old ) {
-
-            $differ{ $key } = $new if $new != $old;
-            $self->_show_debug( qq[$key = ] . $new );
-          }
-        }
-        else {
-
-          if ($new =~ /\./) {
-
-            # floating point
-            my $diff = abs($old - $new);
-            if ($diff > 0.000001) {
-
-              $differ{$key} = $new;
-              $self->_show_debug( qq[$key = ] . $new );
-            }
-          }
-          elsif ( $new != $old ) {
-
-            $differ{$key} = $new;
-            $self->_show_debug( qq[$key = ] . $new );
-          }
-        }
-
-        next;
-      }
-
-      # String.
-      if ( $new ne $old ) {
-
-        $differ{ $key } = $new;
-        $self->_show_debug( qq[$key = ] . $new );
-      }
+    unless ($unique_key) {
+        $log->logdie("No unique keys found for table name: '$table'\n");
     }
 
-    $self->_show_debug( qq[differences to update: ] . keys %differ );
+    my @unique_key = ref $unique_key ? @{$unique_key} : $unique_key ;
 
-    push @update_hash,
-            { 'differ' => { %differ },
-              'unique_val' => [ @unique_val ],
-              'unique_key' => [ @unique_key ]
-            };
+    my $rows = $self->_handle_multiple_changes($table, $field_values);
 
-  }
+    # run a query with this unique value (but on FILES table more than
+    # one entry can be returned - we trap that because FILES for the minute
+    # should not need updating
 
-  return [ @update_hash ];
+    my $sql = 'select * ';
+
+    my (%start, %end);
+
+    if ($table eq 'COMMON') {
+        my %col_date;
+        @col_date{JSA::DB::TableCOMMON::date_columns()} = ();
+
+        my %range = JSA::DB::TableCOMMON::range_columns();
+        @start{keys %range} = ();
+        @end{values %range} = ();
+
+        $sql = 'select ' . join ', ', map {
+            ! exists $col_date{$_}
+                ? $_
+                : "CONVERT( VARCHAR, $_, 23 ) AS $_"
+            }
+            JSA::DB::TableCOMMON::column_names();
+    }
+
+    $sql .= " from $table where "
+          . join ' AND ', map {" $_ = ? "} @unique_key;
+
+    my @update_hash;
+    foreach my $row (@{$rows}) {
+        my @unique_val = map $row->{$_}, @unique_key;
+
+        $self->_show_debug(\@unique_key , \@unique_val);
+
+        my $ref = $dbh->selectall_arrayref($sql, {Columns=>{}}, @unique_val)
+            or $log->logdie("Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n");
+
+        $log->logdie("Only retrieved partial dataset: ", $dbh->errstr, "\n")
+            if $dbh->err;
+
+        # how many rows
+        my $count = scalar @{$ref};
+
+        throw JSA::Error::DBError
+            "Can only update if the row exists previously!\n"
+            if 0 == $count;
+
+        $log->logdie("Should not be possible to have more than one row. Got $count\n")
+            if $count > 1;
+
+        my $indb = $ref->[0];
+
+        my %differ;
+        my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
+        my $am_pm_end = qr/\d\d[APM]$/;
+
+        my $obs_date_re = qr/\bDATE.(?:OBS|END)\b/i;
+
+        my $inbeam_re = qr/\b INBEAM \b/xi;
+
+        # Allowed to be set undef if key from $field_values is missing, say as a
+        # result of external header munging.
+        my $miss_ok = _or_regex(qw/INBEAM/,
+                                _suffix_start_end_headers(qw/SEEING SEEDAT/));
+
+        my $tau_val = qr/\b(?:WVMTAU|TAU225)(?:ST|EN)\b/i;
+
+        my $only_obstime = $table eq 'COMMON'
+                           && $self->update_only_obstime();
+
+        my $only_inbeam = $table eq 'COMMON'
+                          && $self->update_only_inbeam();
+
+        foreach my $key (sort keys %{$indb}) {
+            $self->_show_debug("testing field: $key")
+                if $self->verbosity() > 1;
+
+            next
+                # since that will update automatically
+                if $key eq 'last_modified'
+                || ($key !~ $miss_ok && ! exists $field_values->{$key});
+
+            my $new = $field_values->{$key};
+            my $old = $indb->{$key};
+
+            next unless (defined $old || defined $new);
+
+            $self->_show_debug("continuing with $key")
+                if $self->verbosity();
+
+            my %test = (
+                'start' => exists $start{$key},
+                'end'   => exists $end{$key},
+                'old'   => $old,
+                'new'   => $new,
+            );
+
+            my $in_range = any {$test{$_}} (qw/start end/);
+
+            next if $only_inbeam
+                 && $key !~ $inbeam_re;
+
+            next if $only_obstime
+                 && $key !~ $obs_date_re;
+
+            # Not defined currently - inserting new value.
+            if (defined $new && ! defined $old) {
+                $differ{$key} = $new;
+                $self->_show_debug( qq[$key = ] . $new );
+                next;
+            }
+
+            # Defined in DB but undef in new version - not expecting this but assume
+            # this means a null.
+            if (! defined $new && defined $old) {
+                $differ{$key} = undef;
+                $self->_show_debug("$key = <undef>");
+                next;
+            }
+
+            # Dates.
+            if ($new =~ $ymd_start
+                    && ($old =~ $ymd_start || $old =~ $am_pm_end)) {
+                if ($in_range) {
+                    $new = _find_extreme_value(%test,
+                                               'new>old' => _compare_dates($new, $old));
+                    $self->_show_debug("  possible new value for $key = " . $new );
+                }
+
+                if ($new ne $old) {
+                    $differ{$key} = $new;
+                    $self->_show_debug("$key = " . $new);
+                }
+
+                next;
+            }
+
+            if (looks_like_number($new)) {
+                # Override range check for tau values as there is no relation between start
+                # & end values; these are weather dependent.
+                if ($key =~ $tau_val && $new != $old) {
+                    $differ{$key} = $new;
+                    $self->_show_debug("$key = " . $new);
+                }
+                elsif ($in_range) {
+                    $new = _find_extreme_value(%test, 'new>old' => $new > $old);
+
+                    if ($new != $old) {
+                        $differ{$key} = $new if $new != $old;
+                        $self->_show_debug("$key = " . $new);
+                    }
+                }
+                else {
+                    if ($new =~ /\./) {
+                      # floating point
+                      my $diff = abs($old - $new);
+                      if ($diff > 0.000001) {
+                          $differ{$key} = $new;
+                          $self->_show_debug("$key = " . $new);
+                      }
+                    }
+                    elsif ( $new != $old ) {
+                        $differ{$key} = $new;
+                        $self->_show_debug("$key = " . $new );
+                    }
+                }
+
+                next;
+            }
+
+            # String.
+            if ($new ne $old) {
+                $differ{$key} = $new;
+                $self->_show_debug("$key = " . $new);
+            }
+        }
+
+        $self->_show_debug("differences to update: " . keys %differ);
+
+        push @update_hash, {
+            'differ'        => {%differ},
+            'unique_val'    => [@unique_val],
+            'unique_key'    => [@unique_key],
+        };
+
+    }
+
+    return [@update_hash];
 }
 
-sub _suffix_start_end_headers { return map {; qq/${_}ST/ , qq/${_}EN/ } @_; }
+sub _suffix_start_end_headers {
+    return map {; "${_}ST" , "${_}EN"} @_;
+}
 
 sub _or_regex_string {
-
-  return join '|',
-            map
-            { quotemeta( $_ ) }
-            sort { length $b <=> length $a }
-            @_ ;
+    return join '|',
+        map {quotemeta($_)}
+        sort {length $b <=> length $a}
+        @_;
 }
 
 sub _or_regex {
-
-  my $re = _or_regex_string( @_ );
-  return qr{\b(?:$re)}i;
+    my $re = _or_regex_string(@_);
+    return qr/\b(?:$re)/i;
 }
 
 sub _or_regex_suffix_start_end_headers {
-
-  my $re = _or_regex_string( @_ );
-  return qr{\b (?: $re )(?: ST|EN )}ix;
+    my $re = _or_regex_string( @_ );
+    return qr/\b (?: $re )(?: ST|EN )/ix;
 }
 
 =item B<_get_primary_key>
 
 Returns the primary key for a given table in C<jcmt> database.
 
-  $primary = _get_primary_key( 'ACSIS' );
+    $primary = _get_primary_key('ACSIS');
 
 =cut
 
 sub _get_primary_key {
+    my ($table) = @_;
 
-  my ( $table ) = @_;
-
-  my %keys =
-    ( 'ACSIS'  => 'obsid_subsysnr',
-      'COMMON' => 'obsid',
-      'FILES'  => [qw{ obsid_subsysnr file_id }],
-      'SCUBA2' => 'obsid_subsysnr',
-      'transfer' => 'file_id',
+    my %keys = (
+        'ACSIS'     => 'obsid_subsysnr',
+        'COMMON'    => 'obsid',
+        'FILES'     => [qw/obsid_subsysnr file_id/],
+        'SCUBA2'    => 'obsid_subsysnr',
+        'transfer'  => 'file_id',
     );
 
-  return unless exists $keys{ $table };
-  return $keys{ $table };
+    return unless exists $keys{$table};
+    return $keys{$table};
 }
 
 sub update_hash {
+    my ($self, $table, $dbh, $change) = @_;
 
-  my ( $self, $table, $dbh, $change ) = @_;
+    return if $table eq 'FILES'
+           || ! $change;
 
-  return
-    if $table eq 'FILES'
-    || ! $change;
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    my @change      = @{$change};
+    my @sorted      = sort keys %{$change[0]->{'differ'}};
 
-  my @change     = @{ $change };
-  my @sorted     = sort keys %{ $change[0]->{'differ'} };
+    return 1 unless scalar @sorted;
 
-  return 1 unless scalar @sorted;
+    my @unique_key = @{$change[0]->{'unique_key'}};
 
-  my @unique_key = @{ $change[0]->{'unique_key'} };
+    # Now have to do an UPDATE
+    my $changes = join ', ',
+        map {
+            join ' = ', $_,
+                (! $self->debug && $self->load_header_db
+                    ? ' ? '
+                    : # debug version with unquoted values.
+                      # XXX should show the change per value instead of repeating the
+                      #     whole set of change for each header/column.
+                      $self->_debug_text($change));
+        } @sorted;
 
-  # Now have to do an UPDATE
-  my $changes =
-    join ', ',
-      map
-      { join ' = ',
-          $_,
-          ( !$self->debug && $self->load_header_db
-              ? q[ ? ]
-              : # debug version with unquoted values.
-                # XXX should show the change per value instead of repeating the
-                #     whole set of change for each header/column.
-                $self->_debug_text( $change )
-          );
-      }
-      @sorted;
+    my $sql = sprintf "UPDATE %s SET %s WHERE %s",
+                      $table,
+                      $changes,
+                      join ' AND ', map {" $_ = ? "} @unique_key;
 
-  my $sql = sprintf "UPDATE %s SET %s WHERE %s",
-            $table,
-            $changes,
-            join ' AND ',
-              map { qq[ $_ = ? ] } @unique_key
-              ;
-
-  if ( $self->debug ) {
-
-    $self->_print_text( "$sql\n" );
-    return 1;
-  }
-
-  if ( $self->load_header_db ) {
-
-    my $sth = $dbh->prepare($sql)
-      or $log->logdie( "Could not prepare sql statement for UPDATE\n", $dbh->errstr, "\n" );
-
-    for my $row ( @change ) {
-
-      my @bind = map { $row->{'differ'}{$_} } @sorted;
-      push @bind, @{ $row->{'unique_val'} };
-
-      my $status = $sth->execute( @bind );
-      throw JSA::Error::DBError 'UPDATE error: ' . $dbh->errstr() . "\n... with { $sql, @bind }"
-        if $dbh->err();
-
-      return $status;
+    if ($self->debug) {
+        $self->_print_text("$sql\n");
+        return 1;
     }
-  }
 
-  return 1;
+    if ($self->load_header_db) {
+        my $sth = $dbh->prepare($sql)
+            or $log->logdie("Could not prepare sql statement for UPDATE\n", $dbh->errstr, "\n");
+
+        foreach my $row (@change) {
+            my @bind = map {$row->{'differ'}{$_}} @sorted;
+            push @bind, @{$row->{'unique_val'}};
+
+            my $status = $sth->execute(@bind);
+            throw JSA::Error::DBError 'UPDATE error: ' . $dbh->errstr() . "\n... with { $sql, @bind }"
+                if $dbh->err();
+
+            return $status;
+        }
+    }
+
+    return 1;
 }
 
 =item B<transform_value>
@@ -2265,75 +2064,68 @@ Given a table name, column name, and value to be inserted in a table,
 alter the value if the database expects the value to be in a different
 format than that of the headers.
 
-  $enter->transform_value($table, \%columns, \%values);
+    $enter->transform_value($table, \%columns, \%values);
 
 =cut
 
 sub transform_value {
+    my ($self, $table, $columns, $values) = @_;
 
-  my ( $self, $table, $columns, $values ) = @_;
+    # Transform data hash.  Each data type name contains a hash mapping
+    # values from the headers to the values the database expects.
+    my %transform_data = (
+                          bit => {T => 1,
+                                  F => 0,},
+                          int => {T => 1,
+                                  F => 0,},
+                         );
 
-  # Transform data hash.  Each data type name contains a hash mapping
-  # values from the headers to the values the database expects.
-  my %transform_data = (
-                        bit => {T => 1,
-                                F => 0,},
-                        int => {T => 1,
-                                F => 0,},
-                       );
+    foreach my $column (keys %$values) {
+      # Store column's current value
+      my $val = $values->{$column};
+      next unless defined($val);
 
-  for my $column (keys %$values) {
+      if (exists $columns->{$table}{$column}) {
+          # Column is defined for this table, get the data type
+          my $data_type = $columns->{$table}{$column};
 
-    # Store column's current value
-    my $val = $values->{$column};
-    next unless defined($val);
+          if ($data_type eq 'datetime') {
+              # Temporarily (needs to be handled at the header source) set a
+              # zero date (0000-00-00T00:00:00) to undef.
+              (my $non_zero = $val) =~ tr/0T :-//d;
 
-    if (exists $columns->{$table}{$column}) {
+              unless ($non_zero) {
+                  undef $values->{$column};
 
-      # Column is defined for this table, get the data type
-      my $data_type = $columns->{$table}{$column};
+                  $self->_print_text(sprintf "Converted date [%s] to [undef] for column [%s]\n",
+                                             $val, $column)
+                      if $self->debug;
+              }
+          }
+          elsif (exists $transform_data{$data_type}) {
+              if (exists $transform_data{$data_type}{$val}) {
+                  # This value needs to be transformed to the new value
+                  # defined in the %transform_data hash
+                  $values->{$column} = $transform_data{$data_type}{$val};
 
-      if ( $data_type eq 'datetime' ) {
+                  $self->_print_text(sprintf "Transformed value [%s] to [%s] for column [%s]\n",
+                                             $val, $values->{$column}, $column)
+                      if $self->debug;
+              }
+          }
+          elsif ($column eq 'lststart' or $column eq 'lstend') {
+              # Convert LSTSTART and LSTEND to decimal hours
+              my $ha = new Astro::Coords::Angle::Hour($val, units => 'sex');
+              $values->{$column} = $ha->hours;
 
-        # Temporarily (needs to be handled at the header source) set a
-        # zero date (0000-00-00T00:00:00) to undef.
-        ( my $non_zero = $val ) =~ tr/0T :-//d;
-        unless ( $non_zero ) {
-
-          undef $values->{$column} ;
-
-          $self->_print_text( sprintf "Converted date [%s] to [undef] for column [%s]\n",
-                              $val, $column
-                            )
-            if $self->debug;
-        }
-      } elsif (exists $transform_data{$data_type}) {
-
-        if (exists $transform_data{$data_type}{$val}) {
-
-          # This value needs to be transformed to the new value
-          # defined in the %transform_data hash
-          $values->{$column} = $transform_data{$data_type}{$val};
-
-          $self->_print_text( sprintf "Transformed value [%s] to [%s] for column [%s]\n",
-                                $val, $values->{$column}, $column
-                            )
-            if $self->debug;
-        }
-      } elsif ($column eq 'lststart' or $column eq 'lstend') {
-
-        # Convert LSTSTART and LSTEND to decimal hours
-        my $ha = new Astro::Coords::Angle::Hour($val, units => 'sex');
-        $values->{$column} = $ha->hours;
-
-        $self->_print_text( sprintf "Converted time [%s] to [%s] for column [%s]\n",
-                              $val, $values->{$column}, $column
-                          )
-          if $self->debug;
+              $self->_print_text(sprintf "Converted time [%s] to [%s] for column [%s]\n",
+                                         $val, $values->{$column}, $column)
+                  if $self->debug;
+          }
       }
     }
-  }
-  return 1;
+
+    return 1;
 }
 
 =item B<calculate_release_date>
@@ -2355,55 +2147,59 @@ end of semester 14B.
 =cut
 
 sub calculate_release_date {
-  my $obs = shift;
+    my $obs = shift;
 
-  # Get date of observation
-  my $obsdate = $obs->utdate;
+    # Get date of observation
+    my $obsdate = $obs->utdate;
 
-  if ( $obs->projectid =~ /^mjlsc/i && $obs->isScience) {
-    # CLS. Should properly check the SURVEY FITS header
-    return DateTime->new('month' => 3,
-                         'year' => 2016,
-                         'day' => 1,
-                         'hour' => 23,
-                         'minute' => 59,
-                         'second' => 59,
-                         'time_zone' => 'UTC'
-    );
+    if ( $obs->projectid =~ /^mjlsc/i && $obs->isScience) {
+        # CLS. Should properly check the SURVEY FITS header
+        return DateTime->new('month' => 3,
+                             'year' => 2016,
+                             'day' => 1,
+                             'hour' => 23,
+                             'minute' => 59,
+                             'second' => 59,
+                             'time_zone' => 'UTC');
 
-  } elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
-    # EC05 is a public calibrator monitoring project
-    return OMP::DateTools->yesterday(1);
+    }
+    elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
+        # EC05 is a public calibrator monitoring project
+        return OMP::DateTools->yesterday(1);
 
-  } elsif ($obs->projectid =~ /ec/i) {
-    # Do not release EC data.
+    }
+    elsif ($obs->projectid =~ /ec/i) {
+        # Do not release EC data.
 
-    return DateTime->new('month' => 1,
-                         'year' => 2031,
-                         'day' => 1,
-                         'hour' => 0,
-                         'minute' => 0,
-                         'second' => 0,
-                         'time_zone' => 0
-    );
+        return DateTime->new('month' => 1,
+                             'year' => 2031,
+                             'day' => 1,
+                             'hour' => 0,
+                             'minute' => 0,
+                             'second' => 0,
+                             'time_zone' => 0);
 
-  } elsif ($obs->isScience) {
-    # semester release
-    my $semester = OMP::DateTools->determine_semester(date => $obsdate,
-                                                      tel => 'JCMT');
-    my ($sem_begin, $sem_end) =
-      OMP::DateTools->semester_boundary( semester => $semester, tel => 'JCMT' );
+    }
+    elsif ($obs->isScience) {
+        # semester release
+        my $semester = OMP::DateTools->determine_semester(date => $obsdate,
+                                                          tel => 'JCMT');
+        my ($sem_begin, $sem_end) =
+            OMP::DateTools->semester_boundary(semester => $semester,
+                                              tel => 'JCMT');
 
-    # Use DateTime so that we can have proper addition. Add 1 year 1 day because
-    # sem_end refers to the UT date and doesn't specify hours/minutes/seconds
-    return
-        DateTime->from_epoch( epoch => $sem_end->epoch, time_zone => 'UTC' )
-      + DateTime::Duration->new( years => 1, hours => 23, minutes => 59, seconds => 59 );
+        # Use DateTime so that we can have proper addition. Add 1 year 1 day because
+        # sem_end refers to the UT date and doesn't specify hours/minutes/seconds
+        return DateTime->from_epoch(epoch => $sem_end->epoch,
+                                    time_zone => 'UTC')
+             + DateTime::Duration->new(years => 1, hours => 23,
+                                       minutes => 59, seconds => 59);
 
-  } else {
-    # immediate release
-    return OMP::DateTools->yesterday(1);
-  }
+    }
+    else {
+        # immediate release
+        return OMP::DateTools->yesterday(1);
+    }
 }
 
 =item B<fill_headers_COMMON>
@@ -2411,64 +2207,58 @@ sub calculate_release_date {
 Fills in the headers for C<COMMON> database table, given a headers
 hash reference and an L<OMP::Info::Obs> object.
 
-  $enter->fill_headers_COMMON( \%header, $obs );
+    $enter->fill_headers_COMMON(\%header, $obs);
 
 =cut
 
 sub fill_headers_COMMON {
+    my ($self, $header, $obs) = @_;
 
-  my ( $self, $header, $obs  ) = @_;
+    my $release_date = calculate_release_date($obs);
 
-  my $release_date = calculate_release_date($obs);
+    $header->{'release_date'} = $release_date->strftime($self->sybase_date_format);
 
-  $header->{'release_date'} = $release_date->strftime($self->sybase_date_format);
+    $self->_print_text(sprintf "Created header [release_date] with value [%s]\n",
+                               $header->{'release_date'})
+        if $self->debug;
 
-  $self->_print_text( sprintf "Created header [release_date] with value [%s]\n",
-                        $header->{'release_date'}
-                    )
-    if $self->debug;
+    # Create last_modified
+    my $today = gmtime;
+    $header->{'last_modified'} = $today->strftime($self->sybase_date_format);
 
-  # Create last_modified
-  my $today = gmtime;
-  $header->{'last_modified'} = $today->strftime($self->sybase_date_format);
+    $self->_print_text(sprintf "Created header [last_modified] with value [%s]\n",
+                               $header->{'last_modified'})
+        if $self->debug;
 
-  $self->_print_text( sprintf "Created header [last_modified] with value [%s]\n",
-                        $header->{'last_modified'}
-                    )
-    if $self->debug;
+    if (exists $header->{'INSTRUME'} && ! defined $header->{'BACKEND'}) {
+        $header->{'BACKEND'} = $header->{'INSTRUME'};
+    }
 
-  if ( exists $header->{'INSTRUME'} && ! defined $header->{'BACKEND'} ) {
-
-    $header->{'BACKEND'} = $header->{'INSTRUME'};
-  }
-
-  _fix_dates( $header );
-  return;
+    _fix_dates($header);
+    return;
 }
 
 # Sybase ASE 15 cannot convert '0.000000000000000e+00' to a datetime value.  Set
 # those to undef, thus NULL.
 sub _fix_dates {
+    my ($header) = @_;
 
-  my ( $header ) = @_;
+    my $date_re = qr/ (?: \b date | dat(?: en | st )\b ) /xi;
 
-  my $date_re = qr{ (?: \b date | dat(?: en | st )\b ) }xi;
+    my $zero_date_re = qr/^0{4} -? 00 -? 00/x;
 
-  my $zero_date_re = qr{^0{4} -? 00 -? 00}x;
+    foreach my $k (keys %{$header}) {
+        next unless $k =~ $date_re;
 
-  for my $k ( keys %{ $header } ) {
+        my $date = $header->{$k};
 
-    next unless $k =~ $date_re;
+        undef $header->{ $k }
+            if ! $date
+            || $date =~ $zero_date_re
+            || (looks_like_number($date) && 0 == $date);
+    }
 
-    my $date = $header->{ $k };
-    undef $header->{ $k }
-      if ! $date
-      || $date =~ $zero_date_re
-      || ( looks_like_number( $date ) && 0 == $date )
-      ;
-  }
-
-  return;
+    return;
 }
 
 =item B<fill_headers_FILES>
@@ -2478,52 +2268,48 @@ L<JSA::EnterData::ACSIS>, L<JSA::EnterData::DAS>, or
 L<JSA::EnterData::SCUBA2> object, a headers hash reference and an
 L<OMP::Info::Obs> object.
 
-  $enter->fill_headers_FILES( $inst, \%header, $obs );
+    $enter->fill_headers_FILES($inst, \%header, $obs);
 
 =cut
 
 sub fill_headers_FILES {
+    my ($self, $inst, $header, $obs) = @_;
 
-  my ( $self, $inst, $header, $obs ) = @_;
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    # Create file_id - also need to extract NSUBSCAN from subheader if we have more
+    # than one file. (although simply using a 1-based index would be sufficient)
+    my @files = $obs->simple_filename;
+    $header->{'file_id'} = \@files;
 
-  # Create file_id - also need to extract NSUBSCAN from subheader if we have more
-  # than one file. (although simply using a 1-based index would be sufficient)
-  my @files = $obs->simple_filename;
-  $header->{'file_id'} = \@files;
-
-  # We need to know whether a nsubscan header is even required so %columns really
-  # needs to be accessed. For now we kluge it.
-  unless ( exists $header->{'nsubscan'} ) {
-
-    if (scalar(@files) > 1) {
-
-      $header->{'nsubscan'} = [ map { $_->value('NSUBSCAN') } $obs->fits->subhdrs ];
-    } elsif (exists $header->{'NSUBSCAN'}) {
-
-      # not really needed because the key becomes case insensitive
-      $header->{'nsubscan'} = $header->{'NSUBSCAN'};
-    } else {
-
-      $log->logdie( "Internal error - NSUBSCAN does not exist yet there is only one file!\n" );
+    # We need to know whether a nsubscan header is even required so %columns really
+    # needs to be accessed. For now we kluge it.
+    unless (exists $header->{'nsubscan'}) {
+        if (scalar(@files) > 1) {
+            $header->{'nsubscan'} =
+                [map {$_->value('NSUBSCAN')} $obs->fits->subhdrs];
+        }
+        elsif (exists $header->{'NSUBSCAN'}) {
+            # not really needed because the key becomes case insensitive
+            $header->{'nsubscan'} = $header->{'NSUBSCAN'};
+        }
+        else {
+            $log->logdie("Internal error - NSUBSCAN does not exist yet there is only one file!\n");
+        }
     }
-  }
 
-  $self->_print_text( sprintf "Created header [file_id] with value [%s]\n",
-                        join ',', @{ $header->{'file_id'} }
-                    )
-    if $self->debug;
+    $self->_print_text(sprintf "Created header [file_id] with value [%s]\n",
+                               join ',', @{$header->{'file_id'}})
+        if $self->debug;
 
-  $inst->_fill_headers_obsid_subsys( $header, $obs->obsid );
+    $inst->_fill_headers_obsid_subsys($header, $obs->obsid);
 
-  # Further work needs to be done for SCUBA2.
-  if ( my $fill = $inst->can( 'fill_headers_FILES' ) ) {
+    # Further work needs to be done for SCUBA2.
+    if (my $fill = $inst->can('fill_headers_FILES')) {
+        $inst->$fill( $header, $obs );
+    }
 
-    $inst->$fill( $header, $obs );
-  }
-
-  return;
+    return;
 }
 
 
@@ -2533,45 +2319,41 @@ Given a header hash reference, removes all the I<INBEAM> header occurrences
 which have C<SHUTTER>; combines any remaining header values (in subheaders) in a
 space separated list. Returns a possibly changed header hash reference.
 
-  $changed = $enter->munge_header_INBEAM( $header_hash );
+    $changed = $enter->munge_header_INBEAM($header_hash);
 
 =cut
 
 sub munge_header_INBEAM {
+    my ($self , $headers) = @_;
 
-  my ( $self , $headers ) = @_;
+    my $name        = 'INBEAM';
+    my $empty_re    = qr/^\s*$/;
+    my $shutter_re  = qr/\b SHUTTER \b/ix;
 
-  my $name       = 'INBEAM' ;
-  my $empty_re   = qr{^\s*$} ;
-  my $shutter_re = qr{\b SHUTTER \b}ix ;
+    $self->_delete_header(
+        'headers' => $headers,
+        'name'   => $name,
+        'test'   => sub {
+            my ($val) = @_;
+            return defined $val
+                && ! ref $val
+                && ($val =~ $shutter_re || $val =~ $empty_re);
+        },
+    );
 
-  $self->_delete_header( 'headers' => $headers,
-                          'name'   => $name,
-                          'test'   =>
-                            sub {
-                              my ( $val ) = @_;
-                              return
-                                defined $val && ! ref $val
-                                && ( $val =~ m/$shutter_re/
-                                      ||
-                                    $val =~ m/$empty_re/
-                                  )
-                                ;
-                            },
-                        );
+    my @val = $self->_find_header(
+        'headers' => $headers,
+        'name'   => $name,
+        'value'  => 1,
+        'cond-name'        => 'SEQ_TYPE',
+        'cond-value-regex' =>
+        qr/\b(?: science | pointing | focus )\b/xi
+    );
 
-  my @val = $self->_find_header( 'headers' => $headers,
-                                  'name'   => $name,
-                                  'value'  => 1,
-                                  'cond-name'        => 'SEQ_TYPE',
-                                  'cond-value-regex' =>
-                                    qr{\b(?: science | pointing | focus )\b}xi
-                                );
+    $headers->{$name} = lc(join ' ' , @val)
+        if scalar @val;
 
-    scalar @val
-      and $headers->{ $name } = lc( join ' ' , @val );
-
-  return $headers;
+    return $headers;
 }
 
 
@@ -2580,29 +2362,27 @@ sub munge_header_INBEAM {
 Given a table name and a DBI database handle object, return a hash reference
 containing columns with their associated data types.
 
-  $cols = $enter->get_columns( $table, $dbh )
+    $cols = $enter->get_columns($table, $dbh)
 
 =cut
 
 sub get_columns {
+    my ($self, $table, $dbh) = @_;
 
-  my ( $self, $table, $dbh ) = @_;
+    return {} unless defined $dbh;
 
-  return {} unless defined $dbh;
-
-  # Do query to retrieve column info (using the sp_columns stored procedure)
-  my $col_href = $dbh->selectall_hashref("sp_columns $table", "column_name")
-     or throw JSA::Error
+    # Do query to retrieve column info (using the sp_columns stored procedure)
+    my $col_href = $dbh->selectall_hashref("sp_columns $table", "column_name")
+        or throw JSA::Error
             "Could not obtain column information for table [$table]: "
-          . $dbh->errstr . "\n";
+            . $dbh->errstr . "\n";
 
-  my %result;
-  for my $col (keys %$col_href) {
+    my %result;
+    for my $col (keys %$col_href) {
+        $result{$col} = $col_href->{$col}{type_name};
+    }
 
-    $result{$col} = $col_href->{$col}{type_name};
-  }
-
-  return \%result;
+    return \%result;
 }
 
 =item B<get_insert_values>
@@ -2617,80 +2397,71 @@ For FILES table, an additional hash reference is needed to list the
 already processed files.  Keys are the (base) file names, values could
 be anything.
 
-  $vals =
-    $enter->get_insert_values( 'table' => $table,
-                                'columns' => \%columns,
-                                'dict' => \%dictionary,
-                                'headers' => \%hdrhash,
-                              );
+    $vals = $enter->get_insert_values('table' => $table,
+                                      'columns' => \%columns,
+                                      'dict' => \%dictionary,
+                                      'headers' => \%hdrhash);
 
 =cut
 
 sub get_insert_values {
+    my ($self, %args) = @_;
+    #my ($self, $table, $columns, $dictionary, $hdrhash) = @_;
 
-  my ( $self, %args ) = @_;
-  #my ( $self, $table, $columns, $dictionary, $hdrhash ) = @_;
+    my ($table, $columns) = map {$args{$_}} qw/table columns/;
 
-  my ( $table, $columns ) = map { $args{ $_ } } qw[ table columns ];
+    for (qw/SCUBA-2/) {
+        $columns->{$table} = $columns->{$_}
+            if 'scuba2' eq lc $table
+            && ! exists $columns->{$table}
+            && exists $columns->{$_};
+    }
 
-  for ( qw[ SCUBA-2 ] ) {
+    # Map headers to columns, translating from the dictionary as
+    # necessary.
 
-    $columns->{ $table } = $columns->{ $_ }
-      if 'scuba2' eq lc $table
-      && ! exists $columns->{ $table }
-      && exists $columns->{ $_ }
-      ;
-  }
+    my $main = $self->extract_column_headers(%args);
 
-  # Map headers to columns, translating from the dictionary as
-  # necessary.
+    # Do value transformation
+    $self->transform_value($table, $columns, $main);
 
-  my $main = $self->extract_column_headers( %args );
-
-  # Do value transformation
-  $self->transform_value($table, $columns, $main);
-
-  return $main;
+    return $main;
 }
 
 sub extract_column_headers {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    my ($hdrhash, $table, $columns, $dict) =
+        map {$args{$_}} qw/headers table columns dict/;
 
-  my ( $hdrhash, $table, $columns, $dict ) =
-    map { $args{ $_ } } qw[ headers table columns dict ];
-
-  $self->_print_text( ">Processing table: $table\n" )
-    if $self->debug;
-
-  my %values;
-
-  for my $header (sort { lc $a cmp lc $b } keys %$hdrhash) {
-
-    my $alt_head = lc $header;
-
-    if (exists $columns->{$table}{ $alt_head }) {
-
-      $values{ $alt_head } = $hdrhash->{$header};
-    }
-    elsif ( exists $dict->{ $alt_head }
-            && exists $columns->{ $table }{ $dict->{ $alt_head } } ) {
-
-      # Found header alias in dictionary and column exists in table
-      my $alias = $dict->{ $alt_head };
-      $values{$alias} = $hdrhash->{$header};
-
-      $self->_print_text( "  MAPPED header [$header] to column [$alias]\n" )
+    $self->_print_text(">Processing table: $table\n")
         if $self->debug;
+
+    my %values;
+
+    foreach my $header (sort {lc $a cmp lc $b} keys %$hdrhash) {
+        my $alt_head = lc $header;
+
+        if (exists $columns->{$table}{$alt_head}) {
+            $values{ $alt_head } = $hdrhash->{$header};
+        }
+        elsif (exists $dict->{$alt_head}
+                && exists $columns->{$table}{$dict->{$alt_head}}) {
+            # Found header alias in dictionary and column exists in table
+            my $alias = $dict->{$alt_head};
+            $values{$alias} = $hdrhash->{$header};
+
+            $self->_print_text("  MAPPED header [$header] to column [$alias]\n")
+                if $self->debug;
+        }
+
+        $self->_print_text("  Could not find alias for header [$header].  Skipped.\n")
+            if $self->debug
+            && $self->verbosity > 1
+            && ! exists $values{$alt_head};
     }
 
-    $self->_print_text( "  Could not find alias for header [$header].  Skipped.\n" )
-      if $self->debug
-      && $self->verbosity > 1
-      && ! exists $values{ $alt_head };
-  }
-
-  return \%values;
+    return \%values;
 }
 
 =item B<get_max_idkey>
@@ -2698,26 +2469,25 @@ sub extract_column_headers {
 Given the COMMON table name and a database handle object, return the
 highest idkey/index in the COMMON table.
 
-  $idkey = $enter->get_max_idkey( $common_table, $dbh );
+    $idkey = $enter->get_max_idkey($common_table, $dbh);
 
 =cut
 
 sub get_max_idkey {
+    my ($self, $table, $dbh) = @_;
 
-  my ( $self, $table, $dbh ) = @_;
+    return 1 unless $self->load_header_db;
 
-  return 1 unless $self->load_header_db;
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    my $sth = $dbh->prepare_cached("select max(idkey) from $table");
+    $sth->execute
+        or $log->logdie("Could not obtain max idkey: ", $dbh->errstr, "\n");
 
-  my $sth = $dbh->prepare_cached("select max(idkey) from $table");
-  $sth->execute
-    or $log->logdie( "Could not obtain max idkey: ", $dbh->errstr, "\n" );
+    my $result = $sth->fetchall_arrayref;
+    my $max = $result->[0]->[0];
 
-  my $result = $sth->fetchall_arrayref;
-  my $max = $result->[0]->[0];
-
-  return $max;
+    return $max;
 }
 
 =item B<create_dictionary>
@@ -2725,37 +2495,36 @@ sub get_max_idkey {
 Given the location of the data dictionary, return a hash containing
 the dictionary contents.
 
-  %dictionary = $enter->create_dictionary( $dictionary );
+    %dictionary = $enter->create_dictionary($dictionary);
 
 =cut
 
 sub create_dictionary {
+    my ($self) = @_;
 
-  my ( $self ) = @_;
+    my $dictionary = $self->{'dict'};
+    my %dict;
 
-  my $dictionary = $self->{'dict'};
-  my %dict;
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    open my $DICT, '<', $dictionary
+        or $log->logdie("Could not open data dictionary '$dictionary': $!\n");
 
-  open my $DICT, '<', $dictionary
-    or $log->logdie( "Could not open data dictionary '$dictionary': $!\n" );
+    my @defs = grep {$_ !~ /^\s*(?:#|$)/} <$DICT>;  # Slurp!
 
-  my @defs = grep { $_ !~ /^\s*(?:#|$)/ } <$DICT>;  # Slurp!
+    close $DICT
+        or $log->logdie("Error closing data dictionary '$dictionary': $!\n");
 
-  close $DICT
-    or $log->logdie( "Error closing data dictionary '$dictionary': $!\n" );
+    foreach my $def (@defs) {
+        $def =~ s/\s+$//;
 
-  for my $def (@defs) {
-
-    $def =~ s/\s+$//;
-    if ( $def =~ /(.*?)\:\s(.*)/ ) {
-
-      # Store each dictionary alias as a key whose value is a column name
-      map { $dict{$_} = "$1" } split /\s/, "$2";
+        if ( $def =~ /(.*?)\:\s(.*)/ ) {
+            # Store each dictionary alias as a key whose value is a column name
+            map {$dict{$_} = "$1"} split /\s/, "$2";
+        }
     }
-  }
-  return %dict;
+
+    return %dict;
 }
 
 =item B<skip_obs_calc>
@@ -2768,56 +2537,52 @@ truth value if observation should be skipped.
 Throws L<JSA::Error::BadArgs> exception when headers (or L<*::Obs> object) are
 missing or C<test> hash reference value is missing.
 
-  print "skipped obs"
-    if $enter->skip_obs_calc( 'headers' => $obs->hdrhash(),
-                              'test' =>
-                                { 'OBS_TYPE' => qr{\b(?: skydip | FLAT_?FIELD  )\b}xi
-                                }
-                            );
+    print "skipped obs"
+        if $enter->skip_obs_calc(
+            'headers' => $obs->hdrhash(),
+            'test' => {
+                'OBS_TYPE' => qr/\b(?: skydip | FLAT_?FIELD  )\b/xi
+            });
 
 =cut
 
 sub skip_obs_calc {
+    my ($self, %arg) = @_;
 
-  my ( $self, %arg ) = @_;
+    # Skip list.
+    my %test =
+        exists $arg{'test'} && defined $arg{'test'} ? %{$arg{'test' }} : ();
 
-  # Skip list.
-  my %test =
-      exists $arg{'test'} && defined $arg{'test'} ? %{ $arg{'test' } } : ();
+    scalar keys %test
+        or throw JSA::Error::BadArgs('No "test" hash reference given.');
 
-  scalar keys %test
-    or throw JSA::Error::BadArgs( qq[No "test" hash reference given.] );
+    my $header;
+    if (exists $arg{'headers'}) {
+        throw JSA::Error::BadArgs('No "headers" value given to check if to find bounding box.')
+            unless defined $arg{'headers'};
 
-  my $header;
-  if ( exists $arg{'headers'} ) {
+        $header = $arg{'headers'};
+    }
+    else {
+        JSA::Error::BadArgs('No "obs" value given to check if to find bounding box.')
+            unless exists $arg{'obs'} && defined $arg{'obs'};
 
-    defined $arg{'headers'}
-      or throw JSA::Error::BadArgs( qq[No "headers" value given to check if to find bounding box.] );
+        JSA::Error::BadArgs("Could not get header hash from \"$arg{'obs'}\"")
+            unless $header = $arg{'obs'}->hdrhash();
+    }
 
-    $header = $arg{'headers'};
-  }
-  else {
+    foreach my $name (sort keys %test) {
+        $self->_find_header('headers' => $header,
+                            'name'    => $name,
+                            'value-regex' => $test{$name})
+            or next;
 
-    exists $arg{'obs'} && defined $arg{'obs'}
-      or  JSA::Error::BadArgs( qq[No "obs" value given to check if to find bounding box.] );
+        $self->_show_debug("Matched \"$name\" with $test{$name}; obs may be skipped.");
 
-    $header = $arg{'obs'}->hdrhash()
-      or  JSA::Error::BadArgs( qq[Could not get header hash from "$arg{'obs'}"] );
-  }
+        return 1;
+    }
 
-  for my $name ( sort keys %test ) {
-
-    $self->_find_header(  'headers' => $header,
-                          'name'    => $name,
-                          'value-regex' => $test{ $name }
-                        )
-                        or next;
-
-    $self->_show_debug( qq[Matched "$name" with $test{ $name }; obs may be skipped.] );
-    return 1;
-  }
-
-  return;
+    return;
 }
 
 =item B<skip_calc_radec>
@@ -2826,35 +2591,34 @@ Given a C<OMP::Info::Obs> object header hash reference -- or an
 C<OMP::Info::Obs> object -- as a hash, returns a truth value if
 bounding box calculation should be skipped.
 
-  print "skipped calc_radec()"
-    if $enter->skip_calc_radec( 'headers' => $obs->hdrhash() );
+    print "skipped calc_radec()"
+        if $enter->skip_calc_radec('headers' => $obs->hdrhash());
 
 Default skip list is ...
 
-    'OBS_TYPE' => qr{\b skydips? \b}ix
+    'OBS_TYPE' => qr/\b skydips? \b/ix
 
 Optionally accepts a skip list with I<skip> as key name, and a hash
 reference as value of header names as keys and header values as
 regular expressions ...
 
-  print "skipped calc_radec()"
-    if $enter->skip_calc_radec( 'headers' => $obs->hdrhash(),
-                                'test' =>
-                                  { 'OBS_TYPE' => qr{\b(?: skydip | FLAT_?FIELD  )\b}xi
-                                  }
-                              );
+    print "skipped calc_radec()"
+        if $enter->skip_calc_radec(
+            'headers' => $obs->hdrhash(),
+            'test' => {
+                'OBS_TYPE' => qr/\b(?: skydip | FLAT_?FIELD  )\b/xi
+            });
 
 =cut
 
 sub skip_calc_radec {
+    my ($self, %arg) = @_;
 
-  my ( $self, %arg ) = @_;
+    $self->acsis_calc_radec() or return;
 
-  $self->acsis_calc_radec() or return;
+    my $skip = qr/\b skydips? \b/xi;
 
-  my $skip = qr{\b skydips? \b}xi;
-
-  return $self->skip_obs_calc( 'test' => { 'OBS_TYPE' => $skip }, %arg );
+    return $self->skip_obs_calc('test' => {'OBS_TYPE' => $skip}, %arg);
 }
 
 =item B<calc_radec>
@@ -2863,130 +2627,123 @@ Calculate RA/Dec extent (ICRS) of the observation and the base
 position.  It populates header with corners of grid (in decimal
 degrees).  Status is perl status: 1 is good, 0 bad.
 
-  $status = JSA::EnterData->calc_radec( $inst, $obs, $header );
+    $status = JSA::EnterData->calc_radec($inst, $obs, $header);
 
 =cut
 
 sub calc_radec {
+    my ($self, $inst, $obs, $headerref) = @_;
 
-  my ( $self, $inst, $obs, $headerref ) = @_;
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
+    # File names for a subsystem
+    my @filenames = $obs->filename;
 
-  # File names for a subsystem
-  my @filenames = $obs->filename;
+    my $temp = File::Temp->new('template' => _file_template('radec'));
+    $temp->unlink_on_destroy(1);
+    # Now need to write these files to  temp file
+    my $rc = JSA::WriteList::write_list($temp->filename(), [@filenames]);
 
-  my $temp = File::Temp->new( 'template' => _file_template( 'radec' ) );
-  $temp->unlink_on_destroy( 1 );
-  # Now need to write these files to  temp file
-  my $rc = JSA::WriteList::write_list( $temp->filename(), [ @filenames ] );
+    # PA (may not be present)
+    my $pa = $headerref->{MAP_PA};
+    $pa *= -1 if defined $pa;
 
-  # PA (may not be present)
-  my $pa = $headerref->{MAP_PA};
-  $pa *= -1 if defined $pa;
+    my @command  = $inst->get_bound_check_command($temp->filename(), $pa);
 
-  my @command  = $inst->get_bound_check_command( $temp->filename(), $pa );
+    my $err_text = sprintf "Bound calculation error with files starting with %s; see log\n",
+                           $filenames[0];
 
-  my $err_text = sprintf "Bound calculation error with files starting with %s; see log\n",
-                    $filenames[0];
+    my $starcom = JSA::EnterData::StarCommand->new();
+    $starcom->verbose($self->debug() ? 3 : $self->verbosity());
+    $starcom->try_command('error-text' => $err_text,
+                          'command'    => \@command)
+        or return;
 
-  my $starcom = JSA::EnterData::StarCommand->new();
-  $starcom->verbose( $self->debug() ? 3 : $self->verbosity() );
-  $starcom->try_command(  'error-text' => $err_text,
-                          'command'    => \@command
-                        )
-                        or return;
+    # Get the bounds
+    my @corner     = qw/TL BR TR BL/;
+    my %par_corner = map {; $_ => 'F' . $_ } @corner;
 
-  # Get the bounds
-  my @corner     = qw[ TL BR TR BL ];
-  my %par_corner = map {; $_ => 'F' . $_ } @corner;
+    my %result = ('REFLAT' => undef,
+                  'REFLON' => undef);
 
-  my %result = (  'REFLAT' => undef,
-                  'REFLON' => undef,
-                );
+    my $prog = _basename($command[0]);
 
-  my $prog = _basename( $command[0] );
+    foreach my $k (sort values %par_corner) {
+        my $res = `/star/bin/kappa/parget $k $prog`;
 
-  for my $k ( sort values %par_corner ) {
+        # Rarely happens but when it does, produces warnings about operations on
+        # undef values.
+        # XXX Need to ask if it is important enough to log.
+        unless ($res) {
+            $log->logwarn("No value found for \"parget $k $prog\" after successful run of \"$prog\"!");
+            # XXX return from sub instead?
+            next;
+        }
 
-    my $res = qx{ /star/bin/kappa/parget $k $prog };
-
-    # Rarely happens but when it does, produces warnings about operations on
-    # undef values.
-    # XXX Need to ask if it is important enough to log.
-    unless ( $res ) {
-
-      $log->logwarn( qq[No value found for "parget $k $prog" after successful run of "$prog"!] );
-      # XXX return from sub instead?
-      next;
+        $res =~ s/^\s+//;
+        $res =~ s/\s+$//;
+        $result{$k} = [
+            map {
+                Astro::Coords::Angle->new($_, units => 'rad')
+            } split(/\s+/,$res)];
     }
 
-    $res =~ s/^\s+//;
-    $res =~ s/\s+$//;
-    $result{$k} = [ map {Astro::Coords::Angle->new( $_, units => 'rad') } split(/\s+/,$res) ];
-  }
+    foreach my $corner (@corner) {
+        my $parkey = $par_corner{$corner};
+        my $radec  = exists $result{$parkey} ? $result{$parkey} : undef;
 
-  for my $corner ( @corner ) {
+        next unless defined $radec;
 
-    my $parkey = $par_corner{ $corner };
-    my $radec  = exists $result{ $parkey } ? $result{ $parkey } : undef;
-    defined $radec or next;
+        my $alt = lc $corner;
+        $headerref->{"obsra$alt"}  = $radec->[0]->degrees;
+        $headerref->{"obsdec$alt"} = $radec->[1]->degrees;
+    }
 
-    my $alt = lc $corner;
-    $headerref->{"obsra$alt"}  = $radec->[0]->degrees;
-    $headerref->{"obsdec$alt"} = $radec->[1]->degrees;
-  }
+    # and the base position (easier to just ask SMURF rather than opening the file) but
+    # for a planet or comet/asteroid this will not be correct and should be set to undef
+    # This means we have to look at JCMTSTATE anyway (but we still ask SMURF because that
+    # will save us doing coordinate conversion)
 
-  # and the base position (easier to just ask SMURF rather than opening the file) but
-  # for a planet or comet/asteroid this will not be correct and should be set to undef
-  # This means we have to look at JCMTSTATE anyway (but we still ask SMURF because that
-  # will save us doing coordinate conversion)
+    my $tracksys = $self->_find_header('headers' => $headerref,
+                                       'name'   => 'TRACKSYS',
+                                       'value'  => 1,
+                                       'test'   => 'true');
 
-  my $tracksys =
-    $self->_find_header( 'headers' => $headerref,
-                          'name'   => 'TRACKSYS',
-                          'value'  => 1,
-                          'test'   => 'true',
-                        );
+    my %state;
+    unless ($tracksys) {
+        (undef, %state) = $self->read_ndf($filenames[0], qw/TCS_TR_SYS/);
+        $log->logdie("Error reading state information from file $filenames[0]\n")
+            unless keys %state;
+    }
 
-  my %state;
-  unless ( $tracksys ) {
-
-    ( undef, %state ) = $self->read_ndf( $filenames[0], qw/ TCS_TR_SYS / );
-    $log->logdie( "Error reading state information from file $filenames[0]\n" )
-      unless keys %state;
-  }
-
-  my $not_app_azel =
-    sub {
-      return
-        defined $_[0]
-        && length $_[0]
-        && $_[0] !~ m/^(?:APP|AZEL)/i
+    my $not_app_azel = sub {
+        return defined $_[0]
+               && length $_[0]
+               && $_[0] !~ /^(?:APP|AZEL)/i
     };
 
-  # check for APP or AZEL (should never be AZEL!)
-  if ( $not_app_azel->( $tracksys )
-        || ( exists $state{TCS_TR_SYS} && $not_app_azel->( $state{TCS_TR_SYS} ) )
-      ) {
+    # check for APP or AZEL (should never be AZEL!)
+    if ($not_app_azel->($tracksys)
+            || (exists $state{TCS_TR_SYS}
+                && $not_app_azel->($state{TCS_TR_SYS}))) {
+        foreach my $k (qw/REFLON REFLAT/) {
+            my $res = `/star/bin/kappa/parget $k $prog`;
+            chomp($res);
+            $result{$k} = $res;
+        }
 
-    for my $k (qw/ REFLON REFLAT / ) {
+        # convert to radians
+        $result{REFLON} = Astro::Coords::Angle::Hour->new(
+            $result{REFLON}, units => 'sex', range => '2PI')->degrees;
 
-      my $res = qx{ /star/bin/kappa/parget $k $prog };
-      chomp($res);
-      $result{$k} = $res;
+        $result{REFLAT} = Astro::Coords::Angle->new(
+            $result{REFLAT}, units => 'sex', range => 'PI')->degrees;
     }
 
-    # convert to radians
-    $result{REFLON} = Astro::Coords::Angle::Hour->new( $result{REFLON}, units => 'sex', range => '2PI' )->degrees;
-    $result{REFLAT} = Astro::Coords::Angle->new( $result{REFLAT}      , units => 'sex', range => 'PI'  )->degrees;
+    $headerref->{obsra}  = $result{REFLON};
+    $headerref->{obsdec} = $result{REFLAT};
 
-  }
-
-  $headerref->{obsra}  = $result{REFLON};
-  $headerref->{obsdec} = $result{REFLAT};
-
-  return 1;
+    return 1;
 }
 
 =item B<read_ndf>
@@ -2996,120 +2753,111 @@ supplied list of JCMTSTATE components (can be empty).
 
 Returns hash of JCMTSTATE information and the Starlink::AST object.
 
-  ($wcs, %state) = JSA::EnterData->read_ndf( $file, @state );
+    ($wcs, %state) = JSA::EnterData->read_ndf($file, @state);
 
 returns empty list on error.  In scalar context just returns WCS
 frameset...
 
-  $wcs = JSA::EnterData->read_ndf( $file );
+    $wcs = JSA::EnterData->read_ndf($file);
 
 On error, flushes error to standard error and returns empty list.
 
 =cut
 
 sub read_ndf {
+    my ($self, $file, @statekeys) = @_;
 
-  my ( $self, $file, @statekeys ) = @_;
-
-  my $wcs;
-  my $E;
-  try {
-    $wcs = read_wcs( $file );
-  } catch JSA::Error::FatalError with {
-    $E = shift;
-  } otherwise {
-    $E = shift;
-  };
-
-  if (defined $E) {
-    print STDERR $E;
-    return ();
-  }
-
-  # if we have keys to read and are in list
-  # context, read the state
-  my %state;
-  if (@statekeys && wantarray() ) {
+    my $wcs;
+    my $E;
 
     try {
-      %state = read_jcmtstate( $file, 'start', @statekeys );
+        $wcs = read_wcs($file);
     } catch JSA::Error::FatalError with {
-      $E = shift;
+        $E = shift;
     } otherwise {
-      $E = shift;
+        $E = shift;
     };
-    if (defined $E) {
-      print STDERR $E;
-      return ();
-    }
-  }
 
-  return wantarray ? ( $wcs, %state ) : $wcs;
+    if (defined $E) {
+        print STDERR $E;
+        return ();
+    }
+
+    # if we have keys to read and are in list
+    # context, read the state
+    my %state;
+    if (@statekeys && wantarray()) {
+        try {
+            %state = read_jcmtstate($file, 'start', @statekeys);
+        } catch JSA::Error::FatalError with {
+            $E = shift;
+        } otherwise {
+            $E = shift;
+        };
+
+        if (defined $E) {
+            print STDERR $E;
+            return ();
+        }
+    }
+
+    return wantarray ? ($wcs, %state) : $wcs;
 }
 
 sub _change_FILES {
+    my ($self, %arg) = @_;
 
-  my ( $self, %arg ) = @_;
+    my $table = 'FILES';
 
-  my $table = 'FILES';
+    my ($headers, $obs, $db, $inst) =
+        @arg{qw/headers obs db instrument/};
 
-  my ( $headers, $obs, $db, $inst ) =
-    @arg{qw[ headers obs db instrument ]};
+    my $dbh = $db->handle();
 
-  my $dbh = $db->handle();
+    my $old_cond = $self->conditional_insert;
+    $self->conditional_insert(1)
+        if $self->update_mode;
 
-  my $old_cond = $self->conditional_insert;
-  $self->conditional_insert( 1 )
-    if $self->update_mode;
+    # Create headers that don't exist
+    $self->fill_headers_FILES($inst, $headers, $obs);
 
-  # Create headers that don't exist
-  $self->fill_headers_FILES( $inst, $headers, $obs );
+    my $insert_ref = $self->get_insert_values(
+        'table'     => $table,
+        'headers'   => $headers,
+        map({$_ => $arg{$_}} qw/columns dict/),
+    );
 
-  my $insert_ref =
-    $self->get_insert_values( 'table'    => $table,
-                               'headers' => $headers,
-                              map( { $_ => $arg{ $_} }
-                                    qw[ columns dict ]
-                                  ),
-                            );
+    my ($files , $error);
+    try {
+        _verify_file_name($insert_ref->{'file_id'});
 
-  my ( $files , $error );
-  try {
+        my $hash = $self->prepare_insert_hash($table, $insert_ref);
 
-    _verify_file_name( $insert_ref->{'file_id'} );
+        ($error, $files) = $self->insert_hash('table'   => $table,
+                                              'dbhandle'=> $dbh,
+                                              'insert'  => $hash);
 
-    my $hash = $self->prepare_insert_hash( $table, $insert_ref );
+        $error = $dbh->errstr
+            if $dbh->err();
+    }
+    catch JSA::Error with {
+        $error = shift @_;
+    };
 
-    ( $error, $files ) =
-      $self->insert_hash( 'table'    => $table,
-                          'dbhandle' => $dbh,
-                          'insert' => $hash,
-                        );
+    $self->conditional_insert($old_cond);
 
-    $error = $dbh->errstr
-      if $dbh->err();
-  }
-  catch JSA::Error with {
+    if ( $dbh->err() ) {
+        $db->rollback_trans() if $self->load_header_db();
+        $self->_print_error_simple_dup($error);
+        return;
+    }
 
-    $error = shift @_;
-  };
+    if (! $self->skip_state_setting() && $files && scalar @{$files}) {
+        my $xfer = $self->_get_xfer_unconnected_dbh();
+        $xfer->put_ingested([map _basename($_), @{$files}]);
+    }
 
-  $self->conditional_insert( $old_cond );
-
-  if ( $dbh->err() ) {
-
-    $db->rollback_trans() if $self->load_header_db();
-    $self->_print_error_simple_dup( $error );
     return;
-  }
-
-  if ( ! $self->skip_state_setting() && $files && scalar @{ $files } ) {
-
-    my $xfer = $self->_get_xfer_unconnected_dbh();
-    $xfer->put_ingested( [ map _basename( $_ ), @{ $files } ] );
-  }
-
-  return;
 }
 
 =item B<_show_insert_sql>
@@ -3117,36 +2865,32 @@ sub _change_FILES {
 Prints insert SQL statement, given table name, column names, and
 column values.
 
-  $enter->_show_insert_sql( 'FILES', \@names, \@values );
+    $enter->_show_insert_sql('FILES', \@names, \@values);
 
 =cut
 
 sub _show_insert_sql {
+    my ($self, $table, $fields, $values) = @_;
 
-  my ( $self, $table, $fields, $values ) = @_;
+    my @val = @{$values};
 
-  my @val = @{ $values };
-
-  # print out some SQL that is not going to be executed
-  for ( @val ) {
-
-    unless ( defined $_ ) {
-
-      $_ = 'NULL';
-    } else {
-
-      $_ = "\'$_\'"
-        if /([a-zA-Z]|\s+)/ and $_ !~ /e\+/ ;
+    # print out some SQL that is not going to be executed
+    foreach (@val) {
+        unless (defined $_) {
+            $_ = 'NULL';
+        }
+        else {
+            $_ = "\'$_\'"
+                if /([a-zA-Z]|\s+)/ and $_ !~ /e\+/;
+        }
     }
-  }
 
-  $self->_print_text( sprintf "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
-                        $table,
-                        join( ', ', @{ $fields } ),
-                        join( ', ', @val )
-                    );
+    $self->_print_text(sprintf "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
+                               $table,
+                               join(', ', @{$fields}),
+                               join(', ', @val));
 
-  return;
+    return;
 }
 
 =item B<_update_or_insert>
@@ -3160,162 +2904,143 @@ C<table>, C<columns>, C<dict>, C<headers> as keys.  For details about
 values, see I<insert_hash>, I<update_hash>, and I<get_insert_values>
 methods.
 
-  $enter->_update_or_insert( %hash );
+    $enter->_update_or_insert(%hash);
 
 =cut
 
 sub _update_or_insert {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    my $vals = $self->get_insert_values(%args);
 
-  my $vals = $self->get_insert_values( %args );
+    my $table = $args{'table'};
 
-  my $table = $args{'table'};
+    my $ok;
+    if ($self->update_mode) {
+        my $change = $self->prepare_update_hash(
+            @args{qw/table dbhandle/}, $vals);
 
-  my $ok;
-  if ( $self->update_mode ) {
+        $ok = $self->update_hash(@args{qw/table dbhandle/}, $change);
 
-    my $change = $self->prepare_update_hash( @args{qw/ table dbhandle /}, $vals );
-    $ok = $self->update_hash( @args{qw/ table dbhandle /}, $change );
-    $ok = defined $ok;
-  }
-  else {
+        $ok = defined $ok;
+    }
+    else {
+        $ok = $self->_combined_prepare_insert_hash(
+            $vals,
+            map {$_ => $args{$_}} qw/table dbhandle/);
+    }
 
-    $ok =
-      $self->
-        _combined_prepare_insert_hash( $vals,
-                                  map { $_ => $args{ $_ } } qw[ table dbhandle ]
-                                );
-  }
-
-  return $args{'dbhandle'}->errstr;
+    return $args{'dbhandle'}->errstr;
 }
 
 # KLUDGE to avoid duplicate inserts due to same obsid.  First hash reference
 # most likely have undef (AZ|AM|EL)(START|END).
 sub _apply_kludge_for_COMMON {
+    my ($self, $vals) = @_;
 
-  my ( $self, $vals ) = @_;
+    return unless ref $vals eq 'ARRAY'
+               || 1 < scalar @{$vals};
 
-  return
-    unless ref $vals eq 'ARRAY'
-    || 1 < scalar @{ $vals };
+    my %val;
+    for my $v (@{$vals}) {
+        # Last one "wins".
+        $val{$v->{'obsid'}} = $v;
+    }
 
-  my %val;
-  for my $v ( @{ $vals } ) {
-
-    # Last one "wins".
-    $val{ $v->{'obsid'} } = $v;
-  }
-
-  return [ map { $val{ $_ } } keys %val ];
+    return [map {$val{$_}} keys %val];
 }
 
 sub _modify_db_on_obsend {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
-
-  # (Try to) Obey update_mode() as usual.
-  unless ( $self->_find_header( 'headers' => $args{'headers'},
+    # (Try to) Obey update_mode() as usual.
+    unless ($self->_find_header('headers' => $args{'headers'},
                                 'name' => 'OBSEND',
-                                'test' => 'true'
-                              )
-          ) {
+                                'test' => 'true')) {
+        my ($err_text, $try_insert);
 
-    my ( $err_text, $try_insert );
-    try {
+        try {
+            $err_text = $self->_update_or_insert(%args);
+        }
+        catch JSA::Error::DBError with {
+            my ($err) = @_;
 
-      $err_text = $self->_update_or_insert( %args );
+            # Swallow case of zero rows affected.
+            throw JSA::Error::DBError $err
+                unless $err->text =~ /Can.+update if the row exists previously/i;
+
+            $try_insert ++;
+        };
+
+        return $err_text unless $try_insert;
+
+        return $self->_combined_prepare_insert_hash(
+            $self->get_insert_values(%args),
+            map {$_ => $args{$_}} qw/table dbhandle/);
     }
-    catch JSA::Error::DBError with {
 
-      my ( $err ) = @_;
+    my $old_insert = $self->conditional_insert;
 
-      # Swallow case of zero rows affected.
-      throw JSA::Error::DBError $err
-        unless $err->text =~/Can.+update if the row exists previously/i;
+    my $old_mode = $self->update_mode;
+    $self->update_mode(1);
 
-      $try_insert++;
-    };
-
-    return $err_text unless $try_insert;
-
-    return
-      $self->
-      _combined_prepare_insert_hash( $self->get_insert_values( %args ),
-                                map { $_ => $args{ $_ } } qw[ table dbhandle ]
-                              );
-  }
-
-  my $old_insert = $self->conditional_insert;
-
-  my $old_mode = $self->update_mode;
-  $self->update_mode( 1 );
-
-  my $table = $args{'table'};
-  my $vals = $self->get_insert_values( %args );
-  my $val_count;
-  {
-    my $key = (keys %{ $vals } )[0];
-    $val_count = ref $vals->{ $key } ? scalar @{ $vals->{ $key } } : 1;
-  }
-  my $affected;
-
-  # Try UPDATE.
-  unless ( $table eq 'FILES' ) {
-
-    my $change;
-    try {
-      $change =
-        $self->prepare_update_hash( @args{qw/ table dbhandle /}, $vals );
+    my $table = $args{'table'};
+    my $vals = $self->get_insert_values(%args);
+    my $val_count;
+    {
+        my $key = (keys %{$vals})[0];
+        $val_count = ref $vals->{$key} ? scalar @{$vals->{$key}} : 1;
     }
-    catch JSA::Error::DBError with {
+    my $affected;
 
-      my ( $err ) = @_;
+    # Try UPDATE.
+    unless ($table eq 'FILES') {
+        my $change;
 
-      # Swallow case of zero rows affected.
-      throw JSA::Error::DBError $err
-        unless $err->text =~/Can.+update if the row exists previously/i;
-    };
+        try {
+          $change = $self->prepare_update_hash(@args{qw/table dbhandle/}, $vals);
+        }
+        catch JSA::Error::DBError with {
+            my ($err) = @_;
 
-    $affected =
-      $self->update_hash( @args{qw/ table dbhandle /}, $change );
-  }
+            # Swallow case of zero rows affected.
+            throw JSA::Error::DBError $err
+                unless $err->text =~ /Can.+update if the row exists previously/i;
+        };
 
-  if ( ! $affected || $val_count > $affected ) {
+        $affected = $self->update_hash(@args{qw/table dbhandle/}, $change);
+    }
 
-    $self->update_mode( 0 );
+    if (! $affected || $val_count > $affected) {
+        $self->update_mode(0);
 
-    # Use conditional insert so that on INSERT failure $dbh->{'AutoCommit'} is
-    # NOT set to 1, which breaks the existing transaction setup elsewhere .
-    $self->conditional_insert( 1 );
+        # Use conditional insert so that on INSERT failure $dbh->{'AutoCommit'} is
+        # NOT set to 1, which breaks the existing transaction setup elsewhere .
+        $self->conditional_insert(1);
 
-    $self->
-      _combined_prepare_insert_hash( $vals,
-                                map { $_ => $args{ $_ } } qw[ table dbhandle ]
-                              );
-  }
+        $self->_combined_prepare_insert_hash(
+            $vals,
+            map {$_ => $args{$_}} qw/table dbhandle/);
+    }
 
-  $self->update_mode( $old_mode );
-  $self->conditional_insert( $old_insert );
+    $self->update_mode($old_mode);
+    $self->conditional_insert($old_insert);
 
-  return $args{'dbhandle'}->errstr;
+    return $args{'dbhandle'}->errstr;
 }
 
 sub _combined_prepare_insert_hash {
+    my ($self, $vals, %args) = @_;
 
-  my ( $self, $vals, %args ) = @_;
+    my $table = $args{'table'};
 
-  my $table = $args{'table'};
+    $vals = $self->prepare_insert_hash($table, $vals);
 
-  $vals = $self->prepare_insert_hash( $table, $vals );
+    $vals = $self->_apply_kludge_for_COMMON($vals)
+        if 'COMMON' eq $table ;
 
-  $vals = $self->_apply_kludge_for_COMMON( $vals )
-    if 'COMMON' eq $table ;
-
-  return $self->insert_hash( %args,
-                              'insert' => $vals
-                            );
+    return $self->insert_hash(%args,
+                              'insert' => $vals);
 }
 
 =item B<_find_header>
@@ -3327,10 +3052,9 @@ behaviour is to B<return a truth value if the given header exists>.
 Returns nothing if the header is missing or specified test fails.
 C<SUBHEADERS> are also searched along with the main header hash.
 
-  print 'OBSEND header exists'
-    if $enter->_find_header( 'headers' => $hdrhash,
-                              'name' => 'OBSEND',
-                            );
+    print 'OBSEND header exists'
+        if $enter->_find_header('headers' => $hdrhash,
+                                'name' => 'OBSEND');
 
 Optional keys are ...
 
@@ -3341,192 +3065,177 @@ Optional keys are ...
 To Test for the header value being true or defined by providing
 I<test> key with value of "true" or "defined".
 
-  print 'OBSEND header value is defined'
-    if $enter->_find_header( 'headers' => $hdrhash,
-                              'name' => 'OBSEND',
-                              'test' => 'defined'
-                            );
+    print 'OBSEND header value is defined'
+        if $enter->_find_header('headers' => $hdrhash,
+                                'name' => 'OBSEND',
+                                'test' => 'defined');
 
 =item I<value> any value
 
 To receive header value when defined, specify the I<value> key (with
 any value).
 
-  use Data::Dumper;
-  print "OBSEND header value if present: ",
-    Dumper( $enter->_find_header( 'headers' => $hdrhash,
-                                  'name'  => 'OBSEND',
-                                  'value' => undef
-                                )
-          );
+    use Data::Dumper;
+    print "OBSEND header value if present: ",
+        Dumper( $enter->_find_header('headers' => $hdrhash,
+                                     'name'  => 'OBSEND',
+                                     'value' => undef));
 
 =item I<value-regex> regex
 
 To actually match header value, specify I<value-regex> key with value
 of a regular expression, in which case I<C<value> is ignored>.
 
-  print "OBS_TYPE is 'skydip'."
-    if $enter->_find_header( 'headers' => $hdrhash,
-                              'name'  => 'OBS_TYPE',
-                              'value-regex' => qr{\b skydip \b}xi
-                            );
+    print "OBS_TYPE is 'skydip'."
+        if $enter->_find_header('headers' => $hdrhash,
+                                'name'  => 'OBS_TYPE',
+                                'value-regex' => qr/\b skydip \b/xi);
 
 =back
 
 =cut
 
 sub _find_header {
+    my ($self, %args) = @_;
+    my ($head, $name, $val_re, $cond_name, $cond_val_re) =
+      @args{qw/headers name value-regex cond-name cond-value-regex/};
 
-  my ( $self, %args ) = @_;
+    defined $val_re && ! ref $val_re
+        and $val_re = qr/\b${val_re}\b/x;
 
-  my ( $head, $name, $val_re, $cond_name, $cond_val_re ) =
-    @args{qw[ headers name value-regex cond-name cond-value-regex ]};
+    my $test = sub {
+        my ($head, $key) = @_;
 
-  defined $val_re && ! ref $val_re
-    and $val_re = qr{\b${val_re}\b}x;
+        return unless exists $head->{$key};
+        foreach ($args{'test'}) {
+            last unless defined $args{'test'};
 
-  my $test =
-    sub {
-      my ( $head, $key ) = @_;
+            return !! $head->{$key} if $_ eq 'true';
 
-      return unless exists $head->{ $key };
-      for ( $args{'test'} ) {
+            return defined $head->{ $key } if $_ eq 'defined';
+        }
 
-        last unless defined $args{'test'};
-
-        $_ eq 'true' and return !! $head->{ $key };
-        $_ eq 'defined' and return defined $head->{ $key };
-      }
-      return 1;
+        return 1;
     };
 
-  my $array = ref $head eq 'ARRAY';
+    my $array = ref $head eq 'ARRAY';
 
-  for my $h ( $array
-              ? @{ $head }
-              : $head
-             ) {
+    foreach my $h ($array ? @{$head} : $head) {
+        my $val = $test->($h, $name) ? $h->{$name} : undef;
 
-    my $val = $test->( $h, $name ) ? $h->{ $name } : undef;
+        # Return, or save for later return, only if another header value matches.
+        my $cond_val = defined $cond_name && $test->($h, $cond_name)
+                     ? $h->{ $cond_name }
+                     : undef;
 
-    # Return, or save for later return, only if another header value matches.
-    my $cond_val =
-      defined $cond_name && $test->( $h, $cond_name )
-      ? $h->{ $cond_name }
-      : undef
-      ;
-    if ( defined $cond_val ) { $cond_val =~ $cond_val_re or next; }
+        if (defined $cond_val) {
+            next unless $cond_val =~ $cond_val_re;
+        }
 
-    if ( defined $val  ) {
+        if (defined $val) {
+            return $val =~ $val_re if defined $val_re;
 
-      defined $val_re
-        and return $val =~ $val_re;
+            return 1 unless exists $args{'value'};
 
-      exists $args{'value'} or return 1;
-      ! wantarray() and return $val ;
+            return $val unless wantarray;
 
-      $args{'store'}->{ $val } = undef;
+            $args{'store'}->{$val} = undef;
+        }
     }
-  }
-  if ( wantarray() && defined $args{'store'} ) {
 
-    my %seen;
-    return grep !$seen{ $_ }++,
-              map { split ' ', $_ } keys %{ $args{'store'} };
-  }
+    if (wantarray and defined $args{'store'}) {
+        my %seen;
+        return grep ! $seen{$_} ++,
+               map {split ' ', $_} keys %{$args{'store'}};
+    }
 
-  # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
-  # pseudo header with array reference of hash references as value.
-  return if $array;
+    # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
+    # pseudo header with array reference of hash references as value.
+    return if $array;
 
-  my $subh = 'SUBHEADERS';
-  return $self->_find_header( %args, 'headers' => $head->{ $subh } )
-    if exists $head->{ $subh };
+    my $subh = 'SUBHEADERS';
+    return $self->_find_header(%args, 'headers' => $head->{$subh})
+        if exists $head->{$subh};
 
-  return;
+    return;
 }
 
 sub _delete_header {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    my ($head, $name, $test) = @args{qw/headers name test/};
 
-  my ( $head, $name, $test ) = @args{qw[ headers name test ]};
+    return unless $head
+               && ref $head
+               # Expecting a code reference here.
+               && $test && ref $test;
 
-  return
-    unless $head && ref $head
-        # Expecting a code reference here.
-        && $test && ref $test;
+    my $array = ref $head eq 'ARRAY';
 
-  my $array = ref $head eq 'ARRAY';
+    foreach my $h ($array ? @{$head} : $head) {
+        next unless exists $h->{$name};
 
-  for my $h ( $array ? @{ $head } : $head ) {
-
-    next unless exists $h->{ $name };
-
-    if ( $test->( $h->{ $name } ) ) {
-
-      delete $h->{ $name };
-      $args{'_deleted'}++;
+        if ($test->($h->{$name})) {
+            delete $h->{$name};
+            $args{'_deleted'} ++;
+        }
     }
-  }
 
-  # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
-  # pseudo header with array reference of hash references as value.
-  return $args{'_deleted'} if $array;
+    # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
+    # pseudo header with array reference of hash references as value.
+    return $args{'_deleted'} if $array;
 
-  my $subh = 'SUBHEADERS';
-  return $self->_delete_header( %args, 'headers' => $head->{ $subh } )
-    if exists $head->{ $subh };
+    my $subh = 'SUBHEADERS';
 
-  return $args{'_deleted'};
+    return $self->_delete_header(%args, 'headers' => $head->{$subh})
+        if exists $head->{$subh};
+
+    return $args{'_deleted'};
 }
 
 sub _make_lowercase_header {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    my ($head, $name) = @args{qw/headers name/};
 
-  my ( $head, $name ) = @args{qw[ headers name ]};
+    return unless $head && ref $head;
 
-  return
-    unless $head && ref $head;
+    my $is_array = ref $head eq 'ARRAY';
 
-  my $is_array = ref $head eq 'ARRAY';
-  for my $h ( $is_array ? @{ $head } : $head ) {
+    foreach my $h ($is_array ? @{$head} : $head) {
+        next unless exists $h->{$name};
 
-    next unless exists $h->{ $name };
+        my $type = ref $h->{$name};
 
-    my $type = ref $h->{ $name };
-    unless ( $type ) {
+        unless ($type) {
+            $h->{$name} = uc $h->{$name};
+            $args{'_case-changed'} ++;
+            next;
+        }
 
-      $h->{ $name } = uc $h->{ $name };
-      $args{'_case-changed'}++;
-      next;
+        if ($type eq 'ARRAY') {
+            $h->{ $name } = [ map uc $_, @{ $h->{ $name } } ];
+            $args{'_case-changed'}++;
+            next;
+        }
+
+        if ($type eq 'HASH') {
+            for my $k (keys %{$h->{$name}}) {
+                $h->{$name}{$k} = lc $h->{$name}{$k};
+                $args{'_case-changed'} ++;
+            }
+        }
     }
-    if ( $type eq 'ARRAY' ) {
 
-      $h->{ $name } = [ map uc $_, @{ $h->{ $name } } ];
-      $args{'_case-changed'}++;
-      next;
-    }
-    if ( $type eq 'HASH' ) {
+    # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
+    # pseudo header with array reference of hash references as value.
+    return $args{'_case-changed'} if $is_array;
 
-      for my $k ( keys %{ $h->{ $name } } ) {
+    my $subh = 'SUBHEADERS';
+    return $self->_make_lowercase_header(%args, 'headers' => $head->{$subh})
+        if exists $head->{$subh};
 
-        $h->{ $name }{ $k } = lc $h->{ $name }{ $k };
-        $args{'_case-changed'}++;
-      }
-    }
-  }
-
-  # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
-  # pseudo header with array reference of hash references as value.
-  return $args{'_case-changed'} if $is_array;
-
-  my $subh = 'SUBHEADERS';
-  return $self->_make_lowercase_header( %args, 'headers' => $head->{ $subh } )
-    if exists $head->{ $subh };
-
-  return $args{'_case-changed'};
+    return $args{'_case-changed'};
 }
 
 =item B<_is_insert_dup_error>
@@ -3535,20 +3244,17 @@ Returns a truth value to indicate if the error was due to insertion of duplicate
 row, given a plain string or an L<Error> object.  It compares the expected
 Sybase error text.
 
-  $dbh->rollback
-    if $enter->_is_insert_dup_error( $dbh->errstr );
+    $dbh->rollback
+        if $enter->_is_insert_dup_error($dbh->errstr);
 
 =cut
 
 sub _is_insert_dup_error {
+    my ($self, $err) = @_;
 
-  my ( $self, $err ) = @_;
+    my $text = ref $err ? $err->text : $err;
 
-  my $text = ref $err ? $err->text : $err;
-
-  return
-    $text
-    && $text =~ /insert duplicate key row/i ;
+    return $text && $text =~ /insert duplicate key row/i;
 }
 
 =item B<_is_dup_ignored>
@@ -3557,19 +3263,16 @@ Returns a truth value to indicate if the error message was due ignoring the
 duplicate key, given a plain string or an L<Error> object.  It compares the
 expected Sybase error text.
 
-    $dup_ignore = $enter->_is_dup_ignored( $dbh->errstr );
+    $dup_ignore = $enter->_is_dup_ignored($dbh->errstr);
 
 =cut
 
 sub _is_dup_ignored {
+    my ($self, $err) = @_;
 
-  my ( $self, $err ) = @_;
+    my $text = ref $err ? $err->text : $err;
 
-  my $text = ref $err ? $err->text : $err;
-
-  return
-    $text
-    && $text =~ /Duplicate key.+ignored/i ;
+    return $text && $text =~ /Duplicate key.+ignored/i;
 }
 
 =item <_print_error_simple_dup>
@@ -3577,24 +3280,21 @@ sub _is_dup_ignored {
 Given a error string, prints the it.  If the string matches Sybase duplicate
 insert error message, then prints "File metadata already present".
 
-  $self->_print_error_simple_dup( $dbh->errstr );
+    $self->_print_error_simple_dup($dbh->errstr);
 
 =cut
 
 sub _print_error_simple_dup {
+    my ($self, $err) = @_;
 
-  my ( $self, $err ) = @_;
+    return unless defined $err;
 
-  return unless defined $err;
-
-  return
-    $self->
-    _print_text( $self->_is_insert_dup_error( $err )
-                  ? qq[File metadata already present\n]
-                  : ref $err
-                    ? $err->text . qq[\n\n]
-                    : qq[$err\n\n]
-                );
+    return $self->_print_text(
+        $self->_is_insert_dup_error($err)
+            ? "File metadata already present\n"
+            : ref $err
+                ? $err->text . "\n\n"
+                : "$err\n\n");
 }
 
 =item B<_dataverify_obj_fail_text>
@@ -3602,7 +3302,7 @@ sub _print_error_simple_dup {
 Given an observation returns a string to log, to die with when JCMT::DataVerify
 object cannot be created.
 
-  die _dataverify_obj_fail_text( $obs );
+    die _dataverify_obj_fail_text($obs);
 
 Optionally accepts a string to be printed before observation summary (see
 L<OMP::Info::Obs>). It also accepts an optional integer for that many space of
@@ -3611,43 +3311,37 @@ indent.
 =cut
 
 sub _dataverify_obj_fail_text {
+    my ($obs, $prefix , $indent) = @_;
 
-  my ( $obs, $prefix , $indent ) = @_;
+    $prefix //= 'Could not make JCMT::DataVerify object;';
 
-  defined $prefix
-    or $prefix = q[Could not make JCMT::DataVerify object;],
+    $indent //= 2;
 
-  defined $indent or $indent = 2;
-  my $title_space = ( ' ' ) x $indent;
-  my $data_space  = ( $title_space ) x $indent;
+    my $title_space = (' ') x $indent;
+    my $data_space  = ($title_space) x $indent;
 
-  my $files;
-  my @file = sort grep { defined $_ } $obs->filename();
-  if ( scalar @file ) {
+    my $files;
+    my @file = sort grep {defined $_} $obs->filename();
+    if (scalar @file) {
+        $files = $title_space
+               . 'obs file '
+               . (scalar @file > 1
+                    ? "range:\n" . $data_space . join (' - ', @file[0, -1])
+                    : ":\n"      . $data_space . $file[0]);
+    }
 
-    $files = $title_space
-            . q[obs file ]
-            . ( scalar @file > 1
-                ? qq[range:\n] . $data_space . join ( q[ - ], @file[0,-1] )
-                : qq[:\n]      . $data_space . $file[0]
-              );
-  }
+    my $summ = $obs->summary('text');
 
-  my $summ = $obs->summary( 'text' );
-  if ( defined $summ ) {
+    if (defined $summ) {
+        $summ =~ s/^/$data_space/mg;
+        $summ = $title_space . "obs summary:\n" . $summ;
+    }
 
-    $summ =~ s/^/$data_space/mg;
-    $summ = $title_space . qq[obs summary:\n] . $summ;
-  }
+    return unless (defined $files || defined $summ);
 
-  defined $files || defined $summ
-    or return ;
-
-  return
-    join "\n",
-      $prefix,
-      grep { defined $_ && length $_ } $files, $summ
-      ;
+    return join "\n",
+        $prefix,
+        grep {defined $_ && length $_} $files, $summ;
 }
 
 =item B<_verify_dict>
@@ -3656,23 +3350,22 @@ Verifies that the data dictionary (set via I<new> method) is a
 readable file.  On errors, throws L<JSA::Error::FatalError>
 exceptions, else returns true.
 
-  $ok = $enter->_verify_dict;
+    $ok = $enter->_verify_dict;
 
 =cut
 
 sub _verify_dict {
+    my ($self) = @_;
 
-  my ( $self ) = @_;
+    my $dict = $self->get_dict;
 
-  my $dict = $self->get_dict;
+    throw JSA::Error::FatalError('No valid data dictionary given')
+        unless defined $dict ;
 
-  throw JSA::Error::FatalError( 'No valid data dictionary given' )
-    unless defined $dict ;
+    throw JSA::Error::FatalError("Data dictionary, $dict, is not a readable file.")
+        unless -f $dict && -r _;
 
-  throw JSA::Error::FatalError( "Data dictionary, $dict, is not a readable file." )
-    unless -f $dict && -r _;
-
-  return 1;
+    return 1;
 }
 
 =item B<_verify_file_name>
@@ -3688,23 +3381,21 @@ unexpected format.  Else, it simply returns.
 =cut
 
 sub _verify_file_name {
+    my ($name) = @_;
 
-  my ( $name ) = @_;
+    return unless defined $name;
 
-  return unless defined $name;
+    my @bad;
+    for my $n (ref $name ? @{$name} : $name) {
+        push @bad, $n unless looks_like_rawfile($n);
+    }
 
-  my @bad;
-  for my $n ( ref $name ? @{ $name } : $name ) {
+    my $size = scalar @bad;
 
-    push @bad, $n unless looks_like_rawfile( $n );
-  }
+    return unless $size;
 
-  my $size = scalar @bad;
-
-  return unless $size;
-
-  throw JSA::Error sprintf "Bad file name%s: %s\n",
-                    ( $size > 1 ? 's' : '' ), join ', ' , @bad ;
+    throw JSA::Error sprintf "Bad file name%s: %s\n",
+                             ($size > 1 ? 's' : ''), join ', ', @bad ;
 }
 
 =item B<_print_text>
@@ -3715,81 +3406,70 @@ output normally) if I<verbosity> attribute is true.
 =cut
 
 sub _print_text {
+    my ($self, $text) = @_;
 
-  my ( $self, $text ) = @_;
+    return unless $self->verbosity && defined $text;
 
-  return
-    unless $self->verbosity
-        && defined $text;
+    my $log = Log::Log4perl->get_logger('');
+    $log->info($text);
 
-  my $log = Log::Log4perl->get_logger( '' );
-  $log->info( $text );
-
-  return;
+    return;
 }
 
 sub _show_debug {
+    my ($self, @text) = @_;
 
-  my ( $self, @text ) = @_;
+    my $text = $self->_debug_text(@text)
+        or return;
 
-  my $text = $self->_debug_text( @text )
-    or return ;
-
-  print $text ;
-  return;
+    print $text;
+    return;
 }
 
 sub _debug_text {
+    my ($self, @text) = @_;
 
-  my ( $self, @text ) = @_;
+    $self->debug() && scalar @text
+        or return;
 
-  $self->debug() && scalar @text
-    or return;
+    my @data;
+    for my $t (@text) {
+        unless (defined $t) {
+            push @data, '<undef>';
+            next;
+        }
 
-  my @data;
-  for my $t ( @text ) {
+        if (Scalar::Util::blessed($t) || ref $t) {
+            require Data::Dumper;
+            push @data, Data::Dumper->Dump($t);
+            next;
+        }
 
-    unless ( defined $t ) {
-
-      push @data, '<undef>';
-      next;
+        push @data, $t;
     }
-    if ( Scalar::Util::blessed( $t )
-          || ref $t
-        ) {
 
-      require Data::Dumper;
-      push @data, Data::Dumper->Dump( $t );
-      next;
-    }
-    push @data, $t;
-  }
+    $text[-1] =~ /\n$/s or $data[-1] .= "\n";
 
-  $text[-1] =~ m{\n$}s or $data[-1] .= "\n" ;
-
-  return join "\n" , @data ;
+    return join "\n", @data ;
 }
 
 # JSA::DB::TableTransfer object, to be created as needed.
 {
-  my %xfer;
+    my %xfer;
 
-  sub _get_xfer {
+    sub _get_xfer {
+        my ($self, $dbh, $name) = @_;
 
-    my ( $self, $dbh, $name ) = @_;
+        $name ||= 'default-xfer';
 
-    $name ||= 'default-xfer';
+        return $xfer{$name}
+            if exists  $xfer{$name}
+            && defined $xfer{$name};
 
-    return $xfer{ $name }
-      if exists  $xfer{ $name }
-      && defined $xfer{ $name };
-
-    return
-      $xfer{ $name } =
-        JSA::DB::TableTransfer->new(  'dbhandle'     => $dbh,
-                                      'transactions' => 0,
-                                    );
-  }
+        return $xfer{$name} =
+            JSA::DB::TableTransfer->new('dbhandle'     => $dbh,
+                                        'transactions' => 0);
+    }
 }
 
 =item B<_get_xfer_unconnected_dbh>
@@ -3801,70 +3481,63 @@ unconnected to the one used elsewhere.
 =cut
 
 sub _get_xfer_unconnected_dbh {
+    my ($self, $name) = @_;
 
-  my ( $self, $name ) = @_;
+    $name ||= 'xfer-new-dbh';
 
-  $name ||= 'xfer-new-dbh';
+    require JSA::DB;
+    my $db = JSA::DB->new('name' => $name);
+    $db->use_transaction(0);
 
-  require JSA::DB;
-  my $db = JSA::DB->new( 'name' => $name );
-  $db->use_transaction( 0 );
-
-  return $self->_get_xfer( $db->dbhandle(), $name );
+    return $self->_get_xfer($db->dbhandle(), $name);
 }
 
 sub _compare_dates {
+    my ($new, $old) = @_;
 
-  my ( $new, $old ) = @_;
+    # Sometimes a date-time value only has date, in which case time is appended
+    # without a 'T'.
+    $new =~ s/ /T/;
 
-  # Sometimes a date-time value only has date, in which case time is appended
-  # without a 'T'.
-  $new =~ s/ /T/;
+    $new = make_datetime($new);
+    $old = make_datetime($old);
 
-  $new = make_datetime( $new );
-  $old = make_datetime( $old );
-
-  return $new > $old;
+    return $new > $old;
 }
 
 sub _find_extreme_value {
+    my (%arg) = @_;
 
-  my ( %arg ) = @_;
+    my $gt = $arg{'new>old'};
+    my ($old, $new, $start, $end) = @arg{qw/old new start end/};
 
-  my $gt = $arg{ 'new>old' };
-  my ( $old, $new, $start, $end ) = @arg{qw[ old new start end ]};
+    # Smaller|earlier value.
+    if ($start) {
+        return ! $gt ? $new : $old;
+    }
 
-  # Smaller|earlier value.
-  if ( $start ) {
+    # Larger|later value.
+    if ($end) {
+        return $gt ? $new : $old;
+    }
 
-    return ! $gt ? $new : $old ;
-  }
-
-  # Larger|later value.
-  if ( $end ) {
-
-    return $gt ? $new : $old;
-  }
-
-  throw JSA::Error "Neither 'start' nor 'end' type was specified";
+    throw JSA::Error "Neither 'start' nor 'end' type was specified";
 }
 
 sub _basename {
+    return unless scalar @_;
 
-  return unless scalar @_;
-
-  require File::Basename;
-  my ( $base ) = File::Basename::fileparse( $_[0] );
-  return $base;
+    require File::Basename;
+    my ($base) = File::Basename::fileparse($_[0]);
+    return $base;
 }
 
 sub _file_template {
+    my ($prefix) = @_;
 
-  my ( $prefix ) = @_;
-
-  return sprintf '/tmp/_%s-%s',
-            ( $prefix // 'EnterData'),
-            join '', ( 'X' ) x 10 ;
+    return sprintf '/tmp/_%s-%s',
+                   ($prefix // 'EnterData'),
+                   join '', ('X') x 10;
 }
 
 
@@ -3916,4 +3589,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

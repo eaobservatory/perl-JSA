@@ -286,46 +286,45 @@ use strict;
 our $version = '0.03';
 
 # flush method added to the base class
-use base qw/ Error::Simple /;
+use base qw/Error::Simple/;
 
 package JSA::Error::BadArgs;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::BadEnv;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::BadExec;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::BadFile;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::BadFITSHeader;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::CADCDB;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::Conversion;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::DataRead;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::DirectoryNotFound;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::FatalError;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::DBError;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::Starlink;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 package JSA::Error::StarlinkCommand;
-use base qw/ JSA::Error /;
+use base qw/JSA::Error/;
 
 1;
-

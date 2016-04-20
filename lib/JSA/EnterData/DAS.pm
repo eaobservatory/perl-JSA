@@ -11,17 +11,17 @@ JSA::EnterData::DAS - DAS specific methods.
 
 =head1 SYNOPSIS
 
-  # Create new object, with specific header dictionary.
-  my $inst = JSA::EnterData::DAS->new();
+    # Create new object, with specific header dictionary.
+    my $inst = new JSA::EnterData::DAS;
 
-  my $name = $inst->name();
+    my $name = $inst->name();
 
-  my @cmd = $inst->get_bound_check_command;
-  system( @cmd ) == 0
-    or die "Problem with running bound check command for $name.";
+    my @cmd = $inst->get_bound_check_command;
+    system(@cmd) == 0
+        or die "Problem with running bound check command for $name.";
 
-  # Use table in a SQL later.
-  my $table = $inst->table();
+    # Use table in a SQL later.
+    my $table = $inst->table();
 
 
 =head1 DESCRIPTION
@@ -41,29 +41,30 @@ It inherits from L<JSA::EnterData::ACSIS>.
 
 Constructor, returns an I<JSA::EnterData::DAS> object.
 
-  $enter = JSA::EnterData::DAS->new();
+    $enter = new JSA::EnterData::DAS();
 
 Currently, no extra arguments are handled.
 
 =cut
 
 sub new {
+    my ($class, %args) = @_;
 
-  my ( $class, %args ) = @_;
-
-  my $obj = $class->SUPER::new( %args ) ;
-  return bless $obj, $class;
+    my $obj = $class->SUPER::new(%args);
+    return bless $obj, $class;
 }
 
 =item B<name>
 
 Returns the name of the backend involved.
 
-  $name = $inst->name();
+    $name = $inst->name();
 
 =cut
 
-sub name { return 'DAS' ; }
+sub name {
+    return 'DAS';
+}
 
 
 =item B<raw_basename_regex>
@@ -71,29 +72,28 @@ sub name { return 'DAS' ; }
 Returns the regex to match base file name, with array, date and run
 number captured ...
 
-  qr{ [ah]
-      (\d{8})
-      _
-      (\d{5})
-      _\d{2}_\d{4}[.]sdf
-    }x;
+    qr{ [ah]
+        (\d{8})
+        _
+        (\d{5})
+        _\d{2}_\d{4}[.]sdf
+      }x;
 
-  $re = JSA::EnterData::DAS->raw_basename_regex();
+    $re = JSA::EnterData::DAS->raw_basename_regex();
 
 =cut
 
 sub raw_basename_regex {
-
-  return
-    qr{ \b
-        [ah]
-        ([0-9]{8})       # date,
-        _
-        ([0-9]{5})       # run number,
-        _[0-9]{2}        # subsystem.
-        _[0-9]{4}[.]sdf
-        \b
-      }x;
+    return
+        qr{ \b
+            [ah]
+            ([0-9]{8})       # date,
+            _
+            ([0-9]{5})       # run number,
+            _[0-9]{2}        # subsystem.
+            _[0-9]{4}[.]sdf
+            \b
+          }x;
 }
 
 
@@ -122,4 +122,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

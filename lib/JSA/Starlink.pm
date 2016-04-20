@@ -6,8 +6,8 @@ JSA::Starlink - Helper functions to support the Starlink environment.
 
 =head1 SYNOPSIS
 
-  use JSA::Starlink;
-  check_star_env( "CONVERT", "ndf2fits" );
+    use JSA::Starlink;
+    check_star_env( "CONVERT", "ndf2fits" );
 
 =head1 DESCRIPTION
 
@@ -29,19 +29,20 @@ use Proc::SafeExec;
 use NDF 1.47;
 
 # find out where starlink is located
-use Starlink::Config qw/ :override /;
+use Starlink::Config qw/:override/;
 
-use JSA::Command qw/ run_command /;
-use JSA::Error qw/ :try /;
-use JSA::Headers qw/ read_wcs /;
+use JSA::Command qw/run_command/;
+use JSA::Error qw/:try/;
+use JSA::Headers qw/read_wcs/;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/ check_star_env
-                     run_star_command
-                     prov_update_parent_path
-                     set_wcs_attribs
-                     get_ndf_bb
-                   /;
+our @EXPORT_OK = qw/
+    check_star_env
+    run_star_command
+    prov_update_parent_path
+    set_wcs_attribs
+    get_ndf_bb
+/;
 
 our $DEBUG = 0;
 
@@ -57,7 +58,7 @@ Check that the Starlink environment is okay. Without arguments
 simply checks that $STARLINK_DIR is set and pointing to a
 directory.
 
-  check_star_env();
+    check_star_env();
 
 The first argument (optional) refers to the name of an application
 whose corresponding APPNAME_DIR environment variable should exist.
@@ -65,7 +66,7 @@ If that variable is not defined Starlink::Config is used to locate
 it. If it can not be found throws a C<JSA::Error::BadEnv> exception.
 If it is successfully located APPNAME_DIR will be set appropriately.
 
-  check_star_env( $appname, $command );
+    check_star_env($appname, $command);
 
 The second optional argument refers to a command within that
 application which should exist in the $APPNAME_DIR directory.
@@ -76,60 +77,57 @@ the environment.
 =cut
 
 sub check_star_env {
-  my $appname = shift;
-  my $command = shift;
+    my $appname = shift;
+    my $command = shift;
 
-  # if APPNAME_DIR environment variable is defined and that directory exists
-  # we do not do anything further
+    # if APPNAME_DIR environment variable is defined and that directory exists
+    # we do not do anything further
 
-  # Note that Starlink::Config will use $STARLINK_DIR itself since we have override
-  # enabled.
-  throw JSA::Error::BadEnv( "Do not know where the Starlink software is installed. You may need to set \$STARLINK_DIR.") 
-    unless (exists $StarConfig{"Star"} && -d $StarConfig{"Star"});
+    # Note that Starlink::Config will use $STARLINK_DIR itself since we have override
+    # enabled.
+    throw JSA::Error::BadEnv(
+        "Do not know where the Starlink software is installed. You may need to set \$STARLINK_DIR.")
+        unless (exists $StarConfig{"Star"} && -d $StarConfig{"Star"});
 
-  if (defined $appname) {
+    if (defined $appname) {
+        # Work out the environment variable name
+        my $env = uc($appname);
+        $env .= "_DIR" unless $env =~ /_DIR$/;
 
-    # Work out the environment variable name
-    my $env = uc($appname);
-    $env .= "_DIR" unless $env =~ /_DIR$/;
+        # if that envrinment variable exists and the directory exists we are okay
+        if (exists $ENV{$env} && -d $ENV{$env}) {
+            # everything is okay
+        }
+        else {
+            # Try to find the requested directory.
+            my $dir = $appname;
+            $dir =~ s/_dir$//i;
+            $dir = lc($dir);
 
-    # if that envrinment variable exists and the directory exists we are okay
-    if (exists $ENV{$env} && -d $ENV{$env}) {
-        # everything is okay
-    } else {
-        # Try to find the requested directory.
-        my $dir = $appname;
-        $dir =~ s/_dir$//i;
-        $dir = lc( $dir );
+            my $testdir = File::Spec->catfile($StarConfig{"Star_Bin"}, $dir);
 
-        my $testdir = File::Spec->catfile($StarConfig{"Star_Bin"}, $dir);
+            throw JSA::Error::BadEnv("$dir directory could not be found in Starlink software directory tree." )
+                unless -d $testdir;
 
-        throw JSA::Error::BadEnv("$dir directory could not be found in Starlink software directory tree." )
-            unless -d $testdir;
+            # if we get here then that directory is okay so set the environment
+            $ENV{$env} = $testdir;
+        }
 
-        # if we get here then that directory is okay so set the environment
-        $ENV{$env} = $testdir;
+        # check for the command
+        if (defined $command) {
+            my $app = File::Spec->catfile($ENV{$env}, $command);
+
+            throw JSA::Error::BadEnv("Command '$app' does not seem to exist")
+                unless -e $app;
+        }
     }
-
-    # check for the command
-    if (defined $command) {
-
-      my $app = File::Spec->catfile( $ENV{$env}, $command );
-
-      throw JSA::Error::BadEnv("Command '$app' does not seem to exist")
-        unless -e $app;
-
-    }
-
-  }
-
 }
 
 =item B<run_star_command>
 
 Run a Starlink command using the supplied arguments.
 
-  run_star_command( $command, @args );
+    run_star_command($command, @args);
 
 The command should include the full path to the command.
 Throws C<JSA::Error::BadExec> if the command fails.
@@ -140,42 +138,41 @@ for running non-Starlink commands.
 =cut
 
 sub run_star_command {
-  my @args = @_;
+    my @args = @_;
 
-  # Make sure we get an exit status
-  local $ENV{ADAM_EXIT} = 1;
+    # Make sure we get an exit status
+    local $ENV{ADAM_EXIT} = 1;
 
-  # Note that errors are written to STDOUT not STDERR.
-  my ($stdout, $stderr, $exstat) =  run_command( {nothrow => 1}, @args );
+    # Note that errors are written to STDOUT not STDERR.
+    my ($stdout, $stderr, $exstat) =  run_command({nothrow => 1}, @args);
 
-  # strip error messages from stdout and place in stderr
-  my (@out, @errors);
-  @errors = @$stderr if @$stderr;
-  for my $l (@$stdout) {
-    if ($l =~ /^\s*\!/) {
-      push(@errors, $l);
-    } else {
-      push(@out, $l);
+    # strip error messages from stdout and place in stderr
+    my (@out, @errors);
+    @errors = @$stderr if @$stderr;
+    foreach my $l (@$stdout) {
+        if ($l =~ /^\s*\!/) {
+            push(@errors, $l);
+        }
+        else {
+            push(@out, $l);
+        }
     }
-  }
 
-  if ( $exstat != 0 ) {
+    if ( $exstat != 0 ) {
+        my $text =
+            "Error running Starlink command $args[0] - status = $exstat."
+            . (@errors
+                ? " Errors:\n" . join("\n", @errors)
+                : '')
+            . "\n" ;
 
-    my $text =
-      "Error running Starlink command $args[0] - status = $exstat."
-      . ( @errors
-          ? " Errors:\n" . join( "\n", @errors )
-          : ''
-        )
-      . "\n" ;
+        throw JSA::Error::StarlinkCommand($text)
+            if ($exstat == 1 or $exstat == -1);
 
-    throw JSA::Error::StarlinkCommand( $text )
-      if ($exstat == 1 or $exstat == -1);
+        throw JSA::Error::BadExec($text);
+    }
 
-    throw JSA::Error::BadExec( $text );
-  }
-
-  return (\@out, \@errors, $exstat);
+    return (\@out, \@errors, $exstat);
 }
 
 =item B<prov_update_parent_path>
@@ -183,9 +180,9 @@ sub run_star_command {
 Rename the provenance entries in the supplied file to match the CADC
 filenaming convention rather than the CADC naming scheme.
 
-  prov_update_parent_path( $file, \&is_dr_file, \&is_archive_file,
-                           \&check_file, \&convert_filename,
-                           $strict_check );
+    prov_update_parent_path($file, \&is_dr_file, \&is_archive_file,
+                            \&check_file, \&convert_filename,
+                            $strict_check );
 
 Note that this command only works if the parent file actually exists,
 since in many cases the ASN_TYPE header is required to determine the
@@ -237,123 +234,124 @@ entries which don't have any valid parents are retained.
 =cut
 
 sub prov_update_parent_path {
-  my $file = shift;
+    my $file = shift;
 
-  my $is_dr_file = shift;
-  my $is_archive_file = shift;
-  my $check_file = shift;
-  my $convert_filename = shift;
-  my $strict_check = shift;
+    my $is_dr_file = shift;
+    my $is_archive_file = shift;
+    my $check_file = shift;
+    my $convert_filename = shift;
+    my $strict_check = shift;
 
-  # first see if this is a valid NDF
-  $is_dr_file->($file)
-    or JSA::Error::BadFile->throw( "File '$file' does not look like it came from the DR");
+    # first see if this is a valid NDF
+    $is_dr_file->($file)
+        or JSA::Error::BadFile->throw("File '$file' does not look like it came from the DR");
 
-  print "Updating parent provenance path for file $file\n" if $DEBUG;
+    print "Updating parent provenance path for file $file\n" if $DEBUG;
 
-  # Grab the base directory.
-  my( $filename, $basedir, $suffix ) = fileparse( $file );
+    # Grab the base directory.
+    my ($filename, $basedir, $suffix) = fileparse($file);
 
-  # Starlink status
-  my $status = &NDF::SAI__OK;
+    # Starlink status
+    my $status = &NDF::SAI__OK;
 
-  # open the file
-  err_begin($status);
-  ndf_begin();
-  ndf_open( &NDF::DAT__ROOT(), $file, "UPDATE","OLD",my $indf, my $place,$status );
+    # open the file
+    err_begin($status);
+    ndf_begin();
+    ndf_open(&NDF::DAT__ROOT(), $file, "UPDATE", "OLD", my $indf, my $place,$status);
 
-  # Read the provenance from the file
-  my $prov = ndgReadProv( $indf, "", $status );
+    # Read the provenance from the file
+    my $prov = ndgReadProv($indf, "", $status);
 
-  # Get the 0th provenance entry
-  my @parind = _get_prov_parents( $prov, 0, $status );
+    # Get the 0th provenance entry
+    my @parind = _get_prov_parents($prov, 0, $status);
 
-  # now go through the parents
-  if ($status == &NDF::SAI__OK) {
+    # now go through the parents
+    if ($status == &NDF::SAI__OK) {
+        # find valid product in hierarchy
+        my @validated;
+        my @rejected;
+        my %checked = ();
 
-    # find valid product in hierarchy
-    my @validated;
-    my @rejected;
-    my %checked = ();
-    for my $i (@parind) {
-      next if( $checked{$i} );
-      print "Checking parent $i\n" if $DEBUG;
-      my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $check_file,
-                                              $strict_check, $status );
-      last if $status != &NDF::SAI__OK;
-      push(@validated, @$ok);
-      push(@rejected, @$rej);
-      $checked{$i}++;
+        foreach my $i (@parind) {
+            next if( $checked{$i} );
+            print "Checking parent $i\n" if $DEBUG;
+
+            my ($ok, $rej) = _check_parent_product($prov, $i, $file, $check_file,
+                                                   $strict_check, $status );
+            last if $status != &NDF::SAI__OK;
+            push(@validated, @$ok);
+            push(@rejected, @$rej);
+            $checked{$i} ++;
+        }
+
+        # Remove the rejected parents (in reverse order)
+        my %seen = ();
+        my @toremove = sort {$b <=> $a} grep {! $seen{$_} ++} @rejected;
+        print "Removing ". @toremove . " unused ancestors\n" if $DEBUG;
+        $prov->RemoveProv(\@toremove, $status);
+
+        print "Validated: ". join(" ", @validated)."\n" if $DEBUG;
+        print "Removed ".@rejected.": " . join(" ", @rejected) . "\n" if $DEBUG;
+        print "Sent to remove: ".join( " ", @toremove). "\n" if $DEBUG;
+
+        # Get the parent indices again. These should all be valid
+        @parind = _get_prov_parents($prov, 0, $status);
+        print "After removal: ". join(" ", @parind)."\n" if $DEBUG;
+
+        # Now go through each of the valid parents
+        foreach my $i (@parind) {
+            my $provkm = $prov->GetProv($i, $status);
+
+            # See if we have parents (useful for later)
+            my $haspar = $provkm->MapHasKey("PARENTS");
+
+            # get the PATH
+            my $path = $provkm->MapGet0C("PATH");
+
+            # proceed if status is good and the path does not already
+            # look correct
+            if ($status == &NDF::SAI__OK && !$is_archive_file->($path)) {
+                # The path stored in the file lacks the .sdf
+                $path .= ".sdf" unless $path =~ /\.sdf$/;
+
+                my $newpath = $convert_filename->($path, $basedir, $haspar);
+
+                if (defined $newpath) {
+                    # update the path in the keymap
+                    $provkm->MapPut0C("PATH", $newpath, "");
+
+                    # put it back in the provenance structure
+                    $prov->ModifyProv($i, $provkm, $status);
+                }
+            }
+
+        } # foreach @parind
+
+        # write out the updated provenance structure
+        $prov->WriteProv($indf, 0, $status);
+
+    } # status not ok
+
+    # close the ndf and free locators
+    ndf_annul($indf, $status);
+    ndf_end($status);
+
+    if ($status != &NDF::SAI__OK) {
+        my $err = err_flush_to_string($status);
+        err_end($status);
+        JSA::Error::Starlink->throw($err);
     }
 
-    # Remove the rejected parents (in reverse order)
-    my %seen = ();
-    my @toremove = sort { $b <=> $a } grep { ! $seen{$_} ++ } @rejected;
-    print "Removing ". @toremove . " unused ancestors\n" if $DEBUG;
-    $prov->RemoveProv( \@toremove, $status );
-
-    print "Validated: ". join(" ", @validated)."\n" if $DEBUG;
-    print "Removed ".@rejected.": " . join( " ", @rejected ) . "\n" if $DEBUG;
-    print "Sent to remove: ".join( " ", @toremove). "\n" if $DEBUG;
-
-    # Get the parent indices again. These should all be valid
-    @parind = _get_prov_parents( $prov, 0, $status );
-    print "After removal: ". join(" ",@parind)."\n" if $DEBUG;
-
-    # Now go through each of the valid parents
-    for my $i (@parind) {
-      my $provkm = $prov->GetProv( $i, $status );
-
-      # See if we have parents (useful for later)
-      my $haspar = $provkm->MapHasKey( "PARENTS" );
-
-      # get the PATH
-      my $path = $provkm->MapGet0C( "PATH" );
-
-      # proceed if status is good and the path does not already
-      # look correct
-      if ($status == &NDF::SAI__OK && !$is_archive_file->($path)) {
-
-        # The path stored in the file lacks the .sdf
-        $path .= ".sdf" unless $path =~ /\.sdf$/;
-
-        my $newpath = $convert_filename->($path, $basedir, $haspar);
-
-        if (defined $newpath) {
-          # update the path in the keymap
-          $provkm->MapPut0C( "PATH", $newpath, "" );
-
-          # put it back in the provenance structure
-          $prov->ModifyProv( $i, $provkm, $status );
-        }
-      }
-
-    } # foreach @parind
-
-    # write out the updated provenance structure
-    $prov->WriteProv( $indf, 0, $status );
-
-  } # status not ok
-
-  # close the ndf and free locators
-  ndf_annul( $indf, $status);
-  ndf_end( $status );
-
-  if ($status != &NDF::SAI__OK) {
-    my $err = err_flush_to_string( $status );
     err_end($status);
-    JSA::Error::Starlink->throw( $err );
-  }
-  err_end($status);
 
-  return;
+    return;
 }
 
 =item B<set_wcs_attribs>
 
 Set appropriate WCS attributes for an NDF.
 
-  set_wcs_attribs( $file );
+    set_wcs_attribs($file);
 
 The following WCS attributes are set:
 
@@ -369,42 +367,43 @@ Returns undef.
 =cut
 
 sub set_wcs_attribs {
-  my $file = shift;
+    my $file = shift;
 
-  check_star_env( "KAPPA", "wcsattrib" );
+    check_star_env("KAPPA", "wcsattrib");
 
-  # Read the WCS from the file to see whether a specframe is present
-  my $wcs = read_wcs( $file );
+    # Read the WCS from the file to see whether a specframe is present
+    my $wcs = read_wcs($file);
 
-  # See if we have a SpecFrame
-  my $template = Starlink::AST::SpecFrame->new( "MaxAxes=7" );
-  my $spf = $wcs->FindFrame( $template, " " );
+    # See if we have a SpecFrame
+    my $template = Starlink::AST::SpecFrame->new("MaxAxes=7");
+    my $spf = $wcs->FindFrame($template, " ");
 
-  # Determine the projection -- if it is HEALPix then we do not want to change
-  # it from ICRS to FK5.
-  my $projection = $wcs->GetFrame(Starlink::AST::AST__CURRENT())->GetC('Projection');
+    # Determine the projection -- if it is HEALPix then we do not want to change
+    # it from ICRS to FK5.
+    my $projection = $wcs->GetFrame(Starlink::AST::AST__CURRENT())->GetC('Projection');
 
-  # Form argument string
-  my @argstr = ();
-  unless ($projection eq 'HEALPix') {
-    push @argstr, qw/ System(1)=FK5 /;
-  }
-  if (defined $spf) {
-    push(@argstr, qw/ System(3)=FREQ StdOfRest=BARY / );
-  }
+    # Form argument string
+    my @argstr = ();
+    unless ($projection eq 'HEALPix') {
+        push @argstr, qw/System(1)=FK5/;
+    }
 
-  print "Forcing attributes of file $file to ".join( " ",@argstr)."\n"
-    if $DEBUG;
+    if (defined $spf) {
+        push @argstr, qw/System(3)=FREQ StdOfRest=BARY/;
+    }
 
-  # Now set the attributes
-  my @args = ( File::Spec->catfile( $ENV{KAPPA_DIR}, "wcsattrib" ),
-               "NDF=$file",
-               "MODE=MSet",
-               "SETTING='".join(",",@argstr)."'",
-             );
+    print "Forcing attributes of file $file to ".join( " ",@argstr)."\n"
+        if $DEBUG;
 
-  run_star_command( @args );
-  return;
+    # Now set the attributes
+    my @args = (
+        File::Spec->catfile($ENV{KAPPA_DIR}, "wcsattrib"),
+        "NDF=$file",
+        "MODE=MSet",
+        "SETTING='".join(",",@argstr)."'",);
+
+    run_star_command(@args);
+    return;
 }
 
 =item get_ndf_bb
@@ -456,7 +455,7 @@ sub get_ndf_bb {
 
 Obtain the parent indices given the NDF identified and index of a provenance item.
 
-  @indices = _get_prov_parents( $prov, 0, $status );
+    @indices = _get_prov_parents($prov, 0, $status);
 
 Returns empty list if there are no further parents. Uses inherited status.
 
@@ -468,31 +467,31 @@ Returns empty list if there are no further parents. Uses inherited status.
 # badness to the caller.
 
 sub _get_prov_parents {
-  my $prov = shift;
-  my $index = shift;
+    my $prov = shift;
+    my $index = shift;
 
-  # Note that we do not use a lexical for status since we want to
-  # emulate the interface used for the NDF module
-  return () if $_[0] != &NDF::SAI__OK;
+    # Note that we do not use a lexical for status since we want to
+    # emulate the interface used for the NDF module
+    return () if $_[0] != &NDF::SAI__OK;
 
-  # Get the 0th provenance entry
-  my $km = $prov->GetProv( $index, $_[0] );
+    # Get the 0th provenance entry
+    my $km = $prov->GetProv($index, $_[0]);
 
-  print "Retrieved provenance entry #$index to retrieve parents.\n" if $DEBUG;
-#  $km->Show();
+    print "Retrieved provenance entry #$index to retrieve parents.\n" if $DEBUG;
+    # $km->Show();
 
-  # get the parent indices
-  my $haspar = $km->MapHasKey( "PARENTS" );
+    # get the parent indices
+    my $haspar = $km->MapHasKey("PARENTS");
 
-  my @parind;
-  if ($haspar) {
-    @parind = $km->MapGet1I( "PARENTS" );
-  }
+    my @parind;
+    if ($haspar) {
+        @parind = $km->MapGet1I("PARENTS");
+    }
 
-  my %seen = ();
-  my @uniq_parind = grep { ! $seen{$_} ++ } @parind;
-  print "With parent indices: (". join(",",@uniq_parind). ")\n" if $DEBUG;
-  return @uniq_parind;
+    my %seen = ();
+    my @uniq_parind = grep {! $seen{$_} ++} @parind;
+    print "With parent indices: (". join(",", @uniq_parind). ")\n" if $DEBUG;
+    return @uniq_parind;
 }
 
 =item B<_check_parent_product>
@@ -501,8 +500,8 @@ Get the product for this parent and check whether it is allowed.
 If it does not match the allowed product name, the parent of that item
 is checked until a match is found.
 
-  ($ok, $rej) = _check_parent_product( $prov, $index, $file,
-                                       \&check_file, $strict_check, $status );
+    ($ok, $rej) = _check_parent_product($prov, $index, $file,
+                                        \&check_file, $strict_check, $status );
 
 Returns the results as references to arrays. The first is an array of indices
 that have valid products. The second is an array of indices that were checked and
@@ -522,91 +521,95 @@ files to see whether they are allowed or not.
 # badness to the caller.
 
 sub _check_parent_product {
-  my $prov = shift;
-  my $index = shift;
-  my $file = shift;
-  my $check_file = shift;
-  my $strict_check = shift;
+    my $prov = shift;
+    my $index = shift;
+    my $file = shift;
+    my $check_file = shift;
+    my $strict_check = shift;
 
-  # Note that we do not use a lexical for status since we want to
-  # emulate the interface used for the NDF module
-  return () if $_[0] != &NDF::SAI__OK;
+    # Note that we do not use a lexical for status since we want to
+    # emulate the interface used for the NDF module
+    return () if $_[0] != &NDF::SAI__OK;
 
-  if( defined( $PARENT_PRODUCT_CACHE{$file}{$index}{'ok'} ) &&
-      defined( $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} ) ) {
-    return( $PARENT_PRODUCT_CACHE{$file}{$index}{'ok'},
-            $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} );
-  }
-
-  # first need to get the provenance information
-  my $provkm = $prov->GetProv( $index, $_[0] );
-
-  # get the PATH
-  my $path = $provkm->MapGet0C( "PATH" );
-
-  # clean up
-  print "_check_parent_product PATH $index=$path $_[0]\n" if $DEBUG;
-  my @rejected;
-  my @isok;
-  print "Testing index $index\n" if $DEBUG;
-#  $provkm->Show();
-  # now test it. If the parent looks like a CADC file already
-  # then we assume that it is okay
-  if ($_[0] == &NDF::SAI__OK) {
-    # The path stored in the file lacks the .sdf
-    $path .= ".sdf" unless $path =~ /\.sdf$/;
-
-    if( basename( $file ) eq basename( $path ) ) {
-      print "Looks like original file ($file == $path)\n" if $DEBUG;
-    } else {
-      my $want_file = eval {$check_file->($path)};
-      unless (defined $want_file) {
-        if ($_[0] == &NDF::SAI__OK()) {
-          $_[0] = &NDF::SAI__ERROR();
-          err_rep( " ", $@, $_[0] );
-          return ();
-        }
-      }
-      @isok = ($index) if $want_file;
+    if (defined($PARENT_PRODUCT_CACHE{$file}{$index}{'ok'}) &&
+            defined($PARENT_PRODUCT_CACHE{$file}{$index}{'rej'})) {
+        return($PARENT_PRODUCT_CACHE{$file}{$index}{'ok'},
+               $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'});
     }
 
-    # if we have got here with an empty index list we need to look in the parent
-    if (!@isok) {
-      my @parents = _get_prov_parents( $prov, $index, $_[0] );
-      if (@parents) {
-        push(@rejected, $index);
-        for my $i (@parents) {
-          print "Checking parent $i\n" if $DEBUG;
-          my ($ok, $rej) = _check_parent_product( $prov, $i, $file, $check_file,
-                                                  $strict_check, $_[0] );
-          return () unless $_[0] == &NDF::SAI__OK();
-          push(@isok, @$ok);
-          push(@rejected, @$rej);
+    # first need to get the provenance information
+    my $provkm = $prov->GetProv($index, $_[0]);
+
+    # get the PATH
+    my $path = $provkm->MapGet0C("PATH");
+
+    # clean up
+    print "_check_parent_product PATH $index=$path $_[0]\n" if $DEBUG;
+    my @rejected;
+    my @isok;
+    print "Testing index $index\n" if $DEBUG;
+    # $provkm->Show();
+    # now test it. If the parent looks like a CADC file already
+    # then we assume that it is okay
+    if ($_[0] == &NDF::SAI__OK) {
+        # The path stored in the file lacks the .sdf
+        $path .= ".sdf" unless $path =~ /\.sdf$/;
+
+        if( basename($file) eq basename($path)) {
+            print "Looks like original file ($file == $path)\n" if $DEBUG;
         }
-      } elsif ($strict_check) {
-        # In strict-check mode, if no valid parents were found, reject this
-        # provenance entry.
-        print "No parents for $index -- rejected by strict check\n" if $DEBUG;
-        push @rejected, $index;
-      } else {
-        # if there are no more parents we have to assume that this is a valid
-        # parent.
-        print "No parents for $index\n" if $DEBUG;
-        push(@isok, $index);
-      }
+        else {
+            my $want_file = eval {$check_file->($path)};
+            unless (defined $want_file) {
+                if ($_[0] == &NDF::SAI__OK()) {
+                    $_[0] = &NDF::SAI__ERROR();
+                    err_rep(" ", $@, $_[0]);
+                    return ();
+                }
+            }
+            @isok = ($index) if $want_file;
+        }
+
+        # if we have got here with an empty index list we need to look in the parent
+        if (!@isok) {
+            my @parents = _get_prov_parents($prov, $index, $_[0]);
+            if (@parents) {
+                push @rejected, $index;
+
+                foreach my $i (@parents) {
+                    print "Checking parent $i\n" if $DEBUG;
+                    my ($ok, $rej) = _check_parent_product(
+                        $prov, $i, $file, $check_file,
+                        $strict_check, $_[0]);
+                    return () unless $_[0] == &NDF::SAI__OK();
+                    push @isok, @$ok;
+                    push @rejected, @$rej;
+                }
+            }
+            elsif ($strict_check) {
+                # In strict-check mode, if no valid parents were found, reject this
+                # provenance entry.
+                print "No parents for $index -- rejected by strict check\n" if $DEBUG;
+                push @rejected, $index;
+            }
+            else {
+                # if there are no more parents we have to assume that this is a valid
+                # parent.
+                print "No parents for $index\n" if $DEBUG;
+                push @isok, $index;
+            }
+        }
     }
 
-  }
+    my %seen = ();
+    my @isok_uniq = grep {! $seen{$_} ++} @isok;
+    %seen = ();
+    my @rejected_uniq = grep {! $seen{$_} ++} @rejected;
 
-  my %seen = ();
-  my @isok_uniq = grep { ! $seen{$_} ++ } @isok;
-  %seen = ();
-  my @rejected_uniq = grep { ! $seen{$_} ++ } @rejected;
+    $PARENT_PRODUCT_CACHE{$file}{$index}{'ok'} = \@isok_uniq;
+    $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} = \@rejected_uniq;
 
-  $PARENT_PRODUCT_CACHE{$file}{$index}{'ok'} = \@isok_uniq;
-  $PARENT_PRODUCT_CACHE{$file}{$index}{'rej'} = \@rejected_uniq;
-
-  return (\@isok_uniq, \@rejected_uniq);
+    return (\@isok_uniq, \@rejected_uniq);
 }
 
 =back
@@ -638,4 +641,3 @@ Place,Suite 330, Boston, MA  02111-1307, USA
 =cut
 
 1;
-

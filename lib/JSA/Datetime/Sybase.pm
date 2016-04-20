@@ -8,9 +8,9 @@ JSA::Datetime::Sybase - Parse a date-time value, returns L<DateTime> object.
 
 =head1 SYNOPSIS
 
-  use JSA::DateTime::Sybase qw[ parse_syb_datetime ];
+    use JSA::DateTime::Sybase qw/parse_syb_datetime/;
 
-  $dt = parse_syb_datetime( 'Mar  3 2010' );
+    $dt = parse_syb_datetime('Mar  3 2010');
 
 =head1 DESCRIPTION
 
@@ -26,8 +26,8 @@ Currently it uses L<DateTime> module and returns objects of the same.
 Nothing is exported by default.  Following functions can be imported
 ...
 
-  parse_syb_datetime
-  get_syb_format
+    parse_syb_datetime
+    get_syb_format
 
 =over 2
 
@@ -36,11 +36,11 @@ Nothing is exported by default.  Following functions can be imported
 use strict;
 use warnings;
 
-use Exporter qw[ import ];
-our @EXPORT_OK =
-  qw[ parse_syb_datetime
-      get_syb_format
-    ];
+use Exporter qw/import/;
+our @EXPORT_OK = qw/
+    parse_syb_datetime
+    get_syb_format
+/;
 
 =item B<parse_syb_datetime>
 
@@ -48,24 +48,21 @@ Parses, verifies a given Sybase date, datetime, or time string.
 Returns a L<DateTime> object.  It takes an optional time zone value
 (if missing, UTC is used).
 
-  $dt = parse_syb_datetime( 'Mar  3 2010' );
+    $dt = parse_syb_datetime('Mar  3 2010');
 
 =cut
 
 sub parse_syb_datetime {
+    my ($time, $tz) = @_;
 
-  my ( $time, $tz ) = @_;
+    require DateTime::Format::Strptime;
 
-  require DateTime::Format::Strptime;
+    my $dt_format = new DateTime::Format::Strptime(
+        'pattern'    => get_syb_format($time),
+        'time_zone' => $tz || 0,
+        'on_error'  => 'croak');
 
-  my $dt_format =
-    DateTime::Format::Strptime
-    ->new( 'pattern'    => get_syb_format( $time ),
-            'time_zone' => $tz || 0,
-            'on_error'  => 'croak'
-          );
-
-  return $dt_format->parse_datetime( $time );
+    return $dt_format->parse_datetime($time);
 }
 
 =item B<get_syb_format>
@@ -74,8 +71,8 @@ Return a date, datetime, or time format (see C<strptime(3)> and
 L<DateTime::Format::Strptime>) given a Sybase date, datetime, or time
 string.
 
-  $date_format = get_syb_format( 'Mar  3 2010' );
-  $time_format = get_syb_format( ' 3:12AM' );
+    $date_format = get_syb_format('Mar  3 2010');
+    $time_format = get_syb_format(' 3:12AM');
 
 =back
 
@@ -83,26 +80,22 @@ string.
 
 
 sub get_syb_format {
+    my ($time) = @_;
 
-  my ( $time ) = @_;
+    my $time_re = _syb_time_regex();
+    return _syb_time_format() if $time =~ /^$time_re$/;
 
-  my $time_re = _syb_time_regex();
-  return _syb_time_format() if $time =~ /^$time_re$/;
+    my $date_re = _syb_date_regex();
+    return _syb_date_format() if $time =~ /^$date_re$/;
 
-  my $date_re = _syb_date_regex();
-  return _syb_date_format() if $time =~ /^$date_re$/;
+    if ($time =~ _syb_datetime_regex()) {
+        my $milli = $1;
+        return $milli
+            ? _syb_datetime_ms_format()
+            : _syb_datetime_format();
+    }
 
-  if ( $time =~ _syb_datetime_regex() ) {
-
-    my $milli = $1;
-    return
-      $milli
-      ? _syb_datetime_ms_format()
-      : _syb_datetime_format()
-      ;
-  }
-
-  return;
+    return;
 }
 
 =head1 INTERNAL FUNCTIONS
@@ -117,15 +110,14 @@ match.
 =cut
 
 sub _syb_date_regex {
-
-  return
-    qr{ # Month
-        [A-Z][a-z]{2}
-        # Day
-        \s (?: \s | \d )\d
-        # Year
-        \s \d{4}
-      }x;
+    return
+        qr{ # Month
+            [A-Z][a-z]{2}
+            # Day
+            \s (?: \s | \d )\d
+            # Year
+            \s \d{4}
+          }x;
 }
 
 =item B<_syb_time_regex>
@@ -137,16 +129,15 @@ milliseconds.
 =cut
 
 sub _syb_time_regex {
-
-  return
-    qr{ # Hour
-        (?: \s | \d )\d
-        # Minute
-        : \d{2}
-        # To indicate if time has milli seconds.
-        (?: : (\d{3}) )?
-        [AP]M
-      }x;
+    return
+        qr{ # Hour
+            (?: \s | \d )\d
+            # Minute
+            : \d{2}
+            # To indicate if time has milli seconds.
+            (?: : (\d{3}) )?
+            [AP]M
+          }x;
 }
 
 =item B<_syb_datetime_regex>
@@ -157,13 +148,12 @@ The regex has one capture group for optional milliseconds.
 =cut
 
 sub _syb_datetime_regex {
+    my $date = _syb_date_regex();
+    my $time = _syb_time_regex();
 
-  my $date = _syb_date_regex();
-  my $time = _syb_time_regex();
-
-  # An example of default value of a DATETIME type column is
-  # "Aug  3 2010  3:00AM".
-  return qr{ ^ $date \s $time $ }x;
+    # An example of default value of a DATETIME type column is
+    # "Aug  3 2010  3:00AM".
+    return qr/^ $date \s $time $/x;
 }
 
 =item B<_syb_date_format>
@@ -172,7 +162,9 @@ Returns format for Sybase date value.
 
 =cut
 
-sub _syb_date_format { return q[%b %e %Y]; }
+sub _syb_date_format {
+    return '%b %e %Y';
+}
 
 =item B<_syb_time_format>
 
@@ -180,7 +172,9 @@ Returns format for Sybase time value without millisecond.
 
 =cut
 
-sub _syb_time_format { return q[%l:%M%p]; }
+sub _syb_time_format {
+    return '%l:%M%p';
+}
 
 =item B<_syb_time_ms_format>
 
@@ -188,7 +182,9 @@ Returns format for Sybase time value with millisecond.
 
 =cut
 
-sub _syb_time_ms_format { return q[%l:%M:%03d%p]; }
+sub _syb_time_ms_format {
+    return '%l:%M:%03d%p';
+}
 
 =item B<_syb_datetime_format>
 
@@ -197,9 +193,8 @@ Returns format for Sybase datetime value without millisecond.
 =cut
 
 sub _syb_datetime_format {
-
-  # Default example is "Aug  3 2010  3:00AM".
-  return join ' ', _syb_date_format(), _syb_time_format();
+    # Default example is "Aug  3 2010  3:00AM".
+    return join ' ', _syb_date_format(), _syb_time_format();
 }
 
 
@@ -210,10 +205,9 @@ Returns format for Sybase datetime value with millisecond.
 =cut
 
 sub _syb_datetime_ms_format {
-
-  # Use %03d as there is no millisecond option in *::Format::Strptime or in
-  # strftime(3) manual page.
-  return join ' ', _syb_date_format(), _syb_time_ms_format();
+    # Use %03d as there is no millisecond option in *::Format::Strptime or in
+    # strftime(3) manual page.
+    return join ' ', _syb_date_format(), _syb_time_ms_format();
 }
 
 
@@ -279,4 +273,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

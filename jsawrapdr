@@ -6,8 +6,8 @@ jsawrap - process supplied files through the DR in a manner compatible with CADC
 
 =head1 SYNOPSIS
 
-  jsawrapdr --inputs=FILENAME --parameters="oracdr parameters" -persist
-          --id="<instance id>"
+    jsawrapdr --inputs=FILENAME --parameters="oracdr parameters" -persist
+              --id="<instance id>"
 
 =head1 DESCRIPTION
 
@@ -167,7 +167,7 @@ These questions relate mainly to non-CADC usage:
 use strict;
 use warnings;
 
-use Getopt::Long qw/ GetOptionsFromString /;
+use Getopt::Long qw/GetOptionsFromString/;
 use IO::File;
 use IO::Uncompress::Gunzip qw/gunzip $GunzipError/;
 use Pod::Usage;
@@ -182,10 +182,10 @@ use Astro::FITS::Header::NDF;
 use Astro::FITS::Header::CFITSIO;
 use Astro::FITS::HdrTrans;
 
-use JSA::Starlink qw/ check_star_env run_star_command /;
-use JSA::Convert qw/ convert_to_ndf convert_dr_files /;
-use JSA::Files qw/ compare_file_lists scan_dir looks_like_cadcfile /;
-use JSA::Headers qw/ get_header_value read_headers /;
+use JSA::Starlink qw/check_star_env/;
+use JSA::Convert qw/convert_to_ndf convert_dr_files/;
+use JSA::Files qw/compare_file_lists scan_dir looks_like_cadcfile/;
+use JSA::Headers qw/get_header_value read_headers/;
 use JSA::Logging qw/log_message log_warning/;
 use JSA::WrapDR qw/prepare_environment prepare_environment_cadc
                    retrieve_data determine_instrument
@@ -199,73 +199,72 @@ print "*** ENV:\n";
 print Dumper \%ENV;
 
 # Options
-my( $cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
+my ($cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
     $instrument, $log, $man, $mode, $specified_outdir, $parameters, $persist,
-    $tmpdir, $transdir, $ut, $version, $canfar, $debugxfer );
+    $tmpdir, $transdir, $ut, $version, $canfar, $debugxfer);
 
-my $status = GetOptions( "cleanup=s"      => \$cleanup,
-                         "canfar"         => \$canfar,
-                         "debug"          => \$debug,
-                         "drparameters=s" => \$drparameters,
-                         "help"           => \$help,
-                         "id=s"           => \$id,
-                         "indir=s"        => \$indir,
-                         "inputs=s"       => \$inputs,
-                         "instrument=s"   => \$instrument,
-                         "log=s"          => \$log,
-                         "man"            => \$man,
-                         "mode=s"         => \$mode,
-                         "outdir=s"       => \$specified_outdir,
-                         "parameters=s"   => \$parameters,
-                         "persist"        => \$persist,
-                         "tmpdir"         => \$tmpdir,
-                         "transdir=s"     => \$transdir,
-                         "ut=s"           => \$ut,
-                         "version"        => \$version,
-                         'debugxfer'      => \$debugxfer,
-                       );
+my $status = GetOptions(
+    "cleanup=s"     => \$cleanup,
+    "canfar"        => \$canfar,
+    "debug"         => \$debug,
+    "drparameters=s"=> \$drparameters,
+    "help"          => \$help,
+    "id=s"          => \$id,
+    "indir=s"       => \$indir,
+    "inputs=s"      => \$inputs,
+    "instrument=s"  => \$instrument,
+    "log=s"         => \$log,
+    "man"           => \$man,
+    "mode=s"        => \$mode,
+    "outdir=s"      => \$specified_outdir,
+    "parameters=s"  => \$parameters,
+    "persist"       => \$persist,
+    "tmpdir"        => \$tmpdir,
+    "transdir=s"    => \$transdir,
+    "ut=s"          => \$ut,
+    "version"       => \$version,
+    'debugxfer'     => \$debugxfer,
+);
 
 pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
 if ($version) {
-  print "jsawrapdr - CADC compliant wrapper for JSA data processing\n";
-  exit;
+    print "jsawrapdr - CADC compliant wrapper for JSA data processing\n";
+    exit;
 }
 
 # Handle the "parameters" option.
-if( defined( $parameters ) ) {
-
+if (defined($parameters)) {
   # Strip off any leading or trailing double quotes.
   $parameters =~ s/^\"//;
   $parameters =~ s/\"$//;
 
-  $status = GetOptionsFromString( $parameters,
-                                  "mode=s" => \$mode,
-                                  "drparameters=s" => \$drparameters );
+  $status = GetOptionsFromString($parameters,
+                                 "mode=s" => \$mode,
+                                 "drparameters=s" => \$drparameters);
 
   print "Parsed --parameters to give:\n";
   print "mode = $mode\n";
   print "drparameters = $drparameters\n";
-
 }
 
 # Check the UT and instrument parameters. If one's defined but not the
 # other, then die with an error.
-if( defined $ut && ! defined $instrument ) {
-  die "Must include -instrument paramter with -ut";
+if (defined $ut && ! defined $instrument) {
+    die "Must include -instrument paramter with -ut";
 }
-if( ! defined $ut && defined $instrument ) {
-  die "Must include -ut parameter with -instrument";
+if (! defined $ut && defined $instrument) {
+    die "Must include -ut parameter with -instrument";
 }
 my $skipdp = 0;
-if( defined $ut && defined $instrument ) {
-  $skipdp = 1;
+if (defined $ut && defined $instrument) {
+    $skipdp = 1;
 }
 
 # Die if we don't have the mode.
-if( ! defined( $mode ) ) {
-  die "Must supply -mode parameter to jsawrapdr";
+if (! defined( $mode)) {
+    die "Must supply -mode parameter to jsawrapdr";
 }
 
 # Trim any leading or trailing single quotes from mode, which might
@@ -283,32 +282,32 @@ check_star_env( "ORAC" );
 # Check recipe parameters and strip any leading or trailing
 # whitespace.
 if (defined $drparameters) {
-  $drparameters =~ s/^\s+//;
-  $drparameters =~ s/\s+$//;
+    $drparameters =~ s/^\s+//;
+    $drparameters =~ s/\s+$//;
 }
 
 # Get the current working directory
-my $curdir = File::Spec->rel2abs( File::Spec->curdir );
+my $curdir = File::Spec->rel2abs(File::Spec->curdir);
 
 # The grid processing engine at CADC will be configured such that
 # the wrapper is being started in $ENV{TMPDIR}
 
 my $in_grid_engine;
 if (exists $ENV{TMPDIR}) {
-  if (File::Spec->canonpath($curdir) eq File::Spec->canonpath($ENV{TMPDIR})) {
-    $in_grid_engine = 1;
-    print "Running in CADC Grid Engine environment\n";
+    if (File::Spec->canonpath($curdir) eq File::Spec->canonpath($ENV{TMPDIR})) {
+        $in_grid_engine = 1;
+        print "Running in CADC Grid Engine environment\n";
 
-    prepare_environment_cadc();
-  }
+        prepare_environment_cadc();
+    }
 }
 
 print "Environment variables:\n";
-for my $env_variable ( sort qw/PERL5LIB STARLINK_DIR SMURF_THREADS ORAC_DIR
-                               PATH ADAM_USER TMPDIR HDS_SCRATCH/ ) {
-  print "$env_variable: " . ( defined( $ENV{$env_variable} ) ?
-                              $ENV{$env_variable}            :
-                              "undef" ) . "\n";
+for my $env_variable (sort qw/PERL5LIB STARLINK_DIR SMURF_THREADS ORAC_DIR
+                              PATH ADAM_USER TMPDIR HDS_SCRATCH/) {
+    print "$env_variable: "
+        . (defined($ENV{$env_variable}) ? $ENV{$env_variable}
+                                        : "undef") . "\n";
 }
 
 # in grid engine mode we always use tmpdir mode
@@ -319,11 +318,12 @@ $tmpdir = 1 if $in_grid_engine;
 # in grid engine. In grid engine dpRetrieve makes many assumptions
 # and does not want any path to be included
 if (defined $inputs) {
-  $inputs = File::Spec->catfile( $curdir, $inputs )
-    if (!$in_grid_engine &&
-        !File::Spec->file_name_is_absolute($inputs));
-} elsif( ! $skipdp ) {
-  die "Must supply a -inputs file";
+    $inputs = File::Spec->catfile($curdir, $inputs)
+        if ! $in_grid_engine
+        && ! File::Spec->file_name_is_absolute($inputs);
+}
+elsif (! $skipdp) {
+    die "Must supply a -inputs file";
 }
 
 # Change to the output directory so that dpRetrieve will copy to this
@@ -331,16 +331,18 @@ if (defined $inputs) {
 
 my $outdir;
 if ($tmpdir) {
-  $outdir = File::Temp->newdir ( DIR => $curdir );
-  log_message( "Using temporary output directory '$outdir'\n");
-} elsif (defined $specified_outdir) {
-  $outdir = File::Spec->rel2abs($specified_outdir);
-  log_message( "Using specified output directory '$outdir'\n");
-} else {
-  $outdir = $curdir;
+    $outdir = File::Temp->newdir (DIR => $curdir);
+    log_message("Using temporary output directory '$outdir'\n");
+}
+elsif (defined $specified_outdir) {
+    $outdir = File::Spec->rel2abs($specified_outdir);
+    log_message( "Using specified output directory '$outdir'\n");
+}
+else {
+    $outdir = $curdir;
 }
 if ($outdir ne $curdir) {
-  chdir($outdir) || die "Could not change directory to '$outdir'";
+    chdir($outdir) || die "Could not change directory to '$outdir'";
 }
 
 # Default the ID string since most people will not be using one
@@ -370,165 +372,167 @@ my %post_retrieve;
 
 # We need to scan for all files in the directory since dpCapture
 # really does not want anything there in CADC mode
-my %all_existing_files = scan_dir( qr/.*/ );
+my %all_existing_files = scan_dir(qr/.*/);
 
-if( ! $skipdp ) {
+unless ($skipdp) {
+    # Get a hash of the existing files so that we can see which ones
+    # dpRetrieve has fetched.
+    my %existing_files = scan_dir();
 
-  # Get a hash of the existing files so that we can see which ones
-  # dpRetrieve has fetched.
-  my %existing_files = scan_dir();
+    retrieve_data($id, $inputs, 1);
 
-  retrieve_data($id, $inputs, 1);
-
-  # Check for gzipped SDF files.
-  my %gzipped_sdf = scan_dir(qr/\.sdf\.gz$/);
-  foreach my $gz (compare_file_lists(\%all_existing_files, \%gzipped_sdf)) {
-    log_message('Ungzipping file: ' . $gz);
-    gunzip $gz => substr($gz, 0, -3) or die $GunzipError;
-  }
-
-  # Now scan the directory again
-  %post_retrieve = scan_dir();
-
-  # compare the old list with the new and return a list of files that
-  # should be processed
-  @files = compare_file_lists( \%existing_files, \%post_retrieve );
-
-  # Check we got the correct number of files.
-  do {
-    my $fh = new IO::File($inputs);
-    my $n = 0;
-    while (<$fh>) {
-        $n ++ if /\w/ && ! /^\#/;
+    # Check for gzipped SDF files.
+    my %gzipped_sdf = scan_dir(qr/\.sdf\.gz$/);
+    foreach my $gz (compare_file_lists(\%all_existing_files, \%gzipped_sdf)) {
+        log_message('Ungzipping file: ' . $gz);
+        gunzip $gz => substr($gz, 0, -3) or die $GunzipError;
     }
-    $fh->close();
-    die 'Incorrect number of files retrieved: expected ' .
-        $n . ' but got ' . (scalar @files)
-        unless $n == (scalar @files);
-  };
 
-  # Keep a copy of the list of files which were retrieved so that they
-  # can be cleaned up before running dpCapture.
-  @files_retrieved = @files;
+    # Now scan the directory again
+    %post_retrieve = scan_dir();
 
-  log_message("Processing the following files:\n". join("\n",@files)."\n");
+    # compare the old list with the new and return a list of files that
+    # should be processed
+    @files = compare_file_lists( \%existing_files, \%post_retrieve );
 
-  # decide whether we are using ORAC-DR or PICARD
-
-  # First thing we have to do is to analyze the files to determine how
-  # things should be processed. If we are all FITS files then we must
-  # convert to NDF prior to processing. If there are some FITS and
-  # some NDF we have to decide whether that is okay. Read all the FITS
-  # headers and then decide whether they are all raw or all processed.
-
-  # Now count NDF vs FITS
-  my $nfits = 0;
-  my $nsdf = 0;
-  for my $f (@files) {
-    if ($f =~ /\.f\w+$/) {
-      $nfits++;
-    } elsif ($f =~ /\.sdf$/) {
-      $nsdf++;
-    }
-  }
-
-  if ( ($nfits != @files) && ($nsdf != @files) ) {
-    # mixed NDF and FITS
-    die "There are $nfits FITS files and $nsdf NDFs out of ".@files.
-        " files and this is a bit confusing";
-  }
-
-  # FITS headers, indexed by filename
-  my %FITS = read_headers( @files );
-  if (keys %FITS == 0) {
-    die "Could not open any of the supplied files to read headers: " .
-        join(", ",@files);
-  } elsif (keys %FITS != @files) {
-    die "Some files could not be read: " .
-        join(', ', grep {not exists $FITS{$_}} @files);
-  }
-
-  # Decide on ORAC-DR vs PICARD
-  # FITS files are not processable by ORAC-DR and are not archived as
-  # such at CADC NDF are processed by ORAC-DR unless they have PRODUCT
-  # headers. No check is made for filename compliance with raw time
-  # series ICD.
-
-  # Get PRODUCT information
-  my ($nproduct, %products) = get_header_value( "PRODUCT", values %FITS);
-
-  $useoracdr = 0;
-  if ($nfits == @files) {
-    # All of them are FITS so we must use PICARD
-    log_message("Got $nfits fits - using PICARD\n");
-  } elsif ($nsdf == @files) {
-    # we have NDFs so we need to open them and look for PRODUCT
-    # headers Should we check to make sure that the PRODUCT headers
-    # match?
-    log_message("Got $nsdf NDF\n");
-    if ($nproduct == 0) {
-      # oracdr - assume these are raw data. They may be data processed
-      # outside of the DR
-      $useoracdr = 1;
-    }
-  }
-
-  # Analyze product information for non-ORAC-DR case
-  if (!$useoracdr) {
-    if ($nproduct == @files) {
-
-      # check product values
-      if (keys %products > 1) {
-        log_warning( "Processing different products in a single run may be " .
-                     "incorrect. (".  join(",",keys %products).")\n");
-      }
-    } elsif ($nproduct == 0) {
-      die "None of the input files contained PRODUCT FITS headers";
-
-    } else {
-      die "There are $nproduct headers in ".@files.
-        ", making it difficult to determine whether to run ORAC-DR or PICARD";
-    }
-  }
-
-  if ($useoracdr) {
-    $oracinst = determine_instrument(\%FITS);
-  }
-
-  # Convert FITS files into NDF and update name supplied to DR. We
-  # could do this before we read the FITS headers but it is more
-  # efficient to delay conversion in case some other error condition
-  # is hit first. Conversion will take a non-trivial amount of time
-  if ($nfits > 0) {
-    my @new;
-    for my $f (@files) {
-      if (looks_like_cadcfile( $f )) {
-        my $out = convert_to_ndf( $f );
-        if ($out) {
-          push(@new, $out );
+    # Check we got the correct number of files.
+    do {
+        my $fh = new IO::File($inputs);
+        my $n = 0;
+        while (<$fh>) {
+              $n ++ if /\w/ && ! /^\#/;
         }
-      } else {
-        log_warning("File $f does not use the CADC naming convention. " .
-                    "Skipping.\n");
-      }
+        $fh->close();
+        die 'Incorrect number of files retrieved: expected ' .
+            $n . ' but got ' . (scalar @files)
+            unless $n == (scalar @files);
+    };
+
+    # Keep a copy of the list of files which were retrieved so that they
+    # can be cleaned up before running dpCapture.
+    @files_retrieved = @files;
+
+    log_message("Processing the following files:\n". join("\n",@files)."\n");
+
+    # decide whether we are using ORAC-DR or PICARD
+
+    # First thing we have to do is to analyze the files to determine how
+    # things should be processed. If we are all FITS files then we must
+    # convert to NDF prior to processing. If there are some FITS and
+    # some NDF we have to decide whether that is okay. Read all the FITS
+    # headers and then decide whether they are all raw or all processed.
+
+    # Now count NDF vs FITS
+    my $nfits = 0;
+    my $nsdf = 0;
+    for my $f (@files) {
+        if ($f =~ /\.f\w+$/) {
+            $nfits++;
+        }
+        elsif ($f =~ /\.sdf$/) {
+            $nsdf++;
+        }
     }
-    if (@new) {
-      @files = @new;
 
-      # Scan the directory again, so that it includes the converted files
-      # and we don't mistake them for new pipeline products.
-      %post_retrieve = scan_dir();
-    } else {
-      die "No files left to process after conversion to NDF";
+    if (($nfits != @files) && ($nsdf != @files)) {
+        # mixed NDF and FITS
+        die "There are $nfits FITS files and $nsdf NDFs out of ".@files.
+            " files and this is a bit confusing";
     }
-  }
 
-} else {
+    # FITS headers, indexed by filename
+    my %FITS = read_headers( @files );
+    if (keys %FITS == 0) {
+        die "Could not open any of the supplied files to read headers: " .
+            join(", ",@files);
+    }
+    elsif (keys %FITS != @files) {
+        die "Some files could not be read: " .
+            join(', ', grep {not exists $FITS{$_}} @files);
+    }
 
-  %post_retrieve = scan_dir();
-  $useoracdr = 1;
-  $oracinst = $instrument;
+    # Decide on ORAC-DR vs PICARD
+    # FITS files are not processable by ORAC-DR and are not archived as
+    # such at CADC NDF are processed by ORAC-DR unless they have PRODUCT
+    # headers. No check is made for filename compliance with raw time
+    # series ICD.
 
+    # Get PRODUCT information
+    my ($nproduct, %products) = get_header_value("PRODUCT", values %FITS);
+
+    $useoracdr = 0;
+    if ($nfits == @files) {
+        # All of them are FITS so we must use PICARD
+        log_message("Got $nfits fits - using PICARD\n");
+    }
+    elsif ($nsdf == @files) {
+        # we have NDFs so we need to open them and look for PRODUCT
+        # headers Should we check to make sure that the PRODUCT headers
+        # match?
+        log_message("Got $nsdf NDF\n");
+        if ($nproduct == 0) {
+            # oracdr - assume these are raw data. They may be data processed
+            # outside of the DR
+            $useoracdr = 1;
+        }
+    }
+
+    # Analyze product information for non-ORAC-DR case
+    if (!$useoracdr) {
+        if ($nproduct == @files) {
+            # check product values
+            if (keys %products > 1) {
+                log_warning("Processing different products in a single run may be " .
+                            "incorrect. (".  join(",",keys %products).")\n");
+            }
+        }
+        elsif ($nproduct == 0) {
+            die "None of the input files contained PRODUCT FITS headers";
+
+        }
+        else {
+            die "There are $nproduct headers in ".@files.
+              ", making it difficult to determine whether to run ORAC-DR or PICARD";
+        }
+    }
+
+    if ($useoracdr) {
+        $oracinst = determine_instrument(\%FITS);
+    }
+
+    # Convert FITS files into NDF and update name supplied to DR. We
+    # could do this before we read the FITS headers but it is more
+    # efficient to delay conversion in case some other error condition
+    # is hit first. Conversion will take a non-trivial amount of time
+    if ($nfits > 0) {
+        my @new;
+        for my $f (@files) {
+            if (looks_like_cadcfile( $f )) {
+                my $out = convert_to_ndf( $f );
+                if ($out) {
+                    push(@new, $out );
+                }
+            } else {
+                log_warning("File $f does not use the CADC naming convention. " .
+                            "Skipping.\n");
+            }
+        }
+        if (@new) {
+            @files = @new;
+
+            # Scan the directory again, so that it includes the converted files
+            # and we don't mistake them for new pipeline products.
+            %post_retrieve = scan_dir();
+        }
+        else {
+            die "No files left to process after conversion to NDF";
+        }
+    }
+}
+else {
+    %post_retrieve = scan_dir();
+    $useoracdr = 1;
+    $oracinst = $instrument;
 }
 
 run_pipeline($useoracdr, $oracinst, $indir, $outdir,
@@ -541,37 +545,37 @@ run_pipeline($useoracdr, $oracinst, $indir, $outdir,
 
 # scan the directory again
 my %post_process = scan_dir();
-my @drfiles = compare_file_lists( \%post_retrieve, \%post_process );
+my @drfiles = compare_file_lists(\%post_retrieve, \%post_process);
 
 # Read all the FITS headers from these files
-my %drhdrs = read_headers( @drfiles );
+my %drhdrs = read_headers(@drfiles);
 
 # And convert those files that have valid PRODUCT headers.
-convert_dr_files( \%drhdrs, { "mode" => $mode, dpid => $id,
-                              dpdate => DateTime->now->datetime } );
+convert_dr_files(\%drhdrs, {"mode" => $mode, dpid => $id,
+                            dpdate => DateTime->now->datetime});
 
 # TEMPORARY HACK: copy all log.* files into the ORAC_LOGDIR if defined.
 if (exists $ENV{'ORAC_LOGDIR'}) {
-  my $output_dir = $ENV{'ORAC_LOGDIR'};
-  my %logfiles = scan_dir(qr/log\./);
-  foreach my $f (keys %logfiles) {
-      copy($f, $output_dir) or die "copy from $f to $output_dir failed: $!";
-  }
+    my $output_dir = $ENV{'ORAC_LOGDIR'};
+    my %logfiles = scan_dir(qr/log\./);
+    foreach my $f (keys %logfiles) {
+        copy($f, $output_dir) or die "copy from $f to $output_dir failed: $!";
+    }
 }
 
 log_listing('pre-cleanup', '.') if $debugxfer;
 
 if ($cleanup eq 'cadc') {
-  clean_directory_pre_capture($outdir, \%all_existing_files,
-                              \&looks_like_cadcfile);
+    clean_directory_pre_capture($outdir, \%all_existing_files,
+                                \&looks_like_cadcfile);
 
-  # If working in a temporary directory (e.g. at CADC) or a
-  # specified output directory (e.g. in the jsa_proc system), make sure
-  # all the retrieved files have been deleted.  If we are working
-  # on processed data with PICARD then we don't want to send back
-  # the original files.
-  unlink grep {-e $_} map {File::Spec->catfile($outdir, $_)} @files_retrieved
-      if ($tmpdir or $specified_outdir);
+    # If working in a temporary directory (e.g. at CADC) or a
+    # specified output directory (e.g. in the jsa_proc system), make sure
+    # all the retrieved files have been deleted.  If we are working
+    # on processed data with PICARD then we don't want to send back
+    # the original files.
+    unlink grep {-e $_} map {File::Spec->catfile($outdir, $_)} @files_retrieved
+        if ($tmpdir or $specified_outdir);
 }
 
 log_listing('post-cleanup', '.') if $debugxfer;
@@ -643,4 +647,3 @@ this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 Place,Suite 330, Boston, MA  02111-1307, USA
 
 =cut
-

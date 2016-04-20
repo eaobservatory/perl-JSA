@@ -8,9 +8,9 @@ JSA::DB::Sybase - Connects to a Sybase database server
 
 =head1 SYNOPSIS
 
-  use JSA::DB::Sybase qw[ connect_to_db ];
+    use JSA::DB::Sybase qw/connect_to_db/;
 
-  $dbh = connect_to_db( $ini_config_file );
+    $dbh = connect_to_db($ini_config_file);
 
 
 =head1 DESCRIPTION
@@ -26,22 +26,23 @@ Database handles are released at the end of the program via C<END>.
 
 =cut
 
-use strict; use warnings;
+use strict;
+use warnings;
 
-use Carp qw[ croak ];
-use Exporter qw[ import ];
+use Carp qw/croak/;
+use Exporter qw/import/;
 use Log::Log4perl;
 
 use OMP::Config;
 
-our @EXPORT_OK = qw[ connect_to_db ];
+our @EXPORT_OK = qw/connect_to_db/;
 
 $OMP::Config::DEBUG = 0;
 
 {
-  my $omp_cf;
-  my %_handles;
-  my %_log;
+    my $omp_cf;
+    my %_handles;
+    my %_log;
 
 =item B<connect_to_db>
 
@@ -65,82 +66,71 @@ given database.
 
 =cut
 
-  sub connect_to_db {
+    sub connect_to_db {
+        my ($config, $name) = @_;
 
-    my ( $config, $name ) = @_;
+        $omp_cf ||= OMP::Config->new;
 
-    $omp_cf ||= OMP::Config->new;
+        $omp_cf->configDatabase($config);
 
-    $omp_cf->configDatabase( $config );
+        my ($server, $db, $user, $pass) =
+            map {$omp_cf->getData("database.$_")}
+                qw/server  database  user  password/;
 
-    my ( $server, $db, $user, $pass ) =
-      map
-        { $omp_cf->getData( "database.$_" ) }
-        qw[ server  database  user  password ];
+        my $key = join ':', ($name ? $name : '', $server, $db, $user);
 
-    my $key = join ':', ( $name ? $name : '', $server, $db, $user );
+        my $log = Log::Log4perl->get_logger('');
 
-    my $log = Log::Log4perl->get_logger( '' );
+        my $log_text = "Connecting to ${server}..${db} as ${user}\n";
+        unless (exists $_log{$log_text}) {
+            $log->info($log_text);
+            $_log{$log_text}++;
+        };
 
-    my $log_text = "Connecting to ${server}..${db} as ${user}\n";
-    exists $_log{ $log_text }
-      or do {
-              $log->info( $log_text );
-              $_log{ $log_text }++;
-            };
+        if (exists $_handles{$key} && $_handles{$key}) {
+            #$log->trace("  found cached connection");
+            return $_handles{ $key };
+        }
 
-    if ( exists $_handles{ $key } && $_handles{ $key } ) {
+        require DBI;
 
-      #$log->trace( "  found cached connection" );
-      return $_handles{ $key };
+        my $dbh = DBI->connect("dbi:Sybase:server=$server" , $user, $pass, {
+            'RaiseError' => 1,
+            'PrintError' => 0,
+            'AutoCommit' => 1,
+        }) or $log->logcroak( $DBI::errstr );
+
+        for ($dbh) {
+            $_->{'syb_show_sql'} = 1;
+            $_->{'syb_show_eed'} = 1;
+
+            $_->do("use $db") or $log->logdie($_->errstr);
+        }
+
+        $_handles{$key} = $dbh;
+
+        return $dbh ;
     }
 
-    require DBI;
+    sub _release_dbh {
+        my $log = Log::Log4perl->get_logger('');
 
-    my $dbh =
-      DBI->connect( "dbi:Sybase:server=$server" , $user, $pass,
-                    { 'RaiseError' => 1,
-                      'PrintError' => 0,
-                      'AutoCommit' => 1,
-                    }
-                  )
-        or $log->logcroak( $DBI::errstr );
+        foreach my $k (keys %_handles) {
+            my $v = $_handles{$k};
 
-    for ( $dbh )
-    {
-      $_->{'syb_show_sql'} = 1 ;
-      $_->{'syb_show_eed'} = 1 ;
+            if ($v) {
+                $v->disconnect()
+                    or $log->warn("Problem disconnecting from $k: " , $v->errstr());
 
-      $_->do( "use $db" ) or $log->logdie( $_->errstr );
+                undef $v;
+            }
+        }
+
+        return
     }
-
-    $_handles{ $key } = $dbh;
-
-    return $dbh ;
-  }
-
-  sub _release_dbh {
-
-    my $log = Log::Log4perl->get_logger( '' );
-
-    for my $k ( keys %_handles ) {
-
-      my $v = $_handles{ $k };
-
-      if ( $v ) {
-
-        $v->disconnect()
-          or $log->warn( "Problem disconnecting from $k: " , $v->errstr() );
-
-        undef $v;
-      }
-    }
-    return
-  }
-
 }
 
-END { _release_dbh(); }
+END {_release_dbh();}
 
 
 1;
@@ -188,4 +178,3 @@ this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 Place,Suite 330, Boston, MA  02111-1307, USA
 
 =cut
-

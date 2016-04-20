@@ -5,38 +5,34 @@ use warnings;
 
 our $DEBUG;
 
-my %_default =
- ( 'debug' => 0,
- );
+my %_default = (
+    'debug' => 0,
+);
 
 sub new {
+    my ($class, %args) = @_;
 
-  my ( $class, %args ) = @_;
+    my $obj = bless {}, $class;
 
-  my $obj = bless {}, $class;
-
-  for my $k ( keys %_default ) {
-
-    if ( my $sub = $obj->can( $k ) ) {
-
-      $obj->$sub( exists $args{ $k } ? $args{ $k } : $_default{ $k } );
+    foreach my $k (keys %_default) {
+        if (my $sub = $obj->can($k)) {
+            $obj->$sub(exists $args{$k} ? $args{$k} : $_default{$k});
+        }
     }
-  }
 
-  return $obj;
+    return $obj;
 }
 
 # It is in addition to direct access to
 # $JSA::EnterData::Instrument::DEBUG.
 sub debug {
+    my $self = shift @_;
 
-  my $self = shift @_;
+    return $DEBUG
+        unless scalar @_;
 
-  return $DEBUG
-    unless scalar @_;
-
-  $DEBUG = !! $_[0];
-  return;
+    $DEBUG = !! $_[0];
+    return;
 }
 
 1;
@@ -45,5 +41,3 @@ sub debug {
 
 
 =cut
-
-

@@ -5,61 +5,59 @@ use strict; use warnings;
 our $VERSION = '0.01';
 
 use Exporter 'import';
-our @EXPORT_OK = qw( get_asn_id );
+our @EXPORT_OK = qw/get_asn_id/;
 
 use Log::Log4perl;
 
-use JSA::Error       qw[ :try ];
+use JSA::Error qw/:try/;
 use JSA::Headers     (); #get_orac_instrument
 use ORAC::Inst::Defn (); #orac_determine_inst_classes
 
 my %loaded;
 
 sub get_asn_id {
+    my ($obs) = @_;
 
-  my ( $obs ) = @_;
+    my $orac_inst = JSA::Headers::get_orac_instrument($obs->fits());
+    my ($frame_class, $group, $cal, $inst) =
+        ORAC::Inst::Defn::orac_determine_inst_classes($orac_inst);
 
-  my $orac_inst = JSA::Headers::get_orac_instrument( $obs->fits() );
-  my ( $frame_class, $group, $cal, $inst ) =
-    ORAC::Inst::Defn::orac_determine_inst_classes( $orac_inst );
+    my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger( '' );
-
-  unless ( exists $loaded{ $frame_class } ) {
-
-    ( my $load = $frame_class ) =~ s{::}{/}g;
-    $load .= q[.pm];
-    eval { require $load; 1; }
-      or $log->logcroak( "Could not load '$frame_class' class: ", $@  );
-  }
-
-  my $headers = $obs->hdrhash();
-
-  $ENV{'ORAC_INSTRUMENT'} =
-    exists $headers->{'SUBSYSNR'} && defined $headers->{'SUBSYSNR'}
-    && JSA::EnterData::SCUBA2->name_is_scuba2( $obs->backend() )
-    ? 'SCUBA2_' . $headers->{'SUBSYSNR'}
-    : ''
-    ;
-
-  my %out;
-  for my $subsys ( $obs->subsystems() ) {
-
-    my @idss = $subsys->obsidss();
-    my $idss = $idss[0];
-    unless ( $idss ) {
-
-      $log->warn( 'Cannot find OBDISS for an observation.' );
-      next;
+    unless (exists $loaded{$frame_class}) {
+        (my $load = $frame_class) =~ s/::/\//g;
+        $load .= '.pm';
+        eval {
+            require $load; 1;
+        } or $log->logcroak("Could not load '$frame_class' class: ", $@);
     }
 
-    my $frame = $frame_class->new();
-    $frame->configure( [ $subsys->filename() ] );
+    my $headers = $obs->hdrhash();
 
-    my $id =  $frame->jsa_pub_asn_id() or next;
-    push @{ $out{ $idss } }, $id;
-  }
-  return %out;
+    $ENV{'ORAC_INSTRUMENT'} =
+        exists $headers->{'SUBSYSNR'} && defined $headers->{'SUBSYSNR'}
+        && JSA::EnterData::SCUBA2->name_is_scuba2($obs->backend())
+            ? 'SCUBA2_' . $headers->{'SUBSYSNR'}
+            : '';
+
+    my %out;
+    for my $subsys ($obs->subsystems()) {
+        my @idss = $subsys->obsidss();
+        my $idss = $idss[0];
+
+        unless ($idss) {
+            $log->warn('Cannot find OBDISS for an observation.');
+            next;
+        }
+
+        my $frame = $frame_class->new();
+        $frame->configure([$subsys->filename()]);
+
+        my $id =  $frame->jsa_pub_asn_id() or next;
+        push @{$out{$idss}}, $id;
+    }
+
+    return %out;
 }
 
 1;
@@ -76,8 +74,8 @@ JSA::EnterData::Assoc - Find asn_id.
 
 To get ASN ID for ACSIS(HARP) or SCUBA2 instrument ...
 
-  use  JSA::EnterData::Assoc;
-  $asn_list = JSA::EnterData::Assoc::get_asn_id( $obs );
+    use JSA::EnterData::Assoc;
+    $asn_list = JSA::EnterData::Assoc::get_asn_id($obs);
 
 =head1  DESCRIPTION
 
@@ -92,7 +90,7 @@ Currently it is a function based module. Nothing is exported by default.
 Given a L<OMP::Info::Obs> object, returns a hash of C<obsid_subsysnr> as keys
 asn ASN ID as array reference values. It can be imported in your code.
 
- $list = get_asn_id( $obs );
+   $list = get_asn_id($obs);
 
 =back
 
@@ -127,4 +125,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

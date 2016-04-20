@@ -6,7 +6,7 @@ jsasubmit - Submit a job to the CADC GridEngine for JSA processing.
 
 =head1 SYNOPSIS
 
-  jsasubmit -ut 20080705
+    jsasubmit -ut 20080705
 
 =head1 DESCRIPTION
 
@@ -77,23 +77,24 @@ Print version information.
 =cut
 
 
-use JAC::Setup qw/ omp sybase /;
+use JAC::Setup qw/omp sybase/;
 
 use strict;
 use warnings;
 
 use JSA::CADC_Copy;
-use JSA::Submission qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
-                       adjust_header adjust_header_freq assign_to_group
-                       determine_frame_class determine_resource_requirement
-                       echo_messages find_observations get_obsidss
-                       log_message obs_is_fts2_or_pol2_RECIPE
-                       prepare_archive_db send_log_email submit_jobs
-                       write_log_file/;
+use JSA::Submission qw/
+    %DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
+    adjust_header adjust_header_freq assign_to_group
+    determine_frame_class determine_resource_requirement
+    echo_messages find_observations get_obsidss
+    log_message obs_is_fts2_or_pol2_RECIPE
+    prepare_archive_db send_log_email submit_jobs
+    write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 use OMP::Info::Obs;
-use OMP::Constants qw/ :obs /;
+use OMP::Constants qw/:obs/;
 
 use Getopt::Long;
 use Pod::Usage;
@@ -101,32 +102,33 @@ use Pod::Usage;
 prepare_archive_db();
 
 # Handle command-line options.
-my ( $help, $man, $project, $ut, $version, $priority, $noemail, $debug,
-     $queue, $local, $local_only_info, $task );
-my $status = GetOptions( "help"      => \$help,
-                         "man"       => \$man,
-                         "project=s" => \$project,
-                         "ut=s"      => \$ut,
-                         "priority=i"=> \$priority,
-                         "version"   => \$version,
-                         "debug"     => \$debug,
-                         "noemail"   => \$noemail,
-                         "queue=s"   => \$queue,
-                         'local'     => \$local,
-                         'task=s'    => \$task,
-                         'local-add-info' => \$local_only_info,
-                       );
+my ($help, $man, $project, $ut, $version, $priority, $noemail, $debug,
+    $queue, $local, $local_only_info, $task );
+my $status = GetOptions(
+    "help"      => \$help,
+    "man"       => \$man,
+    "project=s" => \$project,
+    "ut=s"      => \$ut,
+    "priority=i"=> \$priority,
+    "version"   => \$version,
+    "debug"     => \$debug,
+    "noemail"   => \$noemail,
+    "queue=s"   => \$queue,
+    'local'     => \$local,
+    'task=s'    => \$task,
+    'local-add-info' => \$local_only_info,
+);
 
 # If asked to update local info, do not try to submit anything to CADC.
 $local = 1 if $local_only_info;
 
-pod2usage( 1 ) if $help;
-pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+pod2usage(1) if $help;
+pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
-if( $version ) {
-  print "Submit a job to the CADC GridEngine for JSA processing.\n";
-  print " Source code revision: 0.01\n";
-  exit;
+if ($version) {
+    print "Submit a job to the CADC GridEngine for JSA processing.\n";
+    print " Source code revision: 0.01\n";
+    exit;
 }
 
 if (not defined $task) {
@@ -147,155 +149,149 @@ my $atCADC = ($mode eq 'night' and not $local)
            ? JSA::CADC_Copy::at_cadc($ut)
            : undef;
 
-if( scalar( @{$grp->obs} ) == 0 ) {
-  log_message( "No observations were retrieved from the database.\n");
-} else {
-  log_message( scalar( @{$grp->obs} ) . " observations were retrieved from the database.\n\n");
+if (scalar(@{$grp->obs}) == 0) {
+    log_message("No observations were retrieved from the database.\n");
+}
+else {
+    log_message(scalar(@{$grp->obs}) . " observations were retrieved from the database.\n\n");
 
-  # Group information hash for submit_jobs().
-  my %groups;
+    # Group information hash for submit_jobs().
+    my %groups;
 
-  foreach my $obs ( $grp->obs ) {
+    foreach my $obs ($grp->obs) {
+        my $hdr = $obs->hdrhash;
 
-    my $hdr = $obs->hdrhash;
-
-    my $obstype = uc( $hdr->{'OBS_TYPE'} );
-    my $instrume = uc( $hdr->{'INSTRUME'} );
-    my $backend = uc( $hdr->{'BACKEND'} );
-    my $project = uc( $hdr->{'PROJECT'} );
+        my $obstype = uc( $hdr->{'OBS_TYPE'} );
+        my $instrume = uc( $hdr->{'INSTRUME'} );
+        my $backend = uc( $hdr->{'BACKEND'} );
+        my $project = uc( $hdr->{'PROJECT'} );
 
 
-    # Don't submit EC jobs for processing except for special calibration observation project EC05
-    if ($project =~ /EC/i and $project !~ /EC05/i) {
-      log_message( sprintf "Skipped observation with OBSID %s because it is from engineering/comissioning project %s.\n",
-                   $obs->obsid(), $project
-                 );
-      next;
-    }
-
-    # No reduction recipe at CADC yet for (FTS|POL)-2.
-    if ( obs_is_fts2_or_pol2_RECIPE( $backend, $obs->drrecipe() ) ) {
-      log_message( sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction %s\n",
-                      $obs->obsid(),
-                      'based on recipe value'
-                  );
-      next;
-
-    }
-
-    # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
-    # ACSIS and the DAS.
-    unless (
-                ( $instrume eq 'SCUBA-2' &&
-                      ( $obstype eq 'SCIENCE' ||
-                        $obstype eq 'POINTING' ) ) ||
-                ( $backend eq 'ACSIS' && $obstype eq 'SCIENCE' ) ||
-                ( $backend eq 'DAS'   && $obstype eq 'SCIENCE' )
-           ) {
-      next;
-    }
-
-    adjust_header($hdr);
-
-    my $frameclass = determine_frame_class($obs);
-
-    # Current default values for this observation in group handling and
-    # recipe submission
-    my %current;
-
-    # If the observation is NOT GOOD we don't want to combine it with other
-    # members of the group so we just want to submit it standalone.
-    # REJECT status could arguably be included in full coadds but for now
-    # we only combine GOOD.
-
-    # Observations to be processed standalone need to be reduced in "obs" mode.
-
-    # We do not process bad observations in PROJECT mode since we assume they have
-    # already been done in NIGHT mode
-
-    my $not_in_group;
-    $current{mode} = $mode;
-    if ( $obs->status != OMP__OBS_GOOD ) {
-      # Do not care about group so add a disambiguater based on obsid
-      log_message( "Observation with OBSID ". $obs->obsid ." is not good so will not be included in a group\n" );
-      $not_in_group = 1;
-      $current{mode} = "obs";
-
-      # if the data are truly JUNK we do not want to ask CADC to process the data at
-      # all since the chances are excellent that the pipeline will fail
-      if ( $obs->status == OMP__OBS_JUNK ) {
-        log_message("Observation is junk and so will not be processed at all\n");
-        next;
-      }
-
-      # Skip to next observation unless we are in night mode
-      if ($mode ne "night") {
-        log_message("Not including this observation in $mode processing\n");
-        next;
-      }
-    }
-
-    $current{'dprecipe'} = determine_resource_requirement($obs);
-
-    # Set up recipe parameters and recipe overrides.
-    # We only do this for non-calibrator science observations
-    if ( $obstype eq 'SCIENCE' && ! $hdr->{STANDARD}) {
-      my $pid = $obs->projectid;
-      if (defined $pid) {
-        # Override the recipe?
-        if ( exists $DR_RECIPES{$pid} ) {
-          $current{drparams} = $DR_RECIPES{$pid};
+        # Don't submit EC jobs for processing except for special calibration observation project EC05
+        if ($project =~ /EC/i and $project !~ /EC05/i) {
+            log_message(sprintf "Skipped observation with OBSID %s because it is from engineering/comissioning project %s.\n",
+                                $obs->obsid(), $project);
+            next;
         }
 
-        # We use this for all modes since the parameter file is relevant
-        # for both night and project processing.
-        $current{recpars} = "recpars-$pid.ini";
-      }
+        # No reduction recipe at CADC yet for (FTS|POL)-2.
+        if (obs_is_fts2_or_pol2_RECIPE($backend, $obs->drrecipe())) {
+            log_message(sprintf "Skipped observation with OBSID %s from FTS-2/POL-2 reduction %s\n",
+                                $obs->obsid(), 'based on recipe value');
+            next;
+        }
+
+        # We process SCIENCE and POINTING for SCUBA-2, and SCIENCE for
+        # ACSIS and the DAS.
+        unless (($instrume eq 'SCUBA-2' &&
+                     ($obstype eq 'SCIENCE' ||
+                      $obstype eq 'POINTING')) ||
+                ($backend eq 'ACSIS' && $obstype eq 'SCIENCE') ||
+                ($backend eq 'DAS'   && $obstype eq 'SCIENCE')) {
+          next;
+        }
+
+        adjust_header($hdr);
+
+        my $frameclass = determine_frame_class($obs);
+
+        # Current default values for this observation in group handling and
+        # recipe submission
+        my %current;
+
+        # If the observation is NOT GOOD we don't want to combine it with other
+        # members of the group so we just want to submit it standalone.
+        # REJECT status could arguably be included in full coadds but for now
+        # we only combine GOOD.
+
+        # Observations to be processed standalone need to be reduced in "obs" mode.
+
+        # We do not process bad observations in PROJECT mode since we assume they have
+        # already been done in NIGHT mode
+
+        my $not_in_group;
+        $current{mode} = $mode;
+        if ($obs->status != OMP__OBS_GOOD) {
+            # Do not care about group so add a disambiguater based on obsid
+            log_message( "Observation with OBSID ". $obs->obsid ." is not good so will not be included in a group\n" );
+            $not_in_group = 1;
+            $current{mode} = "obs";
+
+            # if the data are truly JUNK we do not want to ask CADC to process the data at
+            # all since the chances are excellent that the pipeline will fail
+            if ( $obs->status == OMP__OBS_JUNK ) {
+                log_message("Observation is junk and so will not be processed at all\n");
+                next;
+            }
+
+            # Skip to next observation unless we are in night mode
+            if ($mode ne "night") {
+                log_message("Not including this observation in $mode processing\n");
+                next;
+            }
+        }
+
+        $current{'dprecipe'} = determine_resource_requirement($obs);
+
+        # Set up recipe parameters and recipe overrides.
+        # We only do this for non-calibrator science observations
+        if ($obstype eq 'SCIENCE' && ! $hdr->{STANDARD}) {
+            my $pid = $obs->projectid;
+            if (defined $pid) {
+                # Override the recipe?
+                if ( exists $DR_RECIPES{$pid} ) {
+                    $current{drparams} = $DR_RECIPES{$pid};
+                }
+
+                # We use this for all modes since the parameter file is relevant
+                # for both night and project processing.
+                $current{recpars} = "recpars-$pid.ini";
+            }
+        }
+
+        my @subsystems = $obs->subsystems;
+
+        for my $subsys (@subsystems) {
+            my @all_obsidss = $subsys->obsidss;
+            my $obsidss = $all_obsidss[0];
+
+            die "Error determining an OBSIDSS for an observation. Can not proceed\n"
+                unless defined $obsidss;
+
+            # local copies
+            my $obsidss_not_in_group = $not_in_group;
+            my %obsidss_current = %current;
+
+            if (exists $JUNK_OBSIDSS{$obsidss}) {
+                log_message( "Subsystem $obsidss will not be processed in any way\n");
+                next;
+            }
+
+            if (exists $BAD_OBSIDSS{$obsidss}) {
+                log_message( "Subsystem $obsidss should not be included in group processing\n" );
+                next if $mode ne "night";
+                $obsidss_not_in_group = 1;
+                $obsidss_current{mode} = "obs";
+            }
+
+            my $subsyshdr = $subsys->hdrhash;
+
+            adjust_header_freq($subsyshdr);
+
+            assign_to_group($instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
+                            $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
+                            undef, $task, create_obsinfo_hash($obs, $subsyshdr), 0, undef );
+        }
     }
 
-    my @subsystems = $obs->subsystems;
-
-    for my $subsys (@subsystems) {
-      my @all_obsidss = $subsys->obsidss;
-      my $obsidss = $all_obsidss[0];
-
-      die "Error determining an OBSIDSS for an observation. Can not proceed\n"
-        unless defined $obsidss;
-
-      # local copies
-      my $obsidss_not_in_group = $not_in_group;
-      my %obsidss_current = %current;
-
-      if (exists $JUNK_OBSIDSS{$obsidss}) {
-        log_message( "Subsystem $obsidss will not be processed in any way\n");
-        next;
-      }
-
-      if (exists $BAD_OBSIDSS{$obsidss}) {
-        log_message( "Subsystem $obsidss should not be included in group processing\n" );
-        next if $mode ne "night";
-        $obsidss_not_in_group = 1;
-        $obsidss_current{mode} = "obs";
-      }
-
-      my $subsyshdr = $subsys->hdrhash;
-
-      adjust_header_freq($subsyshdr);
-
-      assign_to_group( $instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
-                       $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
-                       undef, $task, create_obsinfo_hash($obs, $subsyshdr), 0, undef );
+    unless ($local) {
+        submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug);
+        add_jsa_proc_jobs({}, \%groups, $mode, $priority, 0, $debug);
     }
-  }
-
-  unless ($local) {
-    submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug);
-    add_jsa_proc_jobs({}, \%groups, $mode, $priority, 0, $debug);
-  }
-  else {
-    add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $local_only_info,
-                      $debug);
-  }
+    else {
+        add_jsa_proc_jobs(\%groups, {}, $mode, $priority, $local_only_info,
+                          $debug);
+    }
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $debug;

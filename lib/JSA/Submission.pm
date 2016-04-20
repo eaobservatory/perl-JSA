@@ -91,7 +91,7 @@ They will not be included in group processing.
 
 =cut
 
-our %BAD_OBSIDSS = map { $_ => undef } qw/
+our %BAD_OBSIDSS = map {$_ => undef} qw/
                      scuba2_28_20100223T051545_450
                      scuba2_29_20100223T052321_450
                      scuba2_67_20100306T152738_450
@@ -103,7 +103,7 @@ These subsystems should never be processed. Not even in night mode.
 
 =cut
 
-our %JUNK_OBSIDSS = map { $_ => undef } qw/
+our %JUNK_OBSIDSS = map {$_ => undef} qw/
                      scuba2_34_20100111T083310_450
                      scuba2_6_20091203T050120_450
                      scuba2_28_20091205T064832_450
@@ -132,17 +132,17 @@ Configure the archive database for querying.
 =cut
 
 sub prepare_archive_db {
-  # Use new JCMT database for DAS data in ACSIS format.
-  $OMP::ArcQuery::GSD_FROM_JCMT_INSTEAD = 1;
+    # Use new JCMT database for DAS data in ACSIS format.
+    $OMP::ArcQuery::GSD_FROM_JCMT_INSTEAD = 1;
 
-  # Don't fall back to files.
-  $OMP::ArchiveDB::FallbackToFiles = 0;
+    # Don't fall back to files.
+    $OMP::ArchiveDB::FallbackToFiles = 0;
 
-  # Use DB for any date.
-  $OMP::ArchiveDB::AnyDate = 1;
+    # Use DB for any date.
+    $OMP::ArchiveDB::AnyDate = 1;
 
-  # Fix search criteria to avoid being reset just before querying for data.
-  OMP::ArchiveDB->use_existing_criteria( 1 );
+    # Fix search criteria to avoid being reset just before querying for data.
+    OMP::ArchiveDB->use_existing_criteria(1);
 }
 
 =item get_obsidss
@@ -153,33 +153,37 @@ Multiple headers can be supplied
 =cut
 
 sub get_obsidss {
-  my $obsid = shift;
-  my @hdrs = @_;
+    my $obsid = shift;
+    my @hdrs = @_;
 
-  # Try not to merge headers if the answer is in the small one
-  my $obsidss;
- KEYS: for my $k ( qw/ OBSID_SUBSYSNR OBSIDSS SUBSYSNR / ) {
-    # try each key in turn
-    for my $hdr (@hdrs) {
-      if (exists $hdr->{$k}) {
-        if ($k eq 'SUBSYSNR') {
-          $obsidss = $obsid . "_" . $hdr->{$k};
+    # Try not to merge headers if the answer is in the small one
+    my $obsidss;
 
-          # HACK: SCUBA-2 has a buggy OBSIDSS in that
-          # the zero-padding is different
-          $obsidss =~ s/^scuba2_0*/scuba2_/;
+    KEYS: foreach my $k (qw/ OBSID_SUBSYSNR OBSIDSS SUBSYSNR /) {
+        # try each key in turn
+        foreach my $hdr (@hdrs) {
+            if (exists $hdr->{$k}) {
+                if ($k eq 'SUBSYSNR') {
+                    $obsidss = $obsid . "_" . $hdr->{$k};
 
-        } else {
-          $obsidss = $hdr->{$k};
+                    # HACK: SCUBA-2 has a buggy OBSIDSS in that
+                    # the zero-padding is different
+                    $obsidss =~ s/^scuba2_0*/scuba2_/;
+                }
+                else {
+                    $obsidss = $hdr->{$k};
+                }
+
+                last KEYS;
+            }
         }
-        last KEYS;
-      }
     }
-  }
-  if (!defined $obsidss) {
-    die "Could not work out OBSIDSS for ". $obsid;
-  }
-  return $obsidss;
+
+    if (!defined $obsidss) {
+      die "Could not work out OBSIDSS for ". $obsid;
+    }
+
+    return $obsidss;
 }
 
 =item assign_to_group
@@ -189,95 +193,99 @@ Assign the observation to a particular group
 =cut
 
 sub assign_to_group {
-  my $instrume = shift;
-  my $obsid = shift;
-  my $frameclass = shift;
-  my $not_in_group = shift;
-  my $hdrref = shift;
-  my $curref = shift;
-  my $fileref = shift;
-  my $groups = shift;
-  my $tagprefix = shift;
-  my $task = shift;
-  my $obsinfo = shift;
-  my $use_pub_asn = shift;
-  my $mode_override = shift;
+    my $instrume = shift;
+    my $obsid = shift;
+    my $frameclass = shift;
+    my $not_in_group = shift;
+    my $hdrref = shift;
+    my $curref = shift;
+    my $fileref = shift;
+    my $groups = shift;
+    my $tagprefix = shift;
+    my $task = shift;
+    my $obsinfo = shift;
+    my $use_pub_asn = shift;
+    my $mode_override = shift;
 
-  # Deref some hashes and arrays
-  my %current = %$curref;
-  my %tmphdr = %$hdrref;
+    # Deref some hashes and arrays
+    my %current = %$curref;
+    my %tmphdr = %$hdrref;
 
-  # Strip any paths
-  my @files = map { basename($_) } @$fileref;
+    # Strip any paths
+    my @files = map {basename($_)} @$fileref;
 
-  # Set ORAC_INSTRUMENT so SCUBA-2 works.
-  my $ORAC_INSTRUMENT = '';
-  if( exists $tmphdr{SUBSYSNR} &&
-      defined $tmphdr{SUBSYSNR}  &&
-      $instrume eq 'SCUBA-2' ) {
-    $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr{SUBSYSNR};
-  }
-  $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
+    # Set ORAC_INSTRUMENT so SCUBA-2 works.
+    my $ORAC_INSTRUMENT = '';
+    if (exists $tmphdr{SUBSYSNR} &&
+          defined $tmphdr{SUBSYSNR}  &&
+          $instrume eq 'SCUBA-2' ) {
+        $ORAC_INSTRUMENT = 'SCUBA2_' . $tmphdr{SUBSYSNR};
+    }
 
-  # if not_in_group is false then we have to determine the
-  # grouping scheme. If it is false then we need to use the OBSIDSS
-  my $group;
-  if ($not_in_group) {
-    $group = get_obsidss( $obsid, \%tmphdr );
-  } else {
-    my $frm = new $frameclass;
-    $frm->hdr( %tmphdr );
-    $frm->findgroup;
-    $group = $frm->asn_id;
+    $ENV{'ORAC_INSTRUMENT'} = $ORAC_INSTRUMENT;
 
-    # Add the (non-corrected) association identifier to the obsinfo unless
-    # it already contains an association.
-    unless (defined $obsinfo->{'association'}) {
-      unless ($use_pub_asn) {
-        $obsinfo->{'association'} = $group;
-      }
-      else {
-        # If a JSA public association identifier is requested, use
-        # it instead of the normal group string.  This method can
-        # return undef if it wants to reject a frame from JSA
-        # public processing.  Therefore also check whether this
-        # happens, and if so do not add to the group.
-        my $pub_asn = $frm->jsa_pub_asn_id();
+    # if not_in_group is false then we have to determine the
+    # grouping scheme. If it is false then we need to use the OBSIDSS
+    my $group;
+    if ($not_in_group) {
+        $group = get_obsidss($obsid, \%tmphdr);
+    }
+    else {
+        my $frm = new $frameclass;
+        $frm->hdr(%tmphdr);
+        $frm->findgroup;
+        $group = $frm->asn_id;
 
-        unless (defined $pub_asn) {
-          log_message('Rejecting observation ' .
-                      get_obsidss($obsid, \%tmphdr) .
-                      " because jsa_pub_asn_id returned undef\n");
-          return;
+        # Add the (non-corrected) association identifier to the obsinfo unless
+        # it already contains an association.
+        unless (defined $obsinfo->{'association'}) {
+            unless ($use_pub_asn) {
+                $obsinfo->{'association'} = $group;
+            }
+            else {
+                # If a JSA public association identifier is requested, use
+                # it instead of the normal group string.  This method can
+                # return undef if it wants to reject a frame from JSA
+                # public processing.  Therefore also check whether this
+                # happens, and if so do not add to the group.
+                my $pub_asn = $frm->jsa_pub_asn_id();
+
+                unless (defined $pub_asn) {
+                    log_message('Rejecting observation ' .
+                                get_obsidss($obsid, \%tmphdr) .
+                                " because jsa_pub_asn_id returned undef\n");
+                    return;
+                }
+
+                $obsinfo->{'association'} = $pub_asn;
+            }
         }
-
-        $obsinfo->{'association'} = $pub_asn;
-      }
     }
-  }
 
-  # Now correct for the association identifier
-  $tmphdr{ASN_ID} = $group;
-  $group = correct_asn_id( $current{mode}, \%tmphdr );
+    # Now correct for the association identifier
+    $tmphdr{ASN_ID} = $group;
+    $group = correct_asn_id( $current{mode}, \%tmphdr );
 
-  $group = $tagprefix . '-' . $group if defined $tagprefix;
+    $group = $tagprefix . '-' . $group if defined $tagprefix;
 
-  push @{$groups->{$group}{files}}, @files;
-  $groups->{$group}{mode} = $mode_override // $current{mode};
-  $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
-  $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
-  $groups->{$group}{'task'} = $task;
-  push @{$groups->{$group}{'obsinfolist'}}, $obsinfo;
-  # Only set if either we have no previous value for dprecipe or if the
-  # previous value is lower than the current value (so this observation
-  # needs more resources than a previous group member)
-  if (defined $current{dprecipe}) {
-    if (!exists $groups->{$group}{dprecipe} ||
-        (exists $groups->{$group}{dprecipe} && $groups->{$group}{dprecipe} < $current{dprecipe})) {
-      $groups->{$group}{dprecipe} = $current{dprecipe};
+    push @{$groups->{$group}{files}}, @files;
+    $groups->{$group}{mode} = $mode_override // $current{mode};
+    $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
+    $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
+    $groups->{$group}{'task'} = $task;
+    push @{$groups->{$group}{'obsinfolist'}}, $obsinfo;
+    # Only set if either we have no previous value for dprecipe or if the
+    # previous value is lower than the current value (so this observation
+    # needs more resources than a previous group member)
+    if (defined $current{dprecipe}) {
+        if (! exists $groups->{$group}{dprecipe}
+              || (exists $groups->{$group}{dprecipe}
+                  && $groups->{$group}{dprecipe} < $current{dprecipe})) {
+            $groups->{$group}{dprecipe} = $current{dprecipe};
+        }
     }
-  }
-  return $group;
+
+    return $group;
 }
 
 =item obs_is_fts2_or_pol2_RECIPE
@@ -287,30 +295,29 @@ Tell if an observation is FTS-2 or POL-2 type by recipe.
 =cut
 
 {
-  my %skip_recipe;
+    my %skip_recipe;
 
-  sub obs_is_fts2_or_pol2_RECIPE {
+    sub obs_is_fts2_or_pol2_RECIPE {
+        my ($backend, $recipe) = @_;
 
-    my ( $backend, $recipe ) = @_;
+        return unless (defined $recipe
+                       && defined $backend
+                       && $backend =~ m/^ scuba-?2 $/xi);
 
-    defined $recipe && defined $backend && $backend =~ m{^ scuba-?2 $}xi
-      or return;
+        unless (keys %skip_recipe) {
+            %skip_recipe = map {$_ => undef} qw/REDUCE_FTS2
+                                                REDUCE_FTS_FOCUS
+                                                REDUCE_FTS_POINTING
+                                                REDUCE_FTS_SCAN
+                                                REDUCE_FTS_ZPD
+                                                REDUCE_POL_SCAN
+                                                REDUCE_POL_STARE
+                                                REDUCE_DREAMSTARE
+                                               /;
+        }
 
-    unless ( keys %skip_recipe ) {
-
-      %skip_recipe = map { $_ => undef } qw(  REDUCE_FTS2
-                                              REDUCE_FTS_FOCUS
-                                              REDUCE_FTS_POINTING
-                                              REDUCE_FTS_SCAN
-                                              REDUCE_FTS_ZPD
-                                              REDUCE_POL_SCAN
-                                              REDUCE_POL_STARE
-                                              REDUCE_DREAMSTARE
-                                            );
+        return exists $skip_recipe{uc $recipe};
     }
-
-    return exists $skip_recipe{ uc $recipe };
-  }
 }
 
 =item echo_messages($echo)
@@ -328,25 +335,25 @@ Return all cached messages.
 =cut
 
 {
-  # Cache for messages, or we just print them straight out
-  my @MESSAGES;
-  my $ECHO = 0;
+    # Cache for messages, or we just print them straight out
+    my @MESSAGES;
+    my $ECHO = 0;
 
-  sub echo_messages {
-    $ECHO = shift;
-  }
-
-  sub log_message {
-    my @msg = @_;
-    if ($ECHO) {
-      print @msg;
+    sub echo_messages {
+        $ECHO = shift;
     }
-    push(@MESSAGES, @msg);
-  }
 
-  sub all_messages {
-    return @MESSAGES;
-  }
+    sub log_message {
+        my @msg = @_;
+        if ($ECHO) {
+            print @msg;
+        }
+        push(@MESSAGES, @msg);
+    }
+
+    sub all_messages {
+        return @MESSAGES;
+    }
 }
 
 =item write_log_file
@@ -356,23 +363,26 @@ Write to the logging directory.
 =cut
 
 sub write_log_file {
-  my $title = shift;
-  my $ut = shift;
-  my $project = shift;
+    my $title = shift;
+    my $ut = shift;
+    my $project = shift;
 
-  my $logdir = "/jac_logs/jsa";
-  my $froot = $title .
-    (defined $ut      ? '-' . $ut      : '') .
-    (defined $project ? '-' . $project : '') . ".log";
-  my $outfile = File::Spec->catfile( $logdir, $froot );
-  if (-d $logdir) {
-    if (open( my $logfh, ">", $outfile ) ) {
-      for my $msg (all_messages()) {
-        print $logfh $msg;
-      }
-      close $logfh;
+    my $logdir = "/jac_logs/jsa";
+    my $froot = $title .
+        (defined $ut      ? '-' . $ut      : '') .
+        (defined $project ? '-' . $project : '') . ".log";
+
+    my $outfile = File::Spec->catfile($logdir, $froot);
+
+    if (-d $logdir) {
+        if (open(my $logfh, ">", $outfile)) {
+            for my $msg (all_messages()) {
+                print $logfh $msg;
+            }
+
+            close $logfh;
+        }
     }
-  }
 }
 
 =item send_log_email
@@ -382,89 +392,90 @@ Send the email.
 =cut
 
 sub send_log_email {
-  my $title = shift;
-  my $ut = shift;
-  my $project = shift;
+    my $title = shift;
+    my $ut = shift;
+    my $project = shift;
 
-  my $MAILHOST = 'malama.eao.hawaii.edu';
-  my $MAILTO = 'jcmt_archive@eao.hawaii.edu';
-  my $MAILFROM = 'jcmt_archive@eao.hawaii.edu';
+    my $MAILHOST = 'malama.eao.hawaii.edu';
+    my $MAILTO = 'jcmt_archive@eao.hawaii.edu';
+    my $MAILFROM = 'jcmt_archive@eao.hawaii.edu';
 
-  my $smtp = Net::SMTP->new( $MAILHOST );
-  $smtp->mail( $MAILFROM );
-  $smtp->to( $MAILTO );
+    my $smtp = Net::SMTP->new($MAILHOST);
+    $smtp->mail($MAILFROM);
+    $smtp->to($MAILTO);
 
-  $smtp->data();
-  $smtp->datasend( "To: $MAILTO\n" );
-  $smtp->datasend("Subject: " . $title . ' for' .
-    (defined($ut)      ? ' ' . $ut      : '') .
-    (defined($project) ? ' ' . $project : '') . "\n");
-  $smtp->datasend("\n");
-  $smtp->datasend( all_messages() );
+    $smtp->data();
+    $smtp->datasend("To: $MAILTO\n");
+    $smtp->datasend("Subject: " . $title . ' for' .
+        (defined($ut)      ? ' ' . $ut      : '') .
+        (defined($project) ? ' ' . $project : '') . "\n");
+    $smtp->datasend("\n");
+    $smtp->datasend(all_messages());
 
-  $smtp->quit;
+    $smtp->quit;
 }
 
 =item find_observations($ut, $project, $priority)
 
 Determines the mode of operation and retieves the observation group.
 
-  ($mode, $grp) = find_observations($ut, $project);
+    ($mode, $grp) = find_observations($ut, $project);
 
 The project should already be in upper case.
 
 =cut
 
 sub find_observations {
-  my $ut = shift;
-  my $project = shift;
-  my $priority = shift;
-  my $title = shift;
+    my $ut = shift;
+    my $project = shift;
+    my $priority = shift;
+    my $title = shift;
 
-  my ($mode, $grp);
+    my ($mode, $grp);
 
-  # Make sure the UT or Project parameter is defined.
-  unless (defined $ut || defined $project) {
-    die "Must include either -ut or -project parameter";
-  }
-
-  my $pristring = 'with default priority';
-  if (defined $priority) {
-    $pristring = "with priority $priority";
-  }
-
-  if (defined($ut)) {
-    $mode = "night";
-    log_message("Running $title for UT date $ut $pristring.\n");
-  }
-  else  {
-    $mode = "project";
-    log_message("Running $title for project $project $pristring.\n");
-  }
-
-  die "Project '$project' does not seem to exist in the database.\n"
-    if (defined $project) && (! OMP::ProjServer->verifyProject($project));
-
-  my %query = (
-                nocomments => 0,
-                retainhdr => 1,
-  );
-
-  if( $mode eq 'project' ) {
-    $query{'projectid'} = $project;
-  } else {
-    $query{'telescope'} = 'JCMT';
-    $query{'date'} = $ut;
-
-    if (defined $project) {
-      log_message("Selecting observations for project $project.\n");
-      $query{'projectid'} = $project;
+    # Make sure the UT or Project parameter is defined.
+    unless (defined $ut || defined $project) {
+        die "Must include either -ut or -project parameter";
     }
-  }
 
-  $grp = new OMP::Info::ObsGroup(%query);
+    my $pristring = 'with default priority';
+    if (defined $priority) {
+        $pristring = "with priority $priority";
+    }
 
-  return ($mode, $grp);
+    if (defined($ut)) {
+        $mode = "night";
+        log_message("Running $title for UT date $ut $pristring.\n");
+    }
+    else  {
+        $mode = "project";
+        log_message("Running $title for project $project $pristring.\n");
+    }
+
+    die "Project '$project' does not seem to exist in the database.\n"
+        if (defined $project) && (! OMP::ProjServer->verifyProject($project));
+
+    my %query = (
+                  nocomments => 0,
+                  retainhdr => 1,
+    );
+
+    if( $mode eq 'project' ) {
+        $query{'projectid'} = $project;
+    }
+    else {
+        $query{'telescope'} = 'JCMT';
+        $query{'date'} = $ut;
+
+        if (defined $project) {
+            log_message("Selecting observations for project $project.\n");
+            $query{'projectid'} = $project;
+        }
+    }
+
+    $grp = new OMP::Info::ObsGroup(%query);
+
+    return ($mode, $grp);
 }
 
 =item adjust_header(\%hdr)
@@ -489,38 +500,39 @@ entries.
 =cut
 
 sub adjust_header {
-  my $hdr = shift;
+    my $hdr = shift;
 
-  # Check to see if we have OBSRA and OBSDEC. If they're defined,
-  # the tracking system is J2000. Otherwise it's APP.
-  if( ! defined( $hdr->{'TRACKSYS'} ) ) {
-    if( defined( $hdr->{'OBSRA'} ) &&
-        defined( $hdr->{'OBSDEC'} ) ) {
-      $hdr->{'TRACKSYS'} = 'J2000';
-    } else {
-      $hdr->{'TRACKSYS'} = 'APP';
+    # Check to see if we have OBSRA and OBSDEC. If they're defined,
+    # the tracking system is J2000. Otherwise it's APP.
+    if (! defined($hdr->{'TRACKSYS'})) {
+        if (defined( $hdr->{'OBSRA'}) &&
+                defined( $hdr->{'OBSDEC'})) {
+            $hdr->{'TRACKSYS'} = 'J2000';
+        }
+        else {
+            $hdr->{'TRACKSYS'} = 'APP';
+        }
     }
-  }
 
-  # OBSRA and OBSDEC are always ICRS so we have to be careful
-  # if we switch to GALACTIC. The safest solution is to add
-  # BASEC1, BASEC2 and TRACKSYS to the database table since those
-  # are the values used by ORAC-DR group assignment (although only
-  # for night mode in reality).
-  if( defined( $hdr->{'OBSRA'} ) ) {
-    $hdr->{'BASEC1'} = $hdr->{'OBSRA'};
-  }
-  if( defined( $hdr->{'OBSDEC'} ) ) {
-    $hdr->{'BASEC2'} = $hdr->{'OBSDEC'};
-  }
+    # OBSRA and OBSDEC are always ICRS so we have to be careful
+    # if we switch to GALACTIC. The safest solution is to add
+    # BASEC1, BASEC2 and TRACKSYS to the database table since those
+    # are the values used by ORAC-DR group assignment (although only
+    # for night mode in reality).
+    if (defined( $hdr->{'OBSRA'})) {
+        $hdr->{'BASEC1'} = $hdr->{'OBSRA'};
+    }
+    if (defined( $hdr->{'OBSDEC'})) {
+        $hdr->{'BASEC2'} = $hdr->{'OBSDEC'};
+    }
 
-  adjust_header_freq($hdr);
+    adjust_header_freq($hdr);
 
-  # The database will not have a SIMULATE header so assume
-  # it is false.
-  if( ! defined( $hdr->{'SIMULATE'} ) ) {
-    $hdr->{'SIMULATE'} = 0;
-  }
+    # The database will not have a SIMULATE header so assume
+    # it is false.
+    unless (defined($hdr->{'SIMULATE'})) {
+        $hdr->{'SIMULATE'} = 0;
+    }
 }
 
 =item adjust_header_freq(\%hdr)
@@ -538,14 +550,14 @@ Adjusts the header (in place) to set certain entries:
 =cut
 
 sub adjust_header_freq {
-  my $hdr = shift;
+    my $hdr = shift;
 
-  if( defined( $hdr->{'FREQ_SIG_LOWER'} ) ) {
-    $hdr->{'FRQSIGLO'} = $hdr->{'FREQ_SIG_LOWER'};
-  }
-  if( defined( $hdr->{'FREQ_SIG_UPPER'} ) ) {
-    $hdr->{'FRQSIGHI'} = $hdr->{'FREQ_SIG_UPPER'};
-  }
+    if (defined($hdr->{'FREQ_SIG_LOWER'})) {
+        $hdr->{'FRQSIGLO'} = $hdr->{'FREQ_SIG_LOWER'};
+    }
+    if (defined($hdr->{'FREQ_SIG_UPPER'})) {
+        $hdr->{'FRQSIGHI'} = $hdr->{'FREQ_SIG_UPPER'};
+    }
 }
 
 =item determine_frame_class($obs)
@@ -555,25 +567,25 @@ Determines the ORAC-DR frame class for an observation.
 =cut
 
 {
-  # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
-  my %frameclassloaded;
+    # Hash to hold list of ORAC::Frame::<inst> classes already loaded.
+    my %frameclassloaded;
 
-  sub determine_frame_class {
-    my $obs = shift;
+    sub determine_frame_class {
+        my $obs = shift;
 
-    my ($frameclass, undef, undef, undef) =
-      orac_determine_inst_classes(get_orac_instrument($obs->fits()));
+        my ($frameclass, undef, undef, undef) =
+            orac_determine_inst_classes(get_orac_instrument($obs->fits()));
 
-    unless ($frameclassloaded{$frameclass}) {
-      my $isok = eval " require $frameclass; 1; ";
-      unless ($isok) {
-        die "Could not load $frameclass: $@\n";
-      }
-      $frameclassloaded{$frameclass}++;
+        unless ($frameclassloaded{$frameclass}) {
+            my $isok = eval "require $frameclass; 1;";
+            unless ($isok) {
+                die "Could not load $frameclass: $@\n";
+            }
+            $frameclassloaded{$frameclass} ++;
+        }
+
+        return $frameclass;
     }
-
-    return $frameclass;
-  }
 }
 
 =item determine_resource_requirement($obs)
@@ -609,35 +621,36 @@ and we'll need to switch to a 64G queue for those.
 =cut
 
 sub determine_resource_requirement {
-  my $obs = shift;
+    my $obs = shift;
 
-  my $hdr = $obs->hdrhash();
-  my $instrume = uc($hdr->{'INSTRUME'});
+    my $hdr = $obs->hdrhash();
+    my $instrume = uc($hdr->{'INSTRUME'});
 
-  my $req = JSA::CADC_DP::CADC_DPREC_8G;
+    my $req = JSA::CADC_DP::CADC_DPREC_8G;
 
-  if ( $instrume eq 'SCUBA-2' ) {
-    my $duration = $obs->endobs - $obs->startobs;
-    # We count the number of files as a surrogate for required
-    # computing resources since we know each file is roughly
-    # same length. Assume 2 subsytems.
-    my @files = $obs->filename;
-    my $nfiles = @files / 2;
-    # As of 20100929
-    # 16 files => 6.2 GB
-    # 22 files => 8.8GB
-    # 27 files => 10.7GB
-    # 62 files => 26.2 GB
-    if ($nfiles > 30) {
-      $req = JSA::CADC_DP::CADC_DPREC_64G;
-    } elsif ($nfiles > 16) {
-      $req = JSA::CADC_DP::CADC_DPREC_16G;
+    if ($instrume eq 'SCUBA-2') {
+        my $duration = $obs->endobs - $obs->startobs;
+        # We count the number of files as a surrogate for required
+        # computing resources since we know each file is roughly
+        # same length. Assume 2 subsytems.
+        my @files = $obs->filename;
+        my $nfiles = @files / 2;
+        # As of 20100929
+        # 16 files => 6.2 GB
+        # 22 files => 8.8GB
+        # 27 files => 10.7GB
+        # 62 files => 26.2 GB
+        if ($nfiles > 30) {
+            $req = JSA::CADC_DP::CADC_DPREC_64G;
+        }
+        elsif ($nfiles > 16) {
+            $req = JSA::CADC_DP::CADC_DPREC_16G;
+        }
+    } elsif ( $instrume eq 'HARP' && $hdr->{SAM_MODE} =~ /scan|raster/i) {
+        $req = JSA::CADC_DP::CADC_DPREC_16G;
     }
-  } elsif ( $instrume eq 'HARP' && $hdr->{SAM_MODE} =~ /scan|raster/i) {
-    $req = JSA::CADC_DP::CADC_DPREC_16G;
-  }
 
-  return $req;
+    return $req;
 }
 
 =item determine_s2_hpx_chunking($subsystem)
@@ -651,48 +664,48 @@ given in SciCom trac ticket #442.
 =cut
 
 {
-  my %pixel_size = (
-      450 => 1.61,
-      850 => 3.22,
-  );
+    my %pixel_size = (
+        450 => 1.61,
+        850 => 3.22,
+    );
 
-  my %max_fred = (
-      450 => 44000,
-      850 => 85000,
-  );
+    my %max_fred = (
+        450 => 44000,
+        850 => 85000,
+    );
 
-  sub determine_s2_hpx_chunking {
-    my $subsys = shift;
+    sub determine_s2_hpx_chunking {
+        my $subsys = shift;
 
-    my $hdr = $subsys->hdrhash();
+        my $hdr = $subsys->hdrhash();
 
-    my $filter = $hdr->{'FILTER'};
-    die 'Filter undefined' unless defined $filter;
-    my $svel = $hdr->{'SCAN_VEL'};
-    die 'Scan velocity undefined' unless defined $svel;
-    my $steptime = 0.0059;
+        my $filter = $hdr->{'FILTER'};
+        die 'Filter undefined' unless defined $filter;
+        my $svel = $hdr->{'SCAN_VEL'};
+        die 'Scan velocity undefined' unless defined $svel;
+        my $steptime = 0.0059;
 
-    my $pixsize = $pixel_size{$filter};
-    die 'Don\'t know pixel size for filter ' . $filter
-        unless defined $pixsize;
+        my $pixsize = $pixel_size{$filter};
+        die 'Don\'t know pixel size for filter ' . $filter
+            unless defined $pixsize;
 
-    my $max = $max_fred{$filter};
-    die 'Don\'t know max fred for filter ' . $filter
-        unless defined $max;
+        my $max = $max_fred{$filter};
+        die 'Don\'t know max fred for filter ' . $filter
+            unless defined $max;
 
-    my $scalelen = $steptime * $svel / $pixsize;
+        my $scalelen = $steptime * $svel / $pixsize;
 
-    # filename() returns the first filename if called in scalar
-    # context so we need to fetch the whole list to determine the number.
-    my @file = $subsys->filename();
-    my $nfile = scalar @file;
+        # filename() returns the first filename if called in scalar
+        # context so we need to fetch the whole list to determine the number.
+        my @file = $subsys->filename();
+        my $nfile = scalar @file;
 
-    my $fred = ($scalelen < 0.8)
-             ? ($nfile * $svel)
-             : ($nfile * $pixsize / $steptime);
+        my $fred = ($scalelen < 0.8)
+                 ? ($nfile * $svel)
+                 : ($nfile * $pixsize / $steptime);
 
-    return $fred >= $max;
-  }
+        return $fred >= $max;
+    }
 }
 
 =item submit_jobs(\%groups, $atCADC, $mode, $priority, $queue, $debug)
@@ -729,111 +742,124 @@ is added to the hash as a key "recipe_id".
 =cut
 
 sub submit_jobs {
-  my $_groups = shift;
-  my $atCADC = shift;
-  my $mode = shift;
-  my $priority = shift;
-  my $queue = shift;
-  my $debug = shift;
+    my $_groups = shift;
+    my $atCADC = shift;
+    my $mode = shift;
+    my $priority = shift;
+    my $queue = shift;
+    my $debug = shift;
 
-  my %groups = %$_groups;
+    my %groups = %$_groups;
 
-  my $dbh;
-  if ($debug) {
-    log_message( "Would be connecting to CADC data processing database here\n" );
-  } else {
-    log_message( "Connecting to CADC data processing database...");
-    $dbh = connect_to_cadcdp;
-    log_message( "connected!\n\n");
-  }
+    my $dbh;
+    if ($debug) {
+        log_message("Would be connecting to CADC data processing database here\n");
+    }
+    else {
+        log_message("Connecting to CADC data processing database...");
+        $dbh = connect_to_cadcdp;
+        log_message("connected!\n\n");
+    }
 
-  foreach my $group ( sort keys %groups ) {
-    log_message( "Requesting CADC processing of the following files:\n");
-    log_message( map { "$_\n" } @{$groups{$group}{files}});
-    my @members = map { file_to_uri( $_ ) } @{$groups{$group}{files}};
+    foreach my $group (sort keys %groups) {
+        log_message("Requesting CADC processing of the following files:\n");
+        log_message(map {"$_\n"} @{$groups{$group}{files}});
+        my @members = map {file_to_uri($_)} @{$groups{$group}{files}};
 
-    # Only check for night mode, in which case $atCADC will be defined.
-    # Otherwise assume the files are at CADC.
-    if( defined $atCADC ) {
-      log_message( "Checking to ensure files are at CADC...\n");
-      my $there = 1;
-      foreach my $file ( @{$groups{$group}{files}} ) {
-        $file =~ s/\.sdf$//;
-        if( ! exists( $atCADC->{$file} ) ) {
-          $there = 0;
-          log_message( "$file is not at CADC!\n");
+        # Only check for night mode, in which case $atCADC will be defined.
+        # Otherwise assume the files are at CADC.
+        if (defined $atCADC) {
+            log_message("Checking to ensure files are at CADC...\n");
+            my $there = 1;
+
+            foreach my $file (@{$groups{$group}{files}}) {
+                $file =~ s/\.sdf$//;
+                if (! exists( $atCADC->{$file})) {
+                    $there = 0;
+                    log_message( "$file is not at CADC!\n");
+                }
+            }
+
+            unless ($there) {
+                log_message( "One or more files from current group not at CADC.\nSkipping to next group.\n");
+                next;
+            }
+
+            log_message( "All files are at CADC. Submitting processing request.\n");
         }
-      }
-      if( ! $there ) {
-        log_message( "One or more files from current group not at CADC.\nSkipping to next group.\n");
-        next;
-      }
-      log_message( "All files are at CADC. Submitting processing request.\n");
-    }
 
-    # Submit the job.
-    my $recipe_id;
-    try {
-      my %opts;
-      $opts{'mode'} = ( exists $groups{$group}{mode} ? $groups{$group}{mode} : $mode);
-      $opts{priority} = $priority if defined $priority;
-      $opts{queue} = $queue if defined $queue;
-      if ( exists $groups{$group}{drparams} ) {
-        $opts{drparams} = $groups{$group}{drparams};
-      }
+        # Submit the job.
+        my $recipe_id;
+        try {
+            my %opts;
+            $opts{'mode'} = (exists $groups{$group}{mode} ? $groups{$group}{mode} : $mode);
+            $opts{priority} = $priority if defined $priority;
+            $opts{queue} = $queue if defined $queue;
 
-      if (exists $groups{$group}{dprecipe}) {
-        $opts{dprecipe} = $groups{$group}{dprecipe};
-      }
+            if (exists $groups{$group}{drparams}) {
+                $opts{drparams} = $groups{$group}{drparams};
+            }
 
-      # recpars could be part of drparams but for now we let the CADC_DP code handle it
-      if (exists $groups{$group}{recpars}) {
-        $opts{recpars} = $groups{$group}{recpars};
-      }
+            if (exists $groups{$group}{dprecipe}) {
+                $opts{dprecipe} = $groups{$group}{dprecipe};
+            }
 
-      $opts{tag} = $group;
+            # recpars could be part of drparams but for now we let the CADC_DP code handle it
+            if (exists $groups{$group}{recpars}) {
+                $opts{recpars} = $groups{$group}{recpars};
+            }
 
-      if ($debug) {
-        log_message( "Would be submitting job with options:\n");
-        for my $k (sort keys %opts) {
-           log_message( "\t$k : ".(defined $opts{$k} ? $opts{$k} : "<undef>")."\n");
+            $opts{tag} = $group;
+
+            if ($debug) {
+                log_message( "Would be submitting job with options:\n");
+
+                for my $k (sort keys %opts) {
+                   log_message("\t$k : ".(defined $opts{$k} ? $opts{$k} : "<undef>")."\n");
+                }
+
+                $recipe_id = "0xFabCADC";
+            }
+            else {
+                $recipe_id = create_recipe_instance($dbh, \@members, \%opts);
+            }
         }
-        $recipe_id = "0xFabCADC";
-      } else {
-        $recipe_id = create_recipe_instance( $dbh, \@members, \%opts );
-      }
-    }
-    catch JSA::Error::CADCDB with {
-      my $Error = shift;
-      log_message( "Error in CADC DB connectivity: $Error");
-      log_message( "Skipping to next group.\n");
-    }
-    otherwise {
-      my $Error = shift;
-      $Error->throw;
-    };
-    if (!defined $recipe_id) {
-      log_message( "Error submitting. No recipe id returned\n");
-      last;
-    } elsif ($recipe_id =~ /^\-/ ) {
-      $recipe_id =~ s/^\-//;
-      log_message( "*** Attempt to submit recipe update of $recipe_id with group $group failed.\n");
-    } else {
-      $groups{$group}{'recipe_id'} = $recipe_id;
-      log_message( "Request submitted with recipe instance $recipe_id.\n");
-      log_message( "Recipe URL: " . dprecinst_url($recipe_id) . "\n");
-      log_message( "\n");
-    }
-  }
+        catch JSA::Error::CADCDB with {
+            my $Error = shift;
+            log_message("Error in CADC DB connectivity: $Error");
+            log_message("Skipping to next group.\n");
+        }
+        otherwise {
+            my $Error = shift;
+            $Error->throw;
+        };
 
-  if ($debug) {
-    log_message( "Would be disconnecting from CADC data processing database here\n");
-  } else {
-    log_message( "Disconnecting from CADC data processing database...");
-    disconnect_from_cadcdp( $dbh );
-    log_message( "disconnected!\n\n");
-  }
-  log_message( "Data processing requests complete.\n");
+        if (!defined $recipe_id) {
+            log_message("Error submitting. No recipe id returned\n");
+            last;
+        }
+        elsif ($recipe_id =~ /^\-/ ) {
+            $recipe_id =~ s/^\-//;
+            log_message("*** Attempt to submit recipe update of $recipe_id with group $group failed.\n");
+        }
+        else {
+            $groups{$group}{'recipe_id'} = $recipe_id;
+            log_message("Request submitted with recipe instance $recipe_id.\n");
+            log_message("Recipe URL: " . dprecinst_url($recipe_id) . "\n");
+            log_message("\n");
+        }
+    }
+
+    if ($debug) {
+        log_message("Would be disconnecting from CADC data processing database here\n");
+    }
+    else {
+        log_message("Disconnecting from CADC data processing database...");
+        disconnect_from_cadcdp($dbh);
+        log_message("disconnected!\n\n");
+    }
+
+    log_message( "Data processing requests complete.\n");
 }
 
 =back
@@ -859,5 +885,3 @@ Place,Suite 330, Boston, MA  02111-1307, USA
 =cut
 
 1;
-
-# vim: sw=2 sts=2

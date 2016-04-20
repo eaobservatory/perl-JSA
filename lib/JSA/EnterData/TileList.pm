@@ -12,16 +12,16 @@ JSA::EnterData::TileList - Methods related to tile numbers.
 
 =head1 SYNOPSIS
 
-  use JSA::EnterData::TileList;
-  use JSA::EnterData::StarCommand;
+    use JSA::EnterData::TileList;
+    use JSA::EnterData::StarCommand;
 
-  $tilenum = JSA::EnterData::TileList->new();
-  $starcom = JSA::EnterData::StarCommand->new();
+    $tilenum = new JSA::EnterData::TileList();
+    $starcom = new JSA::EnterData::StarCommand();
 
-  $starcom->try_command( 'command' => [ $tilenum->get_file_command( '/file/list' ) ] )
-    or die "Could not run the tile numbers finding command.";
+    $starcom->try_command('command' => [$tilenum->get_file_command('/file/list')])
+        or die "Could not run the tile numbers finding command.";
 
-  print Dumper( $starcom->get_value( 'tilenum' ) );
+    print Dumper($starcom->get_value('tilenum'));
 
 =head1 DESCRIPTION
 
@@ -36,7 +36,7 @@ This object oriented module has methods related to Starlink command execution.
 use Carp ();
 use Log::Log4perl ;
 
-use JSA::Error qw[ :try ];
+use JSA::Error qw/:try/;
 
 our $Tile_List = '/star/bin/smurf/jsatilelist';
 
@@ -44,23 +44,23 @@ our $Tile_List = '/star/bin/smurf/jsatilelist';
 
 Returns a L<JSA::EnterData::TileList> object.
 
-  $tilenum = JSA::EnterData::TileList->new();
+    $tilenum = new JSA::EnterData::TileList();
 
 Takes an optional argument of truth value if to use F</stardev> instead of
 F</star>.
 
-  $tilenum_in_hilo = JSA::EnterData::TileList->new( 'dev' );
+    $tilenum_in_hilo = new JSA::EnterData::TileList('dev');
 
 =cut
 
 sub new {
+    my ($class, $dev) = @_;
 
-  my ( $class, $dev ) = @_;
+    # FIXME: this alters the package variable rather than this instance.
+    $Tile_List =~ s/^(\/star)\//${1}dev\// if $dev;
 
-  $dev and $Tile_List =~ s{^(/star)/}[${1}dev/];
-
-  my $obj = '';
-  return $obj = bless \$obj, $class;
+    my $obj = '';
+    return $obj = bless \$obj, $class;
 }
 
 =pod
@@ -70,21 +70,17 @@ sub new {
 Given a file list path, returns a list of F<jsatilelist> command and arguments to
 be run.
 
-  @command = $tilenum->get_file_command( '/file/list' );
+    @command = $tilenum->get_file_command('/file/list');
 
 =cut
 
 sub get_file_command {
+    my ($class, $list) = @_;
 
-  my ( $class, $list ) = @_;
+    throw JSA::Error::BadArgs 'No readable file list given.'
+        unless defined $list && -r $list;
 
-  defined $list && -r $list
-    or throw JSA::Error::BadArgs 'No readable file list given.';
-
-  return
-    ( $Tile_List,
-      qq[in=^$list],
-    );
+    return ($Tile_List, "in=^$list");
 }
 
 
@@ -95,60 +91,56 @@ sub get_file_command {
 Given a instrument name and 4 corners as RA & Dec array references, returns a
 list of F<jsatilelist> command and arguments to be run.
 
-  @command = $tilenum->get_radec_command( 'RxWD',
-                                          [ $obsratl, $obsratr,
+    @command = $tilenum->get_radec_command('RxWD',
+                                           [$obsratl, $obsratr,
                                             $obsrabr, $obsrabl
-                                          ],
-                                          [ $obsdectl, $obsdectr,
+                                           ],
+                                           [$obsdectl, $obsdectr,
                                             $obsdecbr, $obsdecbl
-                                          ]
-                                        );
+                                           ]);
 
 Known instruments are ...
 
-  HARP
-  RxA
-  RxWB
-  RxWD
-  SCUBA-2(450)
-  SCUBA-2(850)
+    HARP
+    RxA
+    RxWB
+    RxWD
+    SCUBA-2(450)
+    SCUBA-2(850)
 
 =cut
 
 {
-  my $inst_ok;
-  sub get_radec_command {
+    my $inst_ok;
 
-    my ( $class, $inst, $ra, $dec ) = @_;
+    sub get_radec_command {
+        my ($class, $inst, $ra, $dec) = @_;
 
-    my @ra  = @{ $ra };
-    my @dec = @{ $dec };
+        my @ra  = @{$ra};
+        my @dec = @{$dec};
 
-    unless ( defined $inst_ok ) {
+        unless (defined $inst_ok) {
+            $inst_ok = qr/^(?:$_)$/i
+                for join '|', map quotemeta($_), qw/
+                    DAS
+                    ACSIS
+                    HARP RxA RxWB RxWD
+                    SCUBA-2(450) SCUBA-2(850)
+                /;
+        }
 
-      $inst_ok = qr{^(?:$_)$}i
-                    for join '|', map quotemeta( $_ ),
-                                        qw[ DAS
-                                            ACSIS
-                                            HARP RxA RxWB RxWD
-                                            SCUBA-2(450) SCUBA-2(850)
-                                          ];
+        throw JSA::Error::BadArgs "Unknown instrument name, $inst, given."
+            unless $inst =~ $inst_ok;
+
+        $inst = 'ACSIS' if $inst =~ /\b (HARP\b | Rx) /xi;
+
+        return (
+            $Tile_List,
+            "in=!",
+            "instrument=$inst",
+            'vertex_ra=['  . join(',', @ra)  . ']',
+            'vertex_dec=[' . join(',', @dec) . ']');
     }
-
-    $inst =~ $inst_ok
-      or throw JSA::Error::BadArgs "Unknown instrument name, $inst, given." ;
-
-    $inst =~ m/\b (HARP\b | Rx) /xi
-      and $inst = 'ACSIS';
-
-    return
-      ( $Tile_List,
-        qq[in=!],
-        qq[instrument=$inst],
-        q/vertex_ra=[/  . join( ',', @ra )  . q/]/,
-        q/vertex_dec=[/ . join( ',', @dec ) . q/]/
-      );
-  }
 }
 
 
@@ -179,5 +171,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-
-

@@ -13,27 +13,27 @@ use parent qw/Exporter/;
 our @EXPORT_OK = qw/log_message log_warning log_command/;
 
 sub log_message {
-  my $message = shift;
-  chomp($message);
-  print STDERR "$message\n";
+    my $message = shift;
+    chomp($message);
+    print STDERR "$message\n";
 }
 
 sub log_warning {
-  log_message( $_[0] );
+    log_message($_[0]);
 }
 
 sub log_command {
-  my ($cmd, $stdout, $stderr) = @_;
-  if ($stdout) {
-    for my $line (@$stdout) {
-      log_message( "$cmd: $line\n" );
+    my ($cmd, $stdout, $stderr) = @_;
+    if ($stdout) {
+        for my $line (@$stdout) {
+            log_message("$cmd: $line\n");
+        }
     }
-  }
-  if ($stderr) {
-    for my $line (@$stderr) {
-      log_message( "$cmd ERROR: $line\n");
+    if ($stderr) {
+        for my $line (@$stderr) {
+            log_message("$cmd ERROR: $line\n");
+        }
     }
-  }
 }
 
 1;

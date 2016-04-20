@@ -8,15 +8,15 @@ JSA::Verbose - Sets verbosity level.
 
 =head1 SYNOPSIS
 
-  $noise = JSA::Verbosity->new( 1 );
+    $noise = JSA::Verbosity->new(1);
 
-  $noise->verbose() and warn "Verbosity is on";
+    warn "Verbosity is on" if $noise->verbose();
 
-  # Does not print anything as level 2 > 1.
-  $noise->make_noise( 2, 'zero' );
+    # Does not print anything as level 2 > 1.
+    $noise->make_noise(2, 'zero');
 
-  # Prints "Verbosity ...".
-  $noise->make_noise( 1, 'Verbosity is on' );
+    # Prints "Verbosity ...".
+    $noise->make_noise(1, 'Verbosity is on');
 
 =head1 DESCRIPTION
 
@@ -27,9 +27,10 @@ messages based on certain threshold.
 
 =cut
 
-use strict; use warnings;
+use strict;
+use warnings;
 
-use Carp qw[ carp croak ];
+use Carp qw/carp croak/;
 
 
 =item B<new>
@@ -39,52 +40,48 @@ as an integer and optional turth value to force creation of new
 object.  If force parameter is not given, then an already existing
 instance is returned.
 
-  # new() is called first time.
-  $noise = JSA::Verbosity->new( 1 );
+    # new() is called first time.
+    $noise = JSA::Verbosity->new(1);
 
-  # $noise2 is same as above $noise (use verbosity() to change level
-  # at this point).
-  $noise2 = JSA::Verbosity->new( 2 );
+    # $noise2 is same as above $noise (use verbosity() to change level
+    # at this point).
+    $noise2 = JSA::Verbosity->new(2);
 
-  # $noise3 is different than all of the above.
-  $noise2 = JSA::Verbosity->new( 2, 'force' );
+    # $noise3 is different than all of the above.
+    $noise2 = JSA::Verbosity->new(2, 'force');
 
 =cut
 
 {
-  my $_obj;
+    my $_obj;
 
-  sub new {
+    sub new {
+        my ($class, $level, $force) = @_;
 
-    my ( $class, $level, $force ) = @_;
+        return $_obj
+            if ! $force
+            && defined $_obj && ref $_obj;
 
-    return $_obj
-      if ! $force
-      && defined $_obj && ref $_obj;
+        $level = defined $level
+               ? 0 + $level
+               : 0;
 
-    $level =
-      defined $level
-      ? 0 + $level
-      : 0
-      ;
-
-    return $_obj = bless \$level, $class;
-  }
+        return $_obj = bless \$level, $class;
+    }
 }
 
 =item B<verbose>
 
 Returns the current verbosity level.
 
-  $noise->verbose() and warn "Verbose mode set";
+    warn "Verbose mode set" if $noise->verbose();
 
 =cut
 
 sub verbose {
+    my $self = shift @_;
 
-  my $self = shift @_;
-
-  return ${ $self };
+    return ${$self};
 }
 
 =item B<make_noise>
@@ -93,31 +90,28 @@ Prints nothing if level is zero.  Else, prints given list of strings
 on standard error if given verbose level is less than or eqault to the
 set non-zero verbose level.
 
-  $noise->verbose( 1 );
+    $noise->verbose(1);
 
-  # Prints 'failed'.
-  $noise->make_noise( 1, 'failed' );
+    # Prints 'failed'.
+    $noise->make_noise(1, 'failed');
 
-  # Does not print anything.
-  $noise->make_noise( 2, 'oops' );
+    # Does not print anything.
+    $noise->make_noise(2, 'oops');
 
-  # Turn off all make_noise() output here on.
-  $noise->verbose( 0 );
+    # Turn off all make_noise() output here on.
+    $noise->verbose(0);
 
 =cut
 
 sub make_noise {
+    my ($self, $min, @msg) = @_;
 
-  my ( $self, $min, @msg ) = @_;
+    return unless scalar @msg
+               && $self->verbose();
 
-  return
-    unless scalar @msg
-    && $self->verbose();
+    print STDERR @msg if ($min || 0) <= $self->verbose();
 
-  ( $min || 0 ) <= $self->verbose()
-    and print STDERR @msg;
-
-  return;
+    return;
 }
 
 
@@ -152,4 +146,3 @@ this program; if not, write to the Free Software Foundation, Inc., 59 Temple
 Place,Suite 330, Boston, MA  02111-1307, USA
 
 =cut
-

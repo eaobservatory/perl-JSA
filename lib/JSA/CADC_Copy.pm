@@ -5,213 +5,200 @@ use strict;
 
 #use File::Basename;
 use File::Spec;
-use Scalar::Util qw[ blessed looks_like_number ];
+use Scalar::Util qw/blessed looks_like_number/;
 use Time::Piece;
-use Time::Seconds qw[ ONE_DAY ];
-use List::MoreUtils qw[ any ];
+use Time::Seconds qw/ONE_DAY/;
+use List::MoreUtils qw/any/;
 
-use JSA::Command qw/ run_command /;
+use JSA::Command qw/run_command/;
 use JSA::Error qw[ :try ];
 use OMP::Config;
 
 BEGIN {
 
-  my %inst =
-    (
-      'ACSIS' =>
-        {
-          'ok-regex' =>
-            qr[^\. a
-                \d{8}   # Date.
-                _
-                (\d{5}) # Observation number.
-                \.ok$
-              ]x,
+    my %inst = (
+        'ACSIS' => {
+            'ok-regex' =>
+                qr[^\. a
+                    \d{8}   # Date.
+                    _
+                    (\d{5}) # Observation number.
+                    \.ok$
+                  ]x,
 
-          'root' =>
-            '/jcmtdata/raw/acsis/spectra',
+            'root' =>
+                '/jcmtdata/raw/acsis/spectra',
+
+            'path-regex' =>
+                qr{ ^
+                    # Parent instrument directory with date.
+                    ( .+?
+                      /
+                      \d{8}
+                    )
+                    [/\d]+?
+                    # Base file name.
+                    (
+                      ([ah])
+                      \d{8} _
+                      # Observation number.
+                      ( \d{5} )
+                      _ \d{2} _ \d{4} [.]sdf
+                    )
+                    $
+                  }x,
         },
 
-      'SCUBA2' =>
-        {
-          'ok-regex' => qr/^ s[48][a-d] \d{8} _ (\d{5}) [.]ok $/x,
-          'root' =>
-            #'/jcmtdata/raw/scuba2/ok/eng/',
-            '/jcmtdata/raw/scuba2',
+        'SCUBA2' => {
+            'ok-regex' => qr/^ s[48][a-d] \d{8} _ (\d{5}) [.]ok $/x,
+            'root' =>
+                #'/jcmtdata/raw/scuba2/ok/eng/',
+                '/jcmtdata/raw/scuba2',
+
+            'path-regex' =>
+                qr{ ^
+                    # Parent instrument directory with date.
+                    ( .+?
+                      /
+                      \d{8}
+                    )
+                    [/\d]+?
+                    # Base file name.
+                    (
+                      (s[48][a-d])
+                      \d{8} _
+                      # Observation number.
+                      ( \d{5} )
+                      _ \d{4} [.]sdf
+                    )
+                    $
+                  }x,
         },
     );
 
-  $inst{'ACSIS'}->{'path-regex'} =
-    qr{ ^
-        # Parent instrument directory with date.
-        ( .+?
-          /
-          \d{8}
-        )
-        [/\d]+?
-        # Base file name.
-        (
-          ([ah])
-          \d{8} _
-          # Observation number.
-          ( \d{5} )
-          _ \d{2} _ \d{4} [.]sdf
-        )
-        $
-      }x;
 
-  $inst{'SCUBA2'}->{'path-regex'} =
-    qr{ ^
-        # Parent instrument directory with date.
-        ( .+?
-          /
-          \d{8}
-        )
-        [/\d]+?
-        # Base file name.
-        (
-          (s[48][a-d])
-          \d{8} _
-          # Observation number.
-          ( \d{5} )
-          _ \d{4} [.]sdf
-        )
-        $
-      }x;
-  # Instruments to loop through
-  my @inst = sort { lc $a cmp lc $b } keys %inst;
+    # Instruments to loop through
+    my @inst = sort {lc $a cmp lc $b} keys %inst;
 
-  sub instrument_list {
+    sub instrument_list {
+        my ($class) = shift @_;
 
-    my ( $class ) = shift @_;
+        return @inst
+            unless scalar @_;
 
-    return @inst
-      unless scalar @_;
+        @inst = @_;
+        return;
+    }
 
-    @inst = @_;
-    return;
-  }
+    # Make instrument_root(), instrument_ok_regex(), instrument_path_regex
+    # accessors with rudimentary checking.
+    for my $prop (keys %{$inst{'ACSIS'}}) {
+        (my $sub = $prop) =~ tr/-/_/;
 
-  # Make instrument_root(), instrument_ok_regex(), instrument_path_regex
-  # accessors with rudimentary checking.
-  for my $prop ( keys %{ $inst{'ACSIS'} } ) {
-
-    ( my $sub = $prop ) =~ tr/-/_/;
-
-    $sub = join '_', 'instrument', $sub;
-    no strict 'refs';
-    *$sub =
-      sub {
-            my ( $self, $inst ) = @_;
+        $sub = join '_', 'instrument', $sub;
+        no strict 'refs';
+        *$sub = sub {
+            my ($self, $inst) = @_;
 
             throw JSA::Error::BadArgs 'No instrument given.'
-              unless defined $inst;
+                unless defined $inst;
 
             $inst = uc $inst;
 
             throw JSA::Error::BadArgs "Unknown instrument, '$inst', given."
-              unless exists $inst{ $inst };
+                unless exists $inst{$inst};
 
             shift, shift;
 
-            return $inst{ $inst }->{ $prop }
-              unless scalar @_;
+            return $inst{$inst}->{$prop}
+                unless scalar @_;
 
             my $val = shift;
             throw JSA::Error::BadArgs "No $prop given."
-              unless defined $val;
+                unless defined $val;
 
-            $inst{ $inst }->{ $prop } = $val;
+            $inst{$inst}->{$prop} = $val;
             return;
-          };
-  }
-
-  my %default =
-    (
-      # If 'date' is specified, its is used for start- & end-date if any of the
-      # two are not.  Else, if end-date is not given, current UT date is used
-      # (see find_start_end_dates); if start-date is missing, then it is
-      # searched for going back no more than 30 days (see find_start_dates()).
-      'date'       => undef,
-      'start-date' => undef,
-      'end-date'   => undef,
-
-      'verbose' => 0,
-      'dry-run' => 0,
-
-      # Indicator if to force upload.
-      'force' => undef,
-
-      'cadc-dir' =>
-        '/export/jcmtdata/ptransfer/new',
-    ) ;
-
-  # Make cadc_dir(), dry_run(), force(), verbose() accessors.
-  for my $key ( keys %default ) {
-
-    next
-      # Need to verify a date.
-      if $key =~ /\bdate\b/
-      # Need to verify that value given would be an integer.
-      or $key eq 'verbose' ;
-
-    ( my $sub = $key ) =~ tr/-/_/;
-    no strict 'refs';
-    *$sub = sub {
-
-              my $self = shift @_;
-              return $self->{ $key } unless scalar @_;
-
-              $self->{ $key } = shift @_;
-              return;
-            };
-  }
-
-  # Make date(), start_date(), & end_date() methods.
-  for my $key ( grep { /\bdate\b/ } keys %default ) {
-
-    ( my $sub = $key ) =~ tr/-/_/;
-    no strict 'refs';
-    *$sub =
-      sub {
-            my $self = shift @_;
-            return $self->{ $key } unless scalar @_;
-
-            my ( $date ) = @_;
-
-            __PACKAGE__->check_date( $date );
-
-            $self->{ $key } =
-              $date =~ /^\d{8}$/
-              ? Time::Piece->strptime( $date, $self->get_date_format )
-              : $date
-              ;
-
-            return;
-          };
-  }
-
-  # Constructor, uses keys from %default & related subs.
-  sub new {
-
-    my ( $class, %args ) = @_;
-
-    my $obj = bless { %default }, $class;
-
-    for my $k ( keys %args ) {
-
-      next unless exists $default{ $k };
-
-      ( my $sub = $k ) =~ tr/-/_/;
-
-      throw JSA::Error::FatalError "None such method: $sub"
-        unless $obj->can ( $sub );
-
-      $obj->$sub( $args{ $k } );
+        };
     }
 
-    return $obj;
-  }
+    my %default = (
+        # If 'date' is specified, its is used for start- & end-date if any of the
+        # two are not.  Else, if end-date is not given, current UT date is used
+        # (see find_start_end_dates); if start-date is missing, then it is
+        # searched for going back no more than 30 days (see find_start_dates()).
+        'date'      => undef,
+        'start-date'=> undef,
+        'end-date'  => undef,
+
+        'verbose'   => 0,
+        'dry-run'   => 0,
+
+        # Indicator if to force upload.
+        'force'     => undef,
+
+        'cadc-dir'  => '/export/jcmtdata/ptransfer/new',
+    );
+
+    # Make cadc_dir(), dry_run(), force(), verbose() accessors.
+    for my $key (keys %default) {
+        next
+          # Need to verify a date.
+          if $key =~ /\bdate\b/
+          # Need to verify that value given would be an integer.
+          or $key eq 'verbose' ;
+
+        (my $sub = $key) =~ tr/-/_/;
+        no strict 'refs';
+        *$sub = sub {
+            my $self = shift @_;
+            return $self->{$key} unless scalar @_;
+
+            $self->{$key} = shift @_;
+            return;
+        };
+    }
+
+    # Make date(), start_date(), & end_date() methods.
+    for my $key (grep {/\bdate\b/} keys %default) {
+        (my $sub = $key) =~ tr/-/_/;
+        no strict 'refs';
+        *$sub = sub {
+            my $self = shift @_;
+            return $self->{$key} unless scalar @_;
+
+            my ($date) = @_;
+
+            __PACKAGE__->check_date($date);
+
+            $self->{$key} =
+                $date =~ /^\d{8}$/
+                ? Time::Piece->strptime($date, $self->get_date_format)
+                : $date;
+
+            return;
+        };
+    }
+
+    # Constructor, uses keys from %default & related subs.
+    sub new {
+        my ($class, %args) = @_;
+
+        my $obj = bless {%default}, $class;
+
+        for my $k (keys %args) {
+            next unless exists $default{$k};
+
+            (my $sub = $k) =~ tr/-/_/;
+
+            throw JSA::Error::FatalError "None such method: $sub"
+                unless $obj->can ( $sub );
+
+            $obj->$sub($args{$k});
+        }
+
+        return $obj;
+    }
 
 }
 
@@ -219,41 +206,37 @@ BEGIN {
 # matches the number of digits in a date specified in 'YYYYMMDD'
 # format.
 sub check_date {
+    my ($class, $date) = @_;
 
-  my ( $class, $date ) = @_;
+    if (defined $date) {
+        return
+            if $date =~ /^\d{8}$/
+            or (blessed $date && blessed $date eq 'Time::Piece');
+    }
 
-  if ( defined $date ) {
-
-    return
-      if $date =~ /^\d{8}$/
-      or ( blessed $date && blessed $date eq 'Time::Piece' );
-  }
-
-  throw JSA::Error::BadArgs
-    'Must provide date in "YYYYMMDD" format or as Time::Piece object.';
+    throw JSA::Error::BadArgs
+      'Must provide date in "YYYYMMDD" format or as Time::Piece object.';
 }
 
 # Returns the date format.
 sub get_date_format {
+    my ($class) = @_;
 
-  my ( $class ) = @_;
-
-  return '%Y%m%d';
+    return '%Y%m%d';
 }
 
 # Verbosity indicator accessor.
 sub verbose {
+    my $self = shift @_;
+    return $self->{'verbose'} unless scalar @_;
 
-  my $self = shift @_;
-  return $self->{'verbose'} unless scalar @_;
+    my ($val) = @_;
 
-  my ( $val ) = @_;
+    throw JSA::Error::BadArgs "$val is not a number."
+        if $val && ! looks_like_number( $val );
 
-  throw JSA::Error::BadArgs "$val is not a number."
-    if $val && ! looks_like_number( $val );
-
-  $self->{'verbose'} = $val;
-  return;
+    $self->{'verbose'} = $val;
+    return;
 }
 
 # From start date to end date, go through each directory creating symbolic links
@@ -261,136 +244,125 @@ sub verbose {
 # indicate that the file should be ignored in the future.  Do this for each
 # instrument in the $self->instrument_list().
 sub upload_per_instrument {
+    my ($self) = @_;
 
-  my ( $self ) = @_;
+    my ($starts, $end) = $self->find_start_end_dates;
 
-  my ( $starts, $end ) = $self->find_start_end_dates;
+    my $okfiles = $self->okfiles;
+    my $format = __PACKAGE__->get_date_format;
 
-  my $okfiles = $self->okfiles;
-  my $format = __PACKAGE__->get_date_format;
+    foreach my $inst ($self->instrument_list) {
+        # The current date in the loop
+        my $inst_start = $starts->{$inst};
 
-  for my $inst ( $self->instrument_list ) {
+        my @bound = ($inst_start->strftime($format),
+                     join ' ', $end->strftime($format), '23:59:59');
 
-    # The current date in the loop
-    my $inst_start = $starts->{ $inst };
+        # Used to filter out the files for which there is no *.ok file elsewhere.
+        my $file_ids = $self->get_file_ids(@bound);
 
-    my @bound = ( $inst_start->strftime( $format ),
-                  join ' ', $end->strftime( $format ), '23:59:59'
-                );
+        unless ($file_ids) {
+            $self->verbose
+                and printf "Nothing found between $bound[0] - $bound[1] for instrument $inst.\n";
 
-    # Used to filter out the files for which there is no *.ok file elsewhere.
-    my $file_ids = $self->get_file_ids( @bound );
-
-    unless ( $file_ids ) {
-
-      $self->verbose
-        and printf "Nothing found between $bound[0] - $bound[1] for instrument $inst.\n";
-
-      next;
-    }
-
-    while ( $inst_start->epoch <= $end->epoch ) {
-
-      my $ymd = $inst_start->strftime( $format );
-      my $src = $self->make_inst_date_path( $inst, $ymd );
-
-      if ( -e $src ) {
-
-        # Slurp up the *.ok files if we didn't do so earlier while obtaining the
-        # start date.
-        unless ( exists $okfiles->{ $inst }->{ $ymd } ) {
-
-          my $return = __PACKAGE__->read_okfiles( $src );
-          $okfiles->{ $inst }->{ $ymd } = $return->{'ok'}
+            next;
         }
 
-        $self->upload_make_cadc_ok( 'instrument' => $inst,
-                                    'source-dir' => $src,
-                                    'okfiles' => $okfiles->{ $inst }->{ $ymd },
-                                    'file-ids' => $file_ids,
-                                  );
-      }
+        while ($inst_start->epoch <= $end->epoch) {
+            my $ymd = $inst_start->strftime( $format );
+            my $src = $self->make_inst_date_path( $inst, $ymd );
 
-      $inst_start += ONE_DAY;
+            if (-e $src) {
+                # Slurp up the *.ok files if we didn't do so earlier while obtaining the
+                # start date.
+                unless (exists $okfiles->{$inst}->{$ymd}) {
+                    my $return = __PACKAGE__->read_okfiles($src);
+                    $okfiles->{$inst}->{$ymd} = $return->{'ok'}
+                }
+
+                $self->upload_make_cadc_ok('instrument' => $inst,
+                                           'source-dir' => $src,
+                                           'okfiles' => $okfiles->{$inst}->{$ymd},
+                                           'file-ids' => $file_ids);
+            }
+
+            $inst_start += ONE_DAY;
+        }
     }
-  }
 
-  return;
+    return;
 }
 
 # Returns an array reference of array references containing base file names (aka
 # file ids).  Returns nothing if SQL query finds nothing.
 sub get_file_ids {
+    my ($self, $start, $end) = @_;
 
-  my ( $self, $start, $end ) = @_;
+    my $time_re = qr/^ \d{8} [ T] \d{2}:\d{2}:\d{2} $/x;
 
-  my $time_re = qr/^ \d{8} [ T] \d{2}:\d{2}:\d{2} $/x;
+    throw JSA::Error::BadArgs qq[Need start & end dates in "yyyymmddThh:mm:ss" format.\n]
+        unless defined $start
+           and defined $end
+           and $start =~ m/$time_re/
+           and $end   =~ m/$time_re/
+      ;
 
-  throw JSA::Error::BadArgs qq[Need start & end dates in "yyyymmddThh:mm:ss" format.\n]
-    unless defined $start
-    and    defined $end
-    and $start =~ m/$time_re/
-    and $end   =~ m/$time_re/
-    ;
+    ( my $sql =
+      q[ SELECT f.file_id
+          FROM COMMON c, FILES f
+          WHERE c.obsid = f.obsid
+            AND c.date_obs >= ?
+            AND c.date_obs <= ?
+        ]
+    ) =~ s/[ ]{2,}/ /g;
 
-  ( my $sql =
-    q[ SELECT f.file_id
-        FROM COMMON c, FILES f
-        WHERE c.obsid = f.obsid
-          AND c.date_obs >= ?
-          AND c.date_obs <= ?
-      ]
-  ) =~ s/[ ]{2,}/ /g;
+    # Connect to the CADC mirror DB
+    require OMP::DBbackend::Archive;
+    my $back = OMP::DBbackend::Archive->new;
+    my $dbh = $back->handle;
 
-  # Connect to the CADC mirror DB
-  require OMP::DBbackend::Archive;
-  my $back = OMP::DBbackend::Archive->new;
-  my $dbh = $back->handle;
+    my $trace =
+        3 < $self->verbose
+        ? # Heavy trace.
+          2
+        : 2 < $self->verbose
+          ? # Light trace.
+            1
+          : # No trace.
+            0 ;
 
-  my $trace =
-    3 < $self->verbose
-    ? # Heavy trace.
-      2
-    : 2 < $self->verbose
-      ? # Light trace.
-        1
-      : # No trace.
-        0 ;
+    $dbh->trace($trace);
 
-  $dbh->trace( $trace );
+    my $files = $dbh->selectall_arrayref($sql, {}, $start, $end)
+        or throw JSA::Error::FatalError
+           sprintf "Could not perform DB query: %s\n", $dbh->errstr;
 
-  my $files = $dbh->selectall_arrayref( $sql, {}, $start, $end )
-    or throw JSA::Error::FatalError
-        sprintf "Could not perform DB query: %s\n", $dbh->errstr;
+    return unless $files or scalar @{$files};
 
-  return unless $files or scalar @{ $files };
-
-  return [ map { @$_ } @{ $files } ];
+    return [map {@$_} @{$files}];
 }
 
 # Returns a hash reference with the keys 'ok' and 'cadc_ok', where the value of
 # each key is a reference to an array of '.ok' or '.cacdc_ok' file names.
 sub read_okfiles {
+    my ($class, $dir) = @_;
 
-  my ( $class, $dir ) = @_;
+    opendir my $dh, $dir
+        or throw JSA::Error::FatalError "Can't open directory [$dir]: $!\n";
 
-  opendir my $dh, $dir
-    or throw JSA::Error::FatalError "Can't open directory [$dir]: $!\n";
+    my %ok;
+    my $ok = qr[^\. .*? \. ( (?:cadc_)? ok )$]x;
 
-  my %ok;
-  my $ok = qr[^\. .*? \. ( (?:cadc_)? ok )$]x;
+    while (my $file = readdir($dh)) {
+        next unless $file =~ /$ok/;
 
-  while ( my $file = readdir( $dh ) ) {
+        push @{$ok{"$1"}}, $file;
+    }
 
-    next unless $file =~ /$ok/;
+    closedir $dh
+        or throw JSA::Error::FatalError "Can't close directory [$dir]: $!\n";
 
-    push @{ $ok{ "$1" } }, $file;
-  }
-
-  closedir $dh
-    or throw JSA::Error::FatalError "Can't close directory [$dir]: $!\n";
-
-  return \%ok;
+    return \%ok;
 }
 
 # Loop through normal .ok files, and create links for data files that
@@ -401,175 +373,160 @@ sub read_okfiles {
 #   okfiles    => \@okfiles_per_inst_per_date
 #   file-ids   => \@file_id_in_db
 sub upload_make_cadc_ok {
+    my ($self, %args) = @_;
 
-  my ( $self, %args ) = @_;
+    my $inst = $args{'instrument'}
+        or throw JSA::Error::BadArgs "No instrument given.\n";
 
-  my $inst = $args{'instrument'}
-    or throw JSA::Error::BadArgs "No instrument given.\n";
+    throw JSA::Error::BadArgs "Neither source directory nor obs date given\n"
+        unless $args{'source-dir'}
+            or $args{'obs-date'} ;
 
-  throw JSA::Error::BadArgs "Neither source directory nor obs date given\n"
-    unless $args{'source-dir'}
-    or $args{'obs-date'} ;
+    my $inst_date =
+        $args{'source-dir'}
+        || $self->make_inst_date_path( $inst, $args{'obs-date'} );
 
-  my $inst_date =
-    $args{'source-dir'}
-    || $self->make_inst_date_path( $inst, $args{'obs-date'} );
-    ;
+    my %file_id = map {$_ ? ( $_ => undef ) : ()} @{$args{'file-ids'}};
 
-  my %file_id = map { $_ ? ( $_ => undef ) : () } @{ $args{'file-ids'} };
+    for my $ok (@{$args{'okfiles'}}) {
+        my $cadc_ok = __PACKAGE__->make_cadc_ok_path($ok, $inst_date);
+        if (-e $cadc_ok && ! $self->force) {
+            $self->verbose and print "$cadc_ok exists. Skipping.\n";
 
-  for my $ok ( @{ $args{'okfiles'} } ) {
+            next;
+        }
 
-    my $cadc_ok = __PACKAGE__->make_cadc_ok_path( $ok, $inst_date );
+        my $obsnum = $self->make_obsnum_path( $inst, $inst_date, $ok );
 
-    if ( -e $cadc_ok && ! $self->force ) {
+        my @files = @{ __PACKAGE__->filter_files($obsnum, \%file_id)};
 
-      $self->verbose and print "$cadc_ok exists. Skipping.\n";
+        if (scalar @files) {
+          $self->make_symlink($obsnum, "$_") for @files;
 
-      next;
+          $self->make_empty_file($cadc_ok);
+        }
     }
 
-    my $obsnum = $self->make_obsnum_path( $inst, $inst_date, $ok );
-
-    my @files = @{ __PACKAGE__->filter_files( $obsnum, \%file_id ) };
-    if ( scalar @files ) {
-
-      $self->make_symlink( $obsnum, "$_" ) for @files;
-
-      $self->make_empty_file( $cadc_ok );
-    }
-  }
-
-  return;
+    return;
 }
 
 # Returns the UT date directory path given the instrument name.
 sub make_inst_date_path {
-
-  my ( $self, $inst, $date ) = @_;
-  return File::Spec->catdir( $self->instrument_root( $inst ), $date );
+    my ($self, $inst, $date) = @_;
+    return File::Spec->catdir($self->instrument_root($inst), $date);
 }
 
 # Returns a *.cadc_ok file name given a *.ok base name & the parent directory.
 sub make_cadc_ok_path {
+    my ($class, $ok, $parent) = @_;
 
-  my ( $class, $ok, $parent ) = @_;
+    (my $cadc_ok = $ok) =~ s/\.ok/\.cadc_ok/
+        or throw JSA::Error::FatalError "Failed to generate '*.cadc_ok' from '$ok'\n";
 
-  ( my $cadc_ok = $ok ) =~ s/\.ok/\.cadc_ok/
-    or throw JSA::Error::FatalError "Failed to generate '*.cadc_ok' from '$ok'\n";
-
-  return File::Spec->catfile( $parent, $cadc_ok );
+    return File::Spec->catfile($parent, $cadc_ok);
 }
 
 # Returns a observation directory name given a *.ok base name; the parent
 # directory; and the instrument name (to extract observation number from a
 # F<*.ok> file).
 sub make_obsnum_path {
+    my ($self, $inst, $parent, $ok) = @_;
 
-  my ( $self, $inst, $parent, $ok ) = @_;
+    my $re = $self->instrument_ok_regex($inst) ;
+    my ($obsnum) = $ok =~ /$re/
+        or throw JSA::Error::FatalError "File name, $ok, does not match regexp.\n";
 
-  my $re = $self->instrument_ok_regex( $inst ) ;
-  my ( $obsnum ) = $ok =~ /$re/
-    or throw JSA::Error::FatalError "File name, $ok, does not match regexp.\n";
-
-  return File::Spec->catdir( $parent, $obsnum );
+    return File::Spec->catdir($parent, $obsnum);
 }
 
 # Returns the files in the given directory that have been replicated to the CADC
 # mirror db specified by the hash reference.
 sub filter_files {
+    my ($class, $dir, $db_ok) = @_;
 
-  my ( $class, $dir, $db_ok ) = @_;
+    opendir my $dh, $dir
+        or throw JSA::Error::FatalError
+                 sprintf "Could not open directory [%s]: %s\n", $dir, $!;
 
-  opendir my $dh, $dir
-    or throw JSA::Error::FatalError
-        sprintf "Could not open directory [%s]: %s\n", $dir, $!;
+    my @files = grep {exists $db_ok->{$_}} readdir $dh;
 
-  my @files = grep { exists $db_ok->{ $_ } } readdir $dh;
+    closedir $dh;
 
-  closedir $dh;
-
-  return \@files;
+    return \@files;
 }
 
 # Makes a symbolic link for given source directory and the observation number
 # string.
 sub make_symlink {
+    my ($self, $obsnum, $base) = @_;
 
-  my ( $self, $obsnum, $base ) = @_;
-
-  my $link;
-  ( $obsnum, $link) =
-      map { File::Spec->catfile( "$_", $base ) } $obsnum, $self->cadc_dir ;
+    my $link;
+    ($obsnum, $link) =
+        map {File::Spec->catfile("$_", $base)} $obsnum, $self->cadc_dir;
 
 
-  my $message = "Created link: $link -> $obsnum\n";
+    my $message = "Created link: $link -> $obsnum\n";
 
-  if ( $self->dry_run ) {
+    if ($self->dry_run) {
+        print $message;
+        return;
+    }
 
-    print $message;
+    symlink $obsnum, $link
+        or throw JSA::Error::FatalError
+                 sprintf "Can't create symlink %s to %s: %s.\n", $link, $obsnum, $!;
+
+    $self->verbose and print $message;
+
     return;
-  }
-
-  symlink $obsnum, $link
-    or throw JSA::Error::FatalError
-        sprintf "Can't create symlink %s to %s: %s.\n", $link, $obsnum, $!;
-
-  $self->verbose and print $message;
-
-  return;
 }
 
 # Creates an empty file at the given path.
 sub make_empty_file {
+    my ($self, $path) = @_;
 
-  my ( $self, $path ) = @_;
+    return if -e $path;
 
-  return if -e $path;
+    if ($self->dry_run) {
+        print "Created $path\n";
+        return;
+    }
 
-  if ( $self->dry_run ) {
+    umask 0117;
 
-    print "Created $path\n";
+    open my $fh, '>', $path
+        or throw JSA::Error::FatalError "Could not create [$path] file: $!\n";
+    close $fh;
+
+    $self->verbose and print "Created [$path]\n";
+
     return;
-  }
-
-  umask 0117;
-
-  open my $fh, '>', $path
-    or throw JSA::Error::FatalError "Could not create [$path] file: $!\n";
-  close $fh;
-
-  $self->verbose and print "Created [$path]\n";
-
-  return;
 }
 
 # Returns a hash reference with instrument as keys & start date as values, and
 # an end date.
 sub find_start_end_dates {
+    my ($self) = @_;
 
-  my ( $self ) = @_;
+    my ($date, $start, $end) =
+        map {$self->$_} qw/date start_date end_date/;
 
-  my ( $date, $start, $end ) =
-    map { $self->$_ } qw[ date start_date end_date ];
+    #  Override start- & end-date.
+    $start = $end = $date if $date;
 
-  #  Override start- & end-date.
-  $start = $end = $date if $date;
+    $end = gmtime unless $end;
 
-  $end = gmtime unless $end;
+    # (Re)set dates for use elsewhere.
+    $self->start_date( $start ) if $start;
+    $self->end_date( $end );
 
-  # (Re)set dates for use elsewhere.
-  $self->start_date( $start ) if $start;
-  $self->end_date( $end );
+    my $start_inst =
+        $start
+        ? { map { $_ => $start } $self->instrument_list }
+        : # The start date can be different for each instrument.
+          $self->find_start_dates;
 
-  my $start_inst =
-    $start
-    ? { map { $_ => $start } $self->instrument_list }
-    : # The start date can be different for each instrument.
-      $self->find_start_dates
-      ;
-
-  return ( $start_inst, $end );
+    return ($start_inst, $end);
 }
 
 # Returns a hash reference of instruments as keys and start dates as values.
@@ -577,50 +534,46 @@ sub find_start_end_dates {
 # Determines the start date by stepping backwards one day at a time until we've
 # reached a UT-date directory containing a .cadc_ok file.
 sub find_start_dates {
+    my ($self) = @_;
 
-  my ( $self ) = @_;
+    my $end = $self->end_date;
 
-  my $end = $self->end_date;
+    throw JSA::Error::BadArgs 'No end date is specified.'
+        unless $end;
 
-  throw JSA::Error::BadArgs 'No end date is specified.'
-    unless $end;
+    my $okfiles = $self->okfiles;
+    my %start;
+    for my $inst ($self->instrument_list) {
+        # Current date.
+        my $date = $end;
 
-  my $okfiles = $self->okfiles;
-  my %start;
-  for my $inst ( $self->instrument_list ) {
+        # Keep track of how many days we've gone back>
+        my $days;
+        until ($start{$inst}) {
+            $days++;
 
-    # Current date.
-    my $date = $end;
+            # Could not find a single .cadc_ok file.
+            throw JSA::Error::FatalError
+                    "Could not find any .cadc_ok files, unable to determine where to begin.\n"
+                    . "Try the 'start_date' option."
+                if $days >= 30 ;
 
-    # Keep track of how many days we've gone back>
-    my $days;
-    until ( $start{ $inst } ) {
+            my $ymd = $date->strftime($self->get_date_format);
+            my $src_dir = $self->make_inst_date_path($self->instrument_root($inst), $ymd);
 
-      $days++;
+            if ( -e $src_dir ) {
+                my $return = __PACKAGE__->read_okfiles($src_dir);
+                $okfiles->{$inst}->{$ymd} = $return->{'ok'};
 
-      # Could not find a single .cadc_ok file.
-      throw JSA::Error::FatalError
-              "Could not find any .cadc_ok files, unable to determine where to begin.\n"
-              . "Try the 'start_date' option."
-        if $days >= 30 ;
+                $start{$inst} = $date
+                    if defined $return->{'cadc_ok'}->[0];
+            }
 
-      my $ymd = $date->strftime( $self->get_date_format );
-      my $src_dir = $self->make_inst_date_path( $self->instrument_root( $inst ), $ymd );
-
-      if ( -e $src_dir ) {
-
-        my $return = __PACKAGE__->read_okfiles( $src_dir );
-        $okfiles->{ $inst }->{ $ymd } = $return->{'ok'};
-
-        $start{ $inst } = $date
-          if defined $return->{'cadc_ok'}->[0];
-      }
-
-      $date -= ONE_DAY;
+            $date -= ONE_DAY;
+        }
     }
-  }
 
-  return \%start;
+    return \%start;
 }
 
 # To pass same hash reference among various subs.
@@ -629,15 +582,13 @@ sub find_start_dates {
 
   # Returns the hash reference, to be manipulated by others.
   sub okfiles {
-
-    $okfiles ||= {};
-    return $okfiles;
+      $okfiles ||= {};
+      return $okfiles;
   }
 
   sub clear_okfiles {
-
-    $okfiles = {};
-    return;
+      $okfiles = {};
+      return;
   }
 }
 
@@ -662,80 +613,74 @@ sub find_start_dates {
 # ... and, wait time in seconds to wait between requests to CADC
 # server with key of "wait".
 sub at_cadc {
+    my ($ut, %opt) = @_;
 
-  my ( $ut, %opt ) = @_;
+    return if defined $ut && $ut !~ /^\d{8}$/;
 
-  return if defined $ut && $ut !~ /^\d{8}$/;
+    my @inst = qw/a s4a s4b s4c s4d s8a s8b s8c s8d/;
 
-  my @inst = qw/ a s4a s4b s4c s4d s8a s8b s8c s8d /;
+    my @prefix =
+      ($opt{'prefix'} && ref $opt{'prefix'} ? @{ $opt{'prefix'} } : ());
 
-  my @prefix =
-    ( $opt{'prefix'} && ref $opt{'prefix'} ? @{ $opt{'prefix'} } : () );
+    # Use instrument prefix and the date.
+    if ($ut) {
+        @prefix = @inst unless scalar @prefix;
 
-  # Use instrument prefix and the date.
-  if ( $ut ) {
+        return _check_cadc($opt{'wait'}, map { "${_}${ut}" } @prefix);
+    }
 
-    @prefix = @inst unless scalar @prefix;
+    # Assume to be file names.
+    my @file;
+    for my $f (@prefix) {
+        push @file, $f
+            if any { $f =~ /^$_\d{8}/ } @inst;
+    }
 
-    return _check_cadc( $opt{'wait'}, map { "${_}${ut}" } @prefix );
-  }
-
-  # Assume to be file names.
-  my @file;
-  for my $f ( @prefix ) {
-
-    push @file, $f
-      if any { $f =~ /^$_\d{8}/ } @inst;
-  }
-
-  return _check_cadc( $opt{'wait'}, @file );
+    return _check_cadc($opt{'wait'}, @file);
 }
 
 sub _check_cadc {
+    my ($wait, @prefix) = @_;
 
-  my ( $wait, @prefix ) = @_;
+    return unless scalar @prefix;
 
-  return unless scalar @prefix;
+    # Time to wait for a random, reasonable amount.
+    $wait ||= 20;
 
-  # Time to wait for a random, reasonable amount.
-  $wait ||= 20;
+    my @curl = (qw[ curl --silent --location ]);
+    my $cadc_url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=';
 
-  my @curl = (qw[ curl --silent --location ]);
-  my $cadc_url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=';
+    # To avoid hammering the server when run multiple times in a row.
+    my $sleepy_time = scalar(@prefix) - 1;
 
-  # To avoid hammering the server when run multiple times in a row.
-  my $sleepy_time = scalar( @prefix ) -1;
+    # Go through each instrument prefix and push the list of files onto
+    # our array.
+    my @uploaded;
+    foreach my $prefix (@prefix) {
+        # Try to use curl with a URL (which is what jcmtInfo does anyhow).  Use a
+        # sybase wildcard to get all matching files.
+        my $url = sprintf '%s%s%%', $cadc_url, $prefix;
 
-  # Go through each instrument prefix and push the list of files onto
-  # our array.
-  my @uploaded;
-  foreach my $prefix ( @prefix ) {
+        my ($stdout, $stderr, $stat) = run_command(@curl, $url);
 
-    # Try to use curl with a URL (which is what jcmtInfo does anyhow).  Use a
-    # sybase wildcard to get all matching files.
-    my $url = sprintf '%s%s%%', $cadc_url, $prefix;
+        push @uploaded, _filter_curl_output($stdout, $stat);
 
-    my ($stdout, $stderr, $stat) = run_command( @curl, $url);
+        $sleepy_time-- > 0 and sleep $wait;
+    }
 
-    push @uploaded, _filter_curl_output( $stdout, $stat );
+    my %at_cadc = map {chomp( $_ ); $_ => undef} @uploaded;
 
-    $sleepy_time-- > 0 and sleep $wait;
-  }
-
-  my %at_cadc = map { chomp( $_ ); $_ => undef } @uploaded;
-
-  return \%at_cadc;
+    return \%at_cadc;
 }
 
 sub _filter_curl_output {
+    my ($files, $stat) = @_;
 
-  my ( $files, $stat ) = @_;
+    return if $stat != 0;
+    return unless @{ $files };
+    return if $files->[0] =~ /No such file/;
 
-  return if $stat != 0;
-  return unless @{ $files };
-  return if $files->[0] =~ /No such file/;
-
-  return @{ $files };
+    return @{ $files };
 }
 
 1;
@@ -750,49 +695,49 @@ JSA::CADC_Copy - Create links to JCMT data in CADC e-transfer staging area
 
 Create an object:
 
-  my $copy = JSA::CADC_Copy->new;
+    my $copy = JSA::CADC_Copy->new;
 
 
 Shows some progress of the process:
 
-  $copt->verbose( 1 ) ;
+    $copt->verbose(1) ;
 
 
 Upload for current UT date:
 
-  $copy->upload_per_instrument;
+    $copy->upload_per_instrument;
 
 
 or, upload for a particular date:
 
-  $copy->date( '20080820' );
-  $copy->upload_per_instrument;
+    $copy->date('20080820');
+    $copy->upload_per_instrument;
 
 
 or, upload for a date range:
 
-  $copy->start_date( '20080820' );
-  $copy->end_date(   '20080821' );
-  $copy->upload_per_instrument;
+    $copy->start_date('20080820');
+    $copy->end_date(  '20080821');
+    $copy->upload_per_instrument;
 
 
 Force an upload, overwriting existing symbolic links & F<*.cadc_ok>
 files:
 
-  $copy->force( 1 );
-  $copy->upload_per_instrument;
+    $copy->force(1);
+    $copy->upload_per_instrument;
 
 
 Or, just create the object with options:
 
-  $copy = JSA::CADC_Copy->new(
-                               'force'   => 0,
-                               'verbose' => 1,
-                               'start-date' => '20080820',
-                               'end-date'   => '20080821',
-                              );
+    $copy = JSA::CADC_Copy->new(
+                                'force'   => 0,
+                                'verbose' => 1,
+                                'start-date' => '20080820',
+                                'end-date'   => '20080821',
+                               );
 
-  $copy->upload_per_instrument;
+    $copy->upload_per_instrument;
 
 
 =head1 DESCRIPTION

@@ -6,8 +6,8 @@ JSA::Headers - Helper functions to deal with file headers.
 
 =head1 SYNOPSIS
 
-  use JSA::Headers;
-  update_fits_product( $fits_file );
+    use JSA::Headers;
+    update_fits_product($fits_file);
 
 =head1 DESCRIPTION
 
@@ -20,22 +20,22 @@ use strict;
 use warnings;
 use warnings::register;
 
-use Scalar::Util qw/ looks_like_number /;
+use Scalar::Util qw/looks_like_number/;
 use Astro::FITS::CFITSIO;
 use Astro::FITS::HdrTrans;
 use Astro::FITS::Header::NDF;
 use Astro::FITS::Header::CFITSIO;
 use Carp;
-use Image::ExifTool qw/ :Public /;
+use Image::ExifTool qw/:Public/;
 use NDF 1.47;
-use Starlink::Config qw/ :override /;
+use Starlink::Config qw/:override/;
 
-use JSA::Files qw/ drfilename_to_cadc /;
+use JSA::Files qw/drfilename_to_cadc/;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/ read_headers read_header read_wcs get_header_value
-                     get_orac_instrument update_fits_product
-                     cadc_ack read_jcmtstate /;
+our @EXPORT_OK = qw/read_headers read_header read_wcs get_header_value
+                    get_orac_instrument update_fits_product
+                    cadc_ack read_jcmtstate/;
 
 =head1 FUNCTIONS
 
@@ -45,7 +45,7 @@ our @EXPORT_OK = qw/ read_headers read_header read_wcs get_header_value
 
 Retrieve number of values matching a given FITS header keyword.
 
-  my ( $number, %values ) = get_header_value( $key, @headers );
+    my ($number, %values) = get_header_value($key, @headers);
 
 This function takes two arguments: the keyword to search for and a
 list of Astro::FITS::Header objects.
@@ -59,17 +59,20 @@ matched.
 =cut
 
 sub get_header_value {
-  my ($key, @hdrs) = @_;
-  my $nhits = 0;
-  my %values;
-  for my $h (@hdrs) {
-    my $value = $h->value($key);
-    if (defined $value) {
-      $values{$value}++;
-      $nhits++;
+    my ($key, @hdrs) = @_;
+    my $nhits = 0;
+    my %values;
+
+    foreach my $h (@hdrs) {
+        my $value = $h->value($key);
+
+        if (defined $value) {
+            $values{$value} ++;
+            $nhits ++;
+        }
     }
-  }
-  return ($nhits, %values);
+
+    return ($nhits, %values);
 }
 
 =item B<get_orac_instrument>
@@ -77,7 +80,7 @@ sub get_header_value {
 Determine the instrument for a given set of headers. This instrument
 can then be used to initialize ORAC-DR.
 
-  my $instrument = get_orac_instrument( $header );
+    my $instrument = get_orac_instrument($header);
 
 This function looks at two generic headers as returned by
 Astro::FITS::HdrTrans: INSTRUMENT and BACKEND. If the BACKEND is
@@ -97,54 +100,57 @@ Returns a string.
 =cut
 
 sub get_orac_instrument {
-  my $hdr = shift;
+    my $hdr = shift;
 
-  # Make sure the given $hdr is an Astro::FITS::Header object.
-  if( ! UNIVERSAL::isa( $hdr, "Astro::FITS::Header" ) ) {
-    croak "Input to get_orac_instrument must be an Astro::FITS::Header object";
-  }
-
-  # We need the INSTRUMENT and the BACKEND
-  my %fits;
-  tie %fits, "Astro::FITS::Header", $hdr;
-  my $class = Astro::FITS::HdrTrans::determine_class( \%fits, undef, 1);
-
-  if( ! defined $class ) {
-    croak "Unable to determine header translation class";
-  }
-
-  my $instrument = $class->to_INSTRUMENT( \%fits );
-  my $backend = $class->can('to_BACKEND') ? $class->to_BACKEND( \%fits )
-                                          : undef;
-
-  my $oa;
-  unless (defined $backend) {
-    # Without knowing the backend, must just use the instrument name.
-    $oa = $instrument;
-  }
-  elsif ($backend eq 'ACSIS' || $backend eq 'DAS' || $backend eq 'AOSC') {
-    $oa = "ACSIS";
-  } elsif ($instrument eq 'SCUBA-2') {
-    $oa = 'SCUBA2';
-
-    my $subsysnr = $fits{'SUBSYSNR'};
-    if( defined( $subsysnr ) ) {
-      $oa .= "_$subsysnr";
+    # Make sure the given $hdr is an Astro::FITS::Header object.
+    unless (UNIVERSAL::isa( $hdr, "Astro::FITS::Header" )) {
+        croak "Input to get_orac_instrument must be an Astro::FITS::Header object";
     }
 
-  } else {
-    # go with instrument
-    $oa = $instrument;
-  }
+    # We need the INSTRUMENT and the BACKEND
+    my %fits;
+    tie %fits, "Astro::FITS::Header", $hdr;
+    my $class = Astro::FITS::HdrTrans::determine_class(\%fits, undef, 1);
 
-  return $oa;
+    unless (defined $class) {
+      croak "Unable to determine header translation class";
+    }
+
+    my $instrument = $class->to_INSTRUMENT(\%fits);
+    my $backend = $class->can('to_BACKEND') ? $class->to_BACKEND(\%fits)
+                                            : undef;
+
+    my $oa;
+    unless (defined $backend) {
+        # Without knowing the backend, must just use the instrument name.
+        $oa = $instrument;
+    }
+    elsif ($backend eq 'ACSIS' || $backend eq 'DAS' || $backend eq 'AOSC') {
+        $oa = "ACSIS";
+    }
+    elsif ($instrument eq 'SCUBA-2') {
+        $oa = 'SCUBA2';
+
+        my $subsysnr = $fits{'SUBSYSNR'};
+
+        if (defined($subsysnr)) {
+            $oa .= "_$subsysnr";
+        }
+
+    }
+    else {
+        # go with instrument
+        $oa = $instrument;
+    }
+
+    return $oa;
 }
 
 =item B<read_headers>
 
 Read headers from a list of files.
 
-  my %headers = read_headers( @files );
+    my %headers = read_headers(@files);
 
 Returns a hash, keys being the filename and values being an
 Astro::FITS::Header object created from reading the header for the
@@ -153,38 +159,43 @@ given filename.
 =cut
 
 sub read_headers {
-  my @files = @_;
+    my @files = @_;
 
-  my %headers;
-  for my $f (@files) {
-    my $hdr = read_header( $f );
-    $headers{$f} = $hdr if defined $hdr;
-  }
+    my %headers;
 
-  return %headers;
+    foreach my $f (@files) {
+        my $hdr = read_header($f);
+        $headers{$f} = $hdr if defined $hdr;
+    }
+
+    return %headers;
 }
 
 =item B<read_header>
 
 Read header as Astro::FITS::Header object from a single file.
 
-  $hdr = read_header( $file );
+    $hdr = read_header($file);
 
 Can be FITS or NDF.
 
 =cut
 
 sub read_header {
-  my $f = shift;
-  my $hdr;
-  if ($f =~ /\.f.*$/i) {
-    $hdr = eval { Astro::FITS::Header::CFITSIO->new( File => $f )};
-  } elsif( $f =~ /\.sdf$/ ) {
-    $hdr = eval { Astro::FITS::Header::NDF->new( File => $f )};
-  } elsif( $f =~ /\.png$/ ) {
-    $hdr = eval { ImageInfo( $f ) };
-  }
-  return $hdr;
+    my $f = shift;
+    my $hdr;
+
+    if ($f =~ /\.f.*$/i) {
+        $hdr = eval {Astro::FITS::Header::CFITSIO->new(File => $f)};
+    }
+    elsif ($f =~ /\.sdf$/) {
+        $hdr = eval {Astro::FITS::Header::NDF->new(File => $f)};
+    }
+    elsif ($f =~ /\.png$/) {
+        $hdr = eval {ImageInfo($f)};
+    }
+
+    return $hdr;
 }
 
 =item B<read_wcs>
@@ -192,44 +203,47 @@ sub read_header {
 Reads the AST Frameset from a data file. If the file is an NDF the AST
 frameset is read directly, otherwise the header is read and WCS extracted.
 
-  $wcs = read_wcs( $file );
+    $wcs = read_wcs($file);
 
 =cut
 
 sub read_wcs {
-  my $f = shift;
+    my $f = shift;
 
-  my $wcs;
-  if ($f =~ /\.sdf$/) {
-    my $status = &NDF::SAI__OK();
-    err_begin($status);
-    ndf_begin();
+    my $wcs;
 
-    # Retrieve the WCS from the NDF.
-    ndf_find(&NDF::DAT__ROOT(), $f, my $indf, $status);
-    $wcs = ndfGtwcs( $indf, $status );
-    ndf_annul($indf, $status);
-    my $errstr;
-    if ($status != &NDF::SAI__OK()) {
-      $errstr = &NDF::err_flush_to_string( $status );
+    if ($f =~ /\.sdf$/) {
+        my $status = &NDF::SAI__OK();
+        err_begin($status);
+        ndf_begin();
+
+        # Retrieve the WCS from the NDF.
+        ndf_find(&NDF::DAT__ROOT(), $f, my $indf, $status);
+        $wcs = ndfGtwcs($indf, $status);
+        ndf_annul($indf, $status);
+        my $errstr;
+        if ($status != &NDF::SAI__OK()) {
+          $errstr = &NDF::err_flush_to_string($status);
+        }
+        ndf_end($status);
+        err_end($status);
+        throw JSA::Error::FatalError("Error reading WCS from file $f: $errstr")
+            if defined $errstr;
+
     }
-    ndf_end($status);
-    err_end($status);
-    throw JSA::Error::FatalError("Error reading WCS from file $f: $errstr")
-      if defined $errstr;
+    else {
+        my $header = read_header($f);
+        $wcs = $header->get_wcs();
+    }
 
-  } else {
-    my $header = read_header($f);
-    $wcs = $header->get_wcs();
-  }
-  return $wcs;
+    return $wcs;
 }
 
 =item B<read_jcmtstate>
 
 Read the JCMTSTATE information from a raw data file.
 
-  %state = read_jcmtstate( $file, 'start', @items );
+    %state = read_jcmtstate($file, 'start', @items);
 
 Where the second argument can be 'start' or 'end' to indicate
 whether the state values are read first or last entry in
@@ -257,159 +271,171 @@ specified.
 =cut
 
 sub read_jcmtstate {
-  my ($file, $upos, @items) = @_;
+    my ($file, $upos, @items) = @_;
 
-  # Open up the file, retrieve the JCMTSTATE structure, and store it
-  # in our cache.
-  my $status = &NDF::SAI__OK();
-  err_begin($status);
+    # Open up the file, retrieve the JCMTSTATE structure, and store it
+    # in our cache.
+    my $status = &NDF::SAI__OK();
+    err_begin($status);
 
-  hds_open( $file, "READ", my $loc, $status);
-  dat_find( $loc, "MORE", my $mloc, $status);
-  dat_find( $mloc, "JCMTSTATE", my $jloc, $status);
-  dat_annul( $mloc, $status);
+    hds_open($file, "READ", my $loc, $status);
+    dat_find($loc, "MORE", my $mloc, $status);
+    dat_find($mloc, "JCMTSTATE", my $jloc, $status);
+    dat_annul($mloc, $status);
 
-  # find out how many time slice there are going to be
-  # Assumes that RTS_NUM is first so won't be compressed.
-  dat_index( $jloc, 1, my $iloc, $status );
-  dat_size( $iloc, my $size, $status );
-  dat_annul( $iloc, $status );
+    # find out how many time slice there are going to be
+    # Assumes that RTS_NUM is first so won't be compressed.
+    dat_index($jloc, 1, my $iloc, $status);
+    dat_size($iloc, my $size, $status);
+    dat_annul($iloc, $status);
 
-  # Error string indicating that we had a problem and should clean up
-  my $errstr;
+    # Error string indicating that we had a problem and should clean up
+    my $errstr;
 
-  # work out which position to use. Default to first index
-  my @posns;
-  if ( defined $upos && $status == &NDF::SAI__OK() ) {
-    my @inpos = ( ref($upos) ? @$upos : ($upos) );
+    # work out which position to use. Default to first index
+    my @posns;
+    if (defined $upos && $status == &NDF::SAI__OK()) {
+        my @inpos = ( ref($upos) ? @$upos : ($upos) );
 
-    # Loop over all input positions
-    for my $p (@inpos) {
-      $p = lc($p);
-      my $isnum = looks_like_number( $p );
-      # do not need to check if we are only asking for first slice
-      if ( $p eq 'start' ) {
-        push(@posns, 1 );
-      } elsif ( $isnum && $p == 1 ) {
-        push(@posns, 1 );
-      } elsif ($isnum || $p eq 'end' ) {
-        if ($p eq 'end' ) {
-          push(@posns, $size );
-        } elsif ($p > 0 && $p <= $size ) {
-          push(@posns, $p);
-        } else {
-          $errstr = "Requested data from JCMTSTATE slice $p but this is out of range 1 <= $p <= $size";
+        # Loop over all input positions
+        foreach my $p (@inpos) {
+            $p = lc($p);
+            my $isnum = looks_like_number($p);
+
+            # do not need to check if we are only asking for first slice
+            if ($p eq 'start') {
+                push(@posns, 1);
+            }
+            elsif ($isnum && $p == 1) {
+                push(@posns, 1);
+            }
+            elsif ($isnum || $p eq 'end' ) {
+                if ($p eq 'end') {
+                    push(@posns, $size );
+                }
+                elsif ($p > 0 && $p <= $size) {
+                    push(@posns, $p);
+                }
+                else {
+                    $errstr = "Requested data from JCMTSTATE slice $p but this is out of range 1 <= $p <= $size";
+                }
+            }
+            else {
+                $errstr = "Error reading JCMTSTATEfrom file $file, position '$p' not recognized";
+            }
         }
-      } else {
-        $errstr = "Error reading JCMTSTATEfrom file $file, position '$p' not recognized";
-      }
     }
-  }
 
-  # Decide whether we are accessing cells or the full array
-  # Use cell if explicit items have been specified.
-  my $use_cell = ( @posns ? 1 : 0 );
+    # Decide whether we are accessing cells or the full array
+    # Use cell if explicit items have been specified.
+    my $use_cell = (@posns ? 1 : 0);
 
-  # Get a hash indicating which items are requested
-  my %items = map { uc($_), undef } @items;
+    # Get a hash indicating which items are requested
+    my %items = map {uc($_), undef} @items;
 
-  # find out how many extensions we have
-  dat_ncomp( $jloc, my $ncomp, $status );
+    # find out how many extensions we have
+    dat_ncomp($jloc, my $ncomp, $status);
 
-  # Somewhere to store the results
-  my %results;
+    # Somewhere to store the results
+    my %results;
 
-  # Keep a count of how many we retrieved
-  my $found = 0;
+    # Keep a count of how many we retrieved
+    my $found = 0;
 
-  # Loop over each
-  if ($status == &NDF::SAI__OK && !defined $errstr) {
-    for my $i (1..$ncomp) {
-      last if $status != &NDF::SAI__OK;
-      dat_index( $jloc, $i, my $iloc, $status );
-      dat_name( $iloc, my $name, $status );
-      my @dims;
-      dat_shape( $iloc, 1, @dims, my $actdim, $status);
+    # Loop over each
+    if ($status == &NDF::SAI__OK && !defined $errstr) {
+        foreach my $i (1 .. $ncomp) {
+            last if $status != &NDF::SAI__OK;
 
-      # Check for special case of 1 element vector
-      my $is_array = ( $actdim == 0 ? 0 : 1 );
+            dat_index($jloc, $i, my $iloc, $status);
+            dat_name($iloc, my $name, $status);
+            my @dims;
+            dat_shape($iloc, 1, @dims, my $actdim, $status);
 
-      # skip if we are selecting a subset
-      next if (@items && !exists $items{$name});
+            # Check for special case of 1 element vector
+            my $is_array = ($actdim == 0 ? 0 : 1);
 
-      # Skip RTS_TASKS unless we are asking for it
-      next if (!@items && $name eq 'RTS_TASKS');
+            # skip if we are selecting a subset
+            next if (@items && !exists $items{$name});
 
-      $found++;
+            # Skip RTS_TASKS unless we are asking for it
+            next if (!@items && $name eq 'RTS_TASKS');
 
-      # Need the type to decide what to call next
-      dat_type( $iloc, my $type, $status );
+            $found ++;
 
-      my $coderef;
-      if ($type =~ /^_(DOUBLE|REAL)$/) {
-        $coderef = ($use_cell ? \&dat_get0d : \&dat_getvd );
-      } elsif ($type eq '_INTEGER') {
-        $coderef = ($use_cell ? \&dat_get0i : \&dat_getvi );
-      } else {
-        $coderef = ($use_cell ? \&dat_get0c : \&dat_getvc );
-      }
+            # Need the type to decide what to call next
+            dat_type($iloc, my $type, $status);
 
-      my @values;
-      if ($use_cell) {
-        if (!$is_array) {
-          # this is actually a scalar so the value is a constant
-          $coderef->( $iloc, my $val, $status );
-          @values = map { $val } (0..$#posns);
-        } else {
-          for my $c (@posns) {
-            my @cell = ( $c );
-            dat_cell( $iloc, 1, @cell, my $cloc, $status );
-            $coderef->( $cloc, my $val, $status );
-            dat_annul( $cloc, $status );
-            push(@values, $val);
-          }
+            my $coderef;
+            if ($type =~ /^_(DOUBLE|REAL)$/) {
+                $coderef = ($use_cell ? \&dat_get0d : \&dat_getvd);
+            }
+            elsif ($type eq '_INTEGER') {
+                $coderef = ($use_cell ? \&dat_get0i : \&dat_getvi);
+            }
+            else {
+                $coderef = ($use_cell ? \&dat_get0c : \&dat_getvc);
+            }
+
+            my @values;
+            if ($use_cell) {
+                if (!$is_array) {
+                    # this is actually a scalar so the value is a constant
+                    $coderef->($iloc, my $val, $status);
+                    @values = map {$val} (0 .. $#posns);
+                }
+                else {
+                    foreach my $c (@posns) {
+                        my @cell = ($c);
+                        dat_cell($iloc, 1, @cell, my $cloc, $status);
+                        $coderef->($cloc, my $val, $status);
+                        dat_annul($cloc, $status);
+                        push(@values, $val);
+                    }
+                }
+            }
+            else {
+                $coderef->($iloc, $size, \@values, my $el, $status);
+
+                if ($el < $size && $el == 1) {
+                    # duplicate scalar items
+                    my $val = $values[0];
+                    @values = map {$val} (1 .. $size);
+                }
+            }
+
+            # store the results (do not use a scalar if we asked for all entries)
+            $results{$name} = ((@values > 1 || !$use_cell) ? \@values : $values[0]);
+
+            # free the locator associated with this component
+            dat_annul($iloc, $status);
         }
-      } else {
-        $coderef->( $iloc, $size, \@values, my $el, $status );
-
-        if ($el < $size && $el == 1) {
-          # duplicate scalar items
-          my $val = $values[0];
-          @values = map { $val } (1..$size);
-        }
-
-      }
-
-      # store the results (do not use a scalar if we asked for all entries)
-      $results{$name} = ( (@values > 1 || !$use_cell) ? \@values : $values[0] );
-
-      # free the locator associated with this component
-      dat_annul( $iloc, $status );
     }
-  }
-  dat_annul($jloc, $status );
-  dat_annul( $loc, $status );
 
-  if ($status != &NDF::SAI__OK()) {
-    $errstr .= &NDF::err_flush_to_string( $status );
-  }
-  err_end($status);
-  throw JSA::Error::FatalError("Error reading JCMTSTATE from file $file: $errstr")
-    if defined $errstr;
+    dat_annul($jloc, $status);
+    dat_annul($loc, $status);
 
-  # report if we did not find all that was requested
-  if (@items && $found != @items) {
-    throw JSA::Error::FatalError("Requested ".@items." components but only found $found");
-  }
+    if ($status != &NDF::SAI__OK()) {
+        $errstr .= &NDF::err_flush_to_string($status);
+    }
 
-  return %results;
+    err_end($status);
+    throw JSA::Error::FatalError("Error reading JCMTSTATE from file $file: $errstr")
+        if defined $errstr;
+
+    # report if we did not find all that was requested
+    if (@items && $found != @items) {
+        throw JSA::Error::FatalError("Requested ".@items." components but only found $found");
+    }
+
+    return %results;
 }
 
 =item B<update_fits_product>
 
 Update CADC-specific FITS headers in a FITS file.
 
-  update_fits_product( $file );
+    update_fits_product($file);
 
 This function updates one FITS header:
 
@@ -422,46 +448,50 @@ This function does not return anything.
 =cut
 
 sub update_fits_product {
-  my $file = shift;
+    my $file = shift;
 
-  my $status = 0;
-  my $ifits = Astro::FITS::CFITSIO::open_file( $file, Astro::FITS::CFITSIO::READWRITE(), $status );
+    my $status = 0;
+    my $ifits = Astro::FITS::CFITSIO::open_file(
+        $file, Astro::FITS::CFITSIO::READWRITE(), $status);
 
-  $ifits->get_num_hdus( my $numhdus, $status );
+    $ifits->get_num_hdus(my $numhdus, $status);
 
-  # we only have to modify extensions
-  if ($numhdus > 1) {
-    # Read PRODUCT from PRIMARY header
-    $ifits->read_key( Astro::FITS::CFITSIO::TSTRING(), "PRODUCT", my $prodref, my $pcomment, $status );
-    for my $i (2..$numhdus) {
-      last if $status != 0;
-      $ifits->movabs_hdu( $i, my $hdutype, $status );
-      next unless $hdutype == Astro::FITS::CFITSIO::IMAGE_HDU();
+    # we only have to modify extensions
+    if ($numhdus > 1) {
+        # Read PRODUCT from PRIMARY header
+        $ifits->read_key(Astro::FITS::CFITSIO::TSTRING(),
+                         "PRODUCT", my $prodref, my $pcomment, $status);
 
-      # Get the EXTNAME
-      $ifits->read_key( Astro::FITS::CFITSIO::TSTRING(), "EXTNAME", my $extname, undef, $status );
-      if ($status != 0) {
-        $status = 0;
-        next;
-      }
+        foreach my $i (2 .. $numhdus) {
+            last if $status != 0;
+            $ifits->movabs_hdu($i, my $hdutype, $status);
+            next unless $hdutype == Astro::FITS::CFITSIO::IMAGE_HDU();
 
-      # Need thing after last dot
-      $extname = (split(/\./,$extname))[-1];
+            # Get the EXTNAME
+            $ifits->read_key(Astro::FITS::CFITSIO::TSTRING(),
+                             "EXTNAME", my $extname, undef, $status);
+            if ($status != 0) {
+                $status = 0;
+                next;
+            }
 
-      # set the new value for use PRODUCT (lower case version of extension)
-      my $newprod = $prodref . lc("_$extname");
+            # Need thing after last dot
+            $extname = (split(/\./,$extname))[-1];
 
-      $ifits->update_key( Astro::FITS::CFITSIO::TSTRING(), "PRODUCT", $newprod, undef, $status );
+            # set the new value for use PRODUCT (lower case version of extension)
+            my $newprod = $prodref . lc("_$extname");
 
-      # Update the header checksum
-      $ifits->update_chksum($status);
+            $ifits->update_key(Astro::FITS::CFITSIO::TSTRING(),
+                               "PRODUCT", $newprod, undef, $status);
 
-      $status = 0;
+            # Update the header checksum
+            $ifits->update_chksum($status);
+
+            $status = 0;
+        }
     }
-  }
 
-  $ifits->close_file( $status );
-
+    $ifits->close_file($status);
 }
 
 =item B<cadc_ack>
@@ -469,14 +499,14 @@ sub update_fits_product {
 Return the standard CADC acknowledgement text. Should be added as comment to output FITS
 header.
 
-  @text = cadc_ack();
+    @text = cadc_ack();
 
 =cut
 
 sub cadc_ack {
-  my @text = <DATA>;
-  chomp(@text);
-  return @text;
+    my @text = <DATA>;
+    chomp(@text);
+    return @text;
 }
 
 =back

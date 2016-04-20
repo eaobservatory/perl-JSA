@@ -1,8 +1,4 @@
-#!/usr/local/perl-5.8/bin/perl
-
-eval 'exec perl  -S $0 ${1+"$@"}'
-    if 0; # not running under some shell
-
+#!/usr/bin/env perl
 
 =head1 NAME
 
@@ -10,7 +6,7 @@ dpCapture - Scan current dir looking for files suitable for ingestion
 
 =head1 SYNOPSIS
 
-  dpCapture --id="<instance id>" -persist -archive JCMT
+    dpCapture --id="<instance id>" -persist -archive JCMT
 
 =head1 DESCRIPTION
 
@@ -74,7 +70,7 @@ use Getopt::Long;
 use Pod::Usage;
 use File::Copy;
 use File::Spec;
-use File::Temp qw/ tempfile /;
+use File::Temp qw/tempfile/;
 use Carp;
 
 # Work out where we are so that we can run from a build directory
@@ -82,86 +78,87 @@ use Carp;
 use FindBin;
 use lib $FindBin::RealBin."/lib";
 
-use JSA::Files qw/ looks_like_cadcfile scan_dir /;
+use JSA::Files qw/looks_like_cadcfile scan_dir/;
 
 my $CADCDIR = "/export/jcmtdata/ptransfer/new";
 
 # Options
 my ($help, $man, $version, $persist, $archive, $id, $transdir, $debug);
-my $status = GetOptions("help" => \$help,
-                        "man" => \$man,
-                        "version" => \$version,
-                        "id=s" => \$id,
-                        "archive=s" => \$archive,
-                        "debug" => \$debug,
-                        "persist" => \$persist,
-                        "transdir=s" => \$transdir,
-                       );
+my $status = GetOptions(
+    "help" => \$help,
+    "man" => \$man,
+    "version" => \$version,
+    "id=s" => \$id,
+    "archive=s" => \$archive,
+    "debug" => \$debug,
+    "persist" => \$persist,
+    "transdir=s" => \$transdir,
+);
 
 pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
 if ($version) {
-  print "dpCapture - compatibility capture script for jsawrapdr\n";
-  exit;
+    print "dpCapture - compatibility capture script for jsawrapdr\n";
+    exit;
 }
 
-if( defined( $transdir ) ) {
-  $transdir = File::Spec->rel2abs( $transdir );
+if (defined($transdir)) {
+    $transdir = File::Spec->rel2abs($transdir);
 } else {
-  $transdir = $CADCDIR;
+    $transdir = $CADCDIR;
 }
 
 # Regex
 my $regexp;
 my $persistall;
 if (defined $archive && $archive =~ /canfar/i) {
-  $persistall = 1;
-  $regexp = qr/.*\.(fits|png|log|sdf)/;
+    $persistall = 1;
+    $regexp = qr/.*\.(fits|png|log|sdf)/;
 
-  # Append recipe id to transdir if supplied
-  if (defined $id) {
-    $transdir = File::Spec->catdir( $transdir, $id );
-  }
-} else {
-  # Standard CADC compliant capture
-  $regexp = qr/^(?:jcmt.*\.fits|jcmt.*\.png)$/;
+    # Append recipe id to transdir if supplied
+    if (defined $id) {
+        $transdir = File::Spec->catdir( $transdir, $id );
+    }
+}
+else {
+    # Standard CADC compliant capture
+    $regexp = qr/^(?:jcmt.*\.fits|jcmt.*\.png)$/;
 }
 
 # Sort out output directory
 if ($persist) {
-  if (! -d $transdir ) {
-    my $updir = _parentdir( $transdir );
-    if (-d $updir ) {
-      mkdir( $transdir ) || die "Could not create directory '$transdir' required to receive data files";
-    } else {
-      die "$transdir does not exist and neither does its parent. Can not copy data";
+    unless (-d $transdir) {
+        my $updir = _parentdir($transdir);
+        if (-d $updir) {
+            mkdir( $transdir ) || die "Could not create directory '$transdir' required to receive data files";
+        }
+        else {
+            die "$transdir does not exist and neither does its parent. Can not copy data";
+        }
     }
-  }
 }
 
 # Scan the directory for plausible fits or png files
-my %files = scan_dir( $regexp );
+my %files = scan_dir($regexp);
+
 for my $f (sort keys %files) {
+    if ($persistall || looks_like_cadcfile($f)) {
+        if ($persist) {
+            # Copy the file into a temporary file in the current directory,
+            # then rename it.
+            my ($fh, $filename) = tempfile();
+            copy($f, $filename) or die "copy from $f to $filename failed: $!";
+            move($filename, File::Spec->catfile($transdir, $f))
+                or die "move from $filename to " . File::Spec->catfile( $transdir, $f ) . " failed: $!";
 
-  if ($persistall || looks_like_cadcfile( $f )) {
+            print "Copied $f to " . File::Spec->catfile( $transdir, $f ) . "\n";
 
-    if( $persist ) {
-
-      # Copy the file into a temporary file in the current directory,
-      # then rename it.
-      my( $fh, $filename ) = tempfile( );
-      copy( $f, $filename ) or die "copy from $f to $filename failed: $!";
-      move( $filename, File::Spec->catfile( $transdir, $f ) ) or die "move from $filename to " . File::Spec->catfile( $transdir, $f ) . " failed: $!";
-
-      print "Copied $f to " . File::Spec->catfile( $transdir, $f ) . "\n";
-
-    } else {
-
-      print "\tWould ingest file $f\n";
-
+        }
+        else {
+          print "\tWould ingest file $f\n";
+        }
     }
-  }
 }
 
 
@@ -171,11 +168,11 @@ exit 0;
 #  $parent = _parentdir( $dir );
 
 sub _parentdir {
-  my $path = shift;
-  my @dirs = File::Spec->splitdir( $path );
-  pop(@dirs);
-  my $updir = File::Spec->catdir(@dirs);
-  return $updir;
+    my $path = shift;
+    my @dirs = File::Spec->splitdir($path);
+    pop(@dirs);
+    my $updir = File::Spec->catdir(@dirs);
+    return $updir;
 }
 
 
