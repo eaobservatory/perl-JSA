@@ -19,7 +19,6 @@ use OMP::ProjServer;
 use ORAC::Inst::Defn qw/orac_determine_inst_classes/;
 
 use JSA::Error qw/:try/;
-use JSA::Files qw/file_to_uri/;
 use JSA::Headers qw/get_orac_instrument/;
 use JSA::Headers::CADC qw/correct_asn_id/;
 
