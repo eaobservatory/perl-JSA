@@ -6,9 +6,8 @@ JSA::Files - File naming and URIs in the JCMT Science Archive
 
 =head1 SYNOPSIS
 
-    use JSA::Files qw/ uri_to_file file_to_uri /;
+    use JSA::Files qw/file_to_uri/;
 
-    $file = uri_to_file( $uri );
     $uri = file_to_uri( $file );
 
 =head1 DESCRIPTION
@@ -31,7 +30,7 @@ use Astro::FITS::HdrTrans qw/translate_from_FITS/;
 use JSA::Error;
 
 use Exporter 'import';
-our @EXPORT_OK = qw/uri_to_file file_to_uri drfilename_to_cadc
+our @EXPORT_OK = qw/file_to_uri drfilename_to_cadc
                     dissect_drfile dissect_cadcfile
                     cadc_to_drfilename
                     looks_like_drfile looks_like_fits_drfile
@@ -396,33 +395,6 @@ sub merge_pngs {
     }
 
     return \@reduced;
-}
-
-=item B<uri_to_file>
-
-Given a URI of the form ad:JCMT/xxxx convert it to a filename.
-
-    $file = uri_to_file($uri);
-
-The returned file name does not include a path.
-Returns undef if the URI is not recognized.
-
-=cut
-
-sub uri_to_file {
-    my $uri = shift;
-    my $file;
-
-    if ($uri =~ /^ad:JCMT\//) {
-        # chop off the front
-        $file = $uri;
-        $file =~ s/^ad:JCMT\///;
-
-        # append the suffix
-        $file .= ".fits";
-    }
-
-    return $file;
 }
 
 =item B<file_to_uri>
