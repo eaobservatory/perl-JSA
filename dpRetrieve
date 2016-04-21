@@ -15,7 +15,7 @@ from the CADC archive using URIs provided in a text file. The command
 written here is a compatibility version to allow the data processing
 system to be tested outside of the CADC environment.
 
-The test version of dpRetrieve can work on file URIs, full paths
+The test version of dpRetrieve can work on full paths
 to local files, or file names relative to the value of the
 ORAC_DATA_IN environment variable. Current working directory is used
 if ORAC_DATA_IN is unset or if the file does not exist in that directory.
@@ -47,13 +47,6 @@ CADC and should not be used by the wrapper script.
 =item B<--inputs>
 
 The name of a text file containing either file URIs or path to a file.
-If the file contains http: URLs they are immediately given to
-curl without further analysis.
-
-If the file contains strings starting with a "%" they are assumed to
-be file ids or patterns of file ids. The leading "%" is stripped and
-the remainder is either retrieved directly from CADC or else any
-wild-carding is expanded to file IDs.
 
 =cut
 
@@ -63,19 +56,11 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 use File::Spec;
-use File::HomeDir;
-use File::Temp;
-use Carp;
-use URI;
-use Compress::Zlib;
 
 # Work out where we are so that we can run from a build directory
 # and still find the JSA classes
 use FindBin;
 use lib $FindBin::RealBin."/lib";
-
-use JSA::Files qw/uri_to_file/;
-use JSA::Command qw/run_command/;
 
 # Options
 my ($help, $man, $version, $inputs, $debug, $outdir );
@@ -120,157 +105,88 @@ my @lines = <$fh>;
 
 close($fh) or die "Could not close file '$file': $!";
 
-# have three branches here. There is a "it looks like a http url so we use curl directly",
-# a "have file_ids so convert to urls" and "it looks local so we'll just copy"
+for my $line (@lines) {
+    my $fullpath = parse_retrieve_line($line);
+    next unless defined $fullpath;
 
-if ($lines[0] =~ /^\s*http/) {
-    # looks like a collection of URLs.
-    geturls(@lines);
-}
-elsif ($lines[0] =~ /^\%/) {
-    # Keep a list of all file ids to be retrieved
-    my @file_ids;
+    # see if that path exists
+    if (-e $fullpath) {
+        # split into a directory and a filename
+        my ($vol, $dir, $file) = File::Spec->splitpath($fullpath);
 
-    for my $id (@lines) {
-        # trim leading % and leading/trailing whitespace
-        chomp($id);
-        $id =~ s/\#.*//; # remove comment
-        $id =~ s/\s*$//;
-        $id =~ s/^\s*\%//;
-        next unless length($id) > 0;
+        # output location
+        $file = File::Spec->catdir($outdir, $file);
 
-        # if we still have a % we assume it is a wildcard for jcmtInfo
-        if ($id =~ /\%/) {
-            # Escape the wildcard, else jcmtInfo URL returns nothing.
-            $id =~ s/\%/%25/g;
+        # see if it exists already in the current dir
+        if (-e $file) {
+            # We first have to decide whether it is the same
+            # file or note
+            my @statcurr = stat($file);
+            my @statnew  = stat($fullpath);
 
-            # Need a URL
-            my $url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=' . $id;
-
-            $debug and print "Fetching $url ...\n";
-            my ($stdout, $stderr, $status) = run_command( "curl",
-                                                          "--silent",
-                                                          "--location",
-                                                          $url);
-            # each line should be a new file id
-            push( @file_ids, @$stdout );
-        }
-        else {
-            # Just a straight file id
-            push(@file_ids, $id);
-        }
-    }
-
-    # Now convert the file ids to a url at CADC
-    my @urls = map { "http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/data/auth/JCMT/".$_ } @file_ids;
-
-    # and retrieve the data
-    geturls(@urls);
-}
-else {
-    for my $line (@lines) {
-        my $fullpath = parse_retrieve_line($line);
-        next unless defined $fullpath;
-
-        # see if that path exists
-        if (-e $fullpath) {
-            # split into a directory and a filename
-            my ($vol, $dir, $file) = File::Spec->splitpath($fullpath);
-
-            # output location
-            $file = File::Spec->catdir($outdir, $file);
-
-            # see if it exists already in the current dir
-            if (-e $file) {
-                # We first have to decide whether it is the same
-                # file or note
-                my @statcurr = stat($file);
-                my @statnew  = stat($fullpath);
-
-                my $same = 1;
-                for my $i (0..$#statcurr) {
-                    if ($statcurr[$i] != $statnew[$i]) {
-                        $same = 0;
-                        last;
-                    }
+            my $same = 1;
+            for my $i (0..$#statcurr) {
+                if ($statcurr[$i] != $statnew[$i]) {
+                    $same = 0;
+                    last;
                 }
-                if (!$same) {
-                    die "Unable to retrieve file '$fullpath' because a file named '$file' already exists in the retrieve directory ($absdir) and it is different";
-                }
+            }
+            if (!$same) {
+                die "Unable to retrieve file '$fullpath' because a file named '$file' already exists in the retrieve directory ($absdir) and it is different";
+            }
 
-                # we know they are the same file
-                if (-l $file) {
-                    # remove the link and remake it
-                    if (unlink $file) {
-                        symlink $fullpath, $file
-                            or die "Could not make soft link to '$file' in retrieve directory ($absdir)\n";
+            # we know they are the same file
+            if (-l $file) {
+                # remove the link and remake it
+                if (unlink $file) {
+                    symlink $fullpath, $file
+                        or die "Could not make soft link to '$file' in retrieve directory ($absdir)\n";
 
-                        print STDERR "Re-making soft link for '$file'\n"
-                            if $debug;
-                    }
-                }
-                else {
-                    # it is a real file locally and it is the same so we touch
-                    # it to allow the wrapper script to know that it is required
-                    my $atime = time;
-                    my $mtime = $atime;
-
-                    utime($atime, $mtime, $file)
-                        or die "Error touching file '$file' in current directory ($absdir)";
-
-                    print STDERR "Touching pre-existing file '$file'\n"
+                    print STDERR "Re-making soft link for '$file'\n"
                         if $debug;
                 }
             }
             else {
-                # make a soft link
-                symlink $fullpath, $file
-                    or print STDERR "Could not make soft link to '$file' in current directory ($absdir)\n";
-                print STDERR "Making new soft link for file '$file'\n";
+                # it is a real file locally and it is the same so we touch
+                # it to allow the wrapper script to know that it is required
+                my $atime = time;
+                my $mtime = $atime;
+
+                utime($atime, $mtime, $file)
+                    or die "Error touching file '$file' in current directory ($absdir)";
+
+                print STDERR "Touching pre-existing file '$file'\n"
+                    if $debug;
             }
         }
         else {
-          print STDERR "File '$fullpath' does not seem to exist\n";
+            # make a soft link
+            symlink $fullpath, $file
+                or print STDERR "Could not make soft link to '$file' in current directory ($absdir)\n";
+            print STDERR "Making new soft link for file '$file'\n";
         }
+    }
+    else {
+      print STDERR "File '$fullpath' does not seem to exist\n";
     }
 }
 
 exit 0;
 
 # Converts a line retrieved from an "inputs" file into a full path
-# Recognizes file:// URLs
-# Recognizes ad:JCMT/ URIs
-# Recognizes fulle path to file /xxx/yy
-# For path-less strings prepends $ORAC_DATA_IN
-#   or current dir if not set
+# Recognizes full path to file /xxx/yy
+# For path-less strings prepends $ORAC_DATA_IN or current dir if not set
 # Comments (# xxx) are removed
 
 sub parse_retrieve_line {
-    my $line = shift;
-    chomp($line);
-    $line =~ s/\#.*//;
-    return unless $line =~ /\w/;
-
-    my $path;
-
-    # Try it as a URI
-    my $uri = URI->new($line);
-    if (!$uri->scheme) {
-        $path = $line;
-    }
-    elsif ($uri->scheme eq 'ad') {
-        $path = uri_to_file($line);
-    }
-    elsif ($uri->scheme eq 'file') {
-        $path = $uri->path;
-    }
-    else {
-        croak "Unsupported URI scheme '".$uri->scheme."'";
-    }
+    my $path = shift;
+    chomp($path);
+    $path =~ s/\#.*//;
+    return unless $path =~ /\w/;
 
     # see if we need to attach a directory. We do this if the
     # file is relative.
-    if (!File::Spec->file_name_is_absolute($path)) {
+    unless (File::Spec->file_name_is_absolute($path)) {
         # no directory so we guess ORAC_DATA_IN, else it will have
         # to be current working directory. We check in ORAC_DATA_IN
         if (exists $ENV{ORAC_DATA_IN} &&
@@ -280,115 +196,9 @@ sub parse_retrieve_line {
             $path = $newpath if -e $newpath;
         }
     }
+
     return $path;
 }
-
-# Reads .cadcuser file and returns list of $user, $password.
-# Empty list if no file or if file does not have a first line of user:password
-
-sub get_cadc_user_info {
-    my $userinfo = File::Spec->catfile(File::HomeDir->my_home, ".cadcuser");
-    my @results;
-    if (open(my $CADC, "<", $userinfo)) {
-        print "Reading CADC user information\n";
-        my $line = <$CADC>;
-        chomp($line);
-        if (defined $line && $line =~ /\w:/) {
-            $line =~ s/\s+$//;
-            $line =~ s/^\s+//;
-            push(@results, split /:/, $line, 2);
-            print "Found CADC user $results[0]\n" if $debug;
-        }
-        close($CADC);
-    }
-    return @results;
-}
-
-# Given an array of URLs, retrieves them
-# Currently uses curl through run_command. Tsk tsk.
-# Have not got round to using LWP or WWW::Curl yet.
-
-sub geturls {
-    # Read the URLs and remove blank entries
-    my @urls;
-    for my $arg (@_) {
-        chomp($arg);
-        $arg =~ s/\#.*//; # remove comment
-        $arg =~ s/\s*$//;
-        $arg =~ s/^\s*//;
-        push(@urls, $arg) if length($arg) > 0;
-    }
-
-    # See if we have a .cadcuser file
-    my ($user, $password) = get_cadc_user_info();
-
-    # use curl
-    my @curl_args;
-    if (defined $user && defined $password) {
-        push(@curl_args, "--user", "$user:$password");
-    }
-
-    for my $url (@urls) {
-        my $temp_fh = File::Temp->new('TEMPLATE' => join '-', '_temp' , $$ , 'XXXXXXXX');
-        $temp_fh->unlink_on_destroy(1);
-        my $tmpfile = $temp_fh->filename();
-
-        $debug and print "Fetching $url ...\n";
-        my ($stdout, $stderr, $status) = run_command( "curl",
-                                                      @curl_args,
-                                                      "--location",
-                                                      "-o", $tmpfile,
-                                                      "-v","--silent",
-                                                      $url);
-        print join("\n",@$stdout) if $stdout;
-        print "Errors: ". join("\n",@$stderr) if ($stderr && $status);
-
-        # Get the filename
-        my $outfile;
-        for my $out (@$stderr) {
-            if ($out =~ /filename=(.*)\s*$/) {
-                $outfile = $1;
-            }
-        }
-
-        if (defined $outfile) {
-            print "Retrieved file '$outfile'\n";
-
-            # gunzip if necessary
-            if ($outfile =~ /\.gz$/) {
-                $outfile =~ s/\.gz$//;
-                print "Gunzipping to $outfile\n";
-                # Open the gzipped file for read
-                my $gz = gzopen($tmpfile, "rb");
-                die "Could not open gzipped file" unless defined $gz;
-
-                # and the output file for write
-                open(my $outfh, ">", $outfile) or die "Error opening output file $outfile: $!";
-
-                while (1) {
-                    my $buffer;
-                    my $bytesread = $gz->gzread($buffer);
-                    if ($bytesread > 0) {
-                        syswrite($outfh, $buffer, $bytesread);
-                    } elsif ( $bytesread == 0 ) {
-                        last;
-                    } else {
-                        die "Error reading bytes from gzipped file";
-                    }
-                }
-                close($outfh);
-            }
-            else {
-                # simple rename
-                rename($tmpfile, $outfile);
-            }
-        }
-        else {
-            print STDERR "WARNING: Could not determine local file name\n";
-        }
-    }
-}
-
 
 =head1 AUTHORS
 

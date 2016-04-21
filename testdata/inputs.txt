@@ -1,4 +1,3 @@
-# Different schemes to test all types
-ad:JCMT/aaa
-file:bbb.sdf
+aaa.fits
+bbb.sdf
 ccc.sdf
