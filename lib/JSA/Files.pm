@@ -782,7 +782,7 @@ be included in the returned name.
 
 sub drfilename_to_cadc {
     my $drname = shift;
-    my %defaults = (ASN_TYPE => undef, VERSION => 0);
+    my %defaults = (ASN_TYPE => undef, VERSION => undef);
     my %args = (%defaults, @_);
 
     # Get the directory name
@@ -801,6 +801,10 @@ sub drfilename_to_cadc {
         else {
             $args{'ASN_TYPE'} = 'obs';
         }
+    }
+
+    if (! defined($args{'VERSION'})) {
+        $args{'VERSION'} = 0;
     }
 
     return () unless (defined $utdate) or (defined $asn_id);
