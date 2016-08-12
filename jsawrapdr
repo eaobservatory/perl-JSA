@@ -139,6 +139,10 @@ Mode to use when cleaning up files after execution. Options are:
 The main difference between cadc and all is that "cadc" triggers two
 cleanups. Default is "cadc".
 
+=item B<--fileversion>
+
+File version number.  This currently only applies to files with the
+"public" grouping mode.
 
 =back
 
@@ -196,7 +200,7 @@ print Dumper \%ENV;
 # Options
 my ($cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
     $instrument, $log, $man, $mode, $specified_outdir, $parameters, $persist,
-    $tmpdir, $transdir, $ut, $version, $debugxfer);
+    $tmpdir, $transdir, $ut, $show_version, $version, $debugxfer);
 
 my $status = GetOptions(
     "cleanup=s"     => \$cleanup,
@@ -216,14 +220,15 @@ my $status = GetOptions(
     "tmpdir"        => \$tmpdir,
     "transdir=s"    => \$transdir,
     "ut=s"          => \$ut,
-    "version"       => \$version,
+    "version"       => \$show_version,
     'debugxfer'     => \$debugxfer,
+    'fileversion:i' => \$version,
 );
 
 pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
-if ($version) {
+if ($show_version) {
     print "jsawrapdr - CADC compliant wrapper for JSA data processing\n";
     exit;
 }
@@ -529,7 +534,8 @@ my %drhdrs = read_headers(@drfiles);
 
 # And convert those files that have valid PRODUCT headers.
 convert_dr_files(\%drhdrs, {"mode" => $mode, dpid => $id,
-                            dpdate => DateTime->now->datetime});
+                            dpdate => DateTime->now->datetime,
+                            version => $version});
 
 # TEMPORARY HACK: copy all log.* files into the ORAC_LOGDIR if defined.
 if (exists $ENV{'ORAC_LOGDIR'}) {

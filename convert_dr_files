@@ -49,6 +49,11 @@ not given, then an error will be thrown.
 
 Print version information.
 
+=item B<--fileversion>
+
+File version number.  This currently only applies to files with the
+"public" grouping mode.
+
 =back
 
 =head1 ENVIRONMENT
@@ -98,20 +103,21 @@ use JSA::Convert qw/convert_dr_files list_convert_plan/;
 use JSA::Files qw/scan_dir/;
 use JSA::Headers qw/read_headers/;
 
-my ($help, $version, $man, $debug, $list, $mode);
+my ($help, $show_version, $version, $man, $debug, $list, $mode);
 my $status = GetOptions(
     "help" => \$help,
-    "version" => \$version,
+    "version" => \$show_version,
     "man" => \$man,
     "list" => \$list,
     "debug" => \$debug,
     "mode=s" => \$mode,
+    'fileversion:i' => \$version,
 );
 
 pod2usage(1) if $help;
 pod2usage(-exitstatus => 0, -verbose => 2) if $man;
 
-if ($version) {
+if ($show_version) {
     print "convert_dr_files - Convert a directory of files to CADC JSA compliant files\n";
     exit;
 }
@@ -143,11 +149,11 @@ if ($debug) {
 }
 if ($list) {
     # List what would happen (assuming headers are okay)
-    list_convert_plan( \%drhdrs, {mode => $mode} );
+    list_convert_plan( \%drhdrs, {mode => $mode, version => $version} );
 }
 else {
     # Do the actual conversion
-    convert_dr_files( \%drhdrs, { "mode" => $mode } );
+    convert_dr_files( \%drhdrs, { "mode" => $mode, version => $version } );
 }
 
 exit;

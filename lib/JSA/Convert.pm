@@ -63,7 +63,7 @@ our $DEBUG = 0;
 
 Convert the supplied NDF to FITS.
 
-  $fits = convert_to_fits( $ndf );
+  $fits = convert_to_fits( $ndf, $version );
 
 The current working directory is used for the conversion. Returns
 undef if the input file name did not match the standard DR product
@@ -79,6 +79,7 @@ may be automatically called by this routine.
 
 sub convert_to_fits {
     my $ndf = shift;
+    my $version = shift;
 
     # Do a quick check before we read the header
     return unless looks_like_drfile($ndf);
@@ -94,7 +95,8 @@ sub convert_to_fits {
     my $msg;
 
     try {
-        $outfile = drfilename_to_cadc($ndf, ASN_TYPE => $type);
+        $outfile = drfilename_to_cadc($ndf, ASN_TYPE => $type,
+                                      VERSION => $version);
     }
     catch JSA::Error with {
         my $E = shift;
@@ -165,6 +167,7 @@ allowed keys:
  - mode: Processing mode ("obs", "night", "project", "public").
  - dpid: Recipe instance ID for data processing
  - dpdate: ISO8601 date to assign to each converted file
+ - version: file version number (for "public" mode files only)
 
 =cut
 
@@ -175,6 +178,7 @@ sub convert_dr_files {
     my $mode = $opts->{'mode'};
     my $dpid = $opts->{dpid};
     my $dpdate = $opts->{dpdate};
+    my $version = $opts->{'version'};
 
     my @pngs;
 
@@ -212,7 +216,7 @@ sub convert_dr_files {
                                             \&looks_like_drfile,
                                             \&looks_like_cadcfile,
                                             \&_prov_check_file,
-                                            \&_prov_convert_filename,
+                                            _prov_convert_filename($version),
                                             0);
                 }
                 catch JSA::Error with {
@@ -234,7 +238,8 @@ sub convert_dr_files {
                 add_fits_comments($tfile, \@comments) if @comments;
 
                 # then convert to fits
-                my $outfile = convert_to_fits($tfile);
+                my $outfile = convert_to_fits(
+                    $tfile, (($mode eq 'public') ? $version : undef));
 
                 # Now need to fix up PRODUCT names in extensions
                 update_fits_product($outfile);
@@ -280,7 +285,9 @@ sub convert_dr_files {
 
             my $hdr = read_header($file);
             my $type = $hdr->value('ASN_TYPE');
-            my $outfile = drfilename_to_cadc($file, ASN_TYPE => $type);
+            my $outfile = drfilename_to_cadc(
+                $file, ASN_TYPE => $type,
+                VERSION => (($mode eq 'public') ? $version : undef));
 
             copy($file, $outfile);
 
@@ -341,12 +348,15 @@ sub list_convert_plan {
 
     my $opts = shift;
     my $mode = $opts->{'mode'};
+    my $version = $opts->{'version'};
 
     foreach my $file (sort keys %$href) {
         if (looks_like_drfile($file)) {
             if (can_send_to_cadc($mode, $href->{$file})) {
                 my $assoc = $href->{$file}->value("ASN_TYPE");
-                my $outfile = drfilename_to_cadc($file, ASN_TYPE => $assoc);
+                my $outfile = drfilename_to_cadc(
+                    $file, ASN_TYPE => $assoc,
+                    VERSION => (($assoc eq 'public') ? $version : undef));
                 print "Converting file $file -> $outfile\n";
             }
             else {
@@ -689,77 +699,89 @@ sub _prov_check_file {
 
 =item B<_prov_convert_filename>
 
-Convert the name of a file in the provenance system into the
+Return a reference to a subroutine which can be used to
+convert the name of a file in the provenance system into the
 corresponding CADC filename which we would like to be the
 new provenance entry.
+
+    prov_update_parent_path(..., _prov_convert_filename($version), ...);
+
+This is implemented as a closure so that it can retain
+access to the file version.
 
 =cut
 
 sub _prov_convert_filename {
-    my $path = shift;
-    my $basedir = shift;
-    my $haspar = shift;
+    my $version = shift;
+    return sub {
+        my $path = shift;
+        my $basedir = shift;
+        my $haspar = shift;
 
-    # Check to see if this file exists. If it doesn't, we'll check in the
-    # same directory as the original file.
-    unless (-e $path) {
-        my $parent_filename = fileparse($path);
-        $path = File::Spec->catfile($basedir, $parent_filename);
-    }
-
-    # We need the header
-    my $hdr = read_header($path);
-
-    # We need to know if there is a product. There are two ways of doing this.
-    # 1. Look at the filename.
-    # 2. Read the PRODUCT header
-    # Reconstructing the filename will be tricky without a header but see how
-    # far we can get
-    $path =~ s/_0001_raw001/_raw001/;
-    my $product;
-    if (defined $hdr) {
-        $product = $hdr->value("PRODUCT");
-    }
-    else {
-        my @parts = dissect_drfile( $path );
-        # raw is special so is not a real product
-        if (defined $parts[5] && $parts[5] ne 'raw') {
-            $product = $parts[5];
+        # Check to see if this file exists. If it doesn't, we'll check in the
+        # same directory as the original file.
+        unless (-e $path) {
+            my $parent_filename = fileparse($path);
+            $path = File::Spec->catfile($basedir, $parent_filename);
         }
-    }
 
-    # if there is no product it is a raw file so will not be
-    # a FITS CADC filename.
-    my $newpath;
-    if (!$product || !$haspar) {
-        # do nothing if this looks raw
-        if (! looks_like_rawfile($path)) {
-            # Recreate the raw file name
-            if (defined $hdr) {
-                $newpath = construct_rawfile($hdr);
+        # We need the header
+        my $hdr = read_header($path);
+
+        # We need to know if there is a product. There are two ways of doing this.
+        # 1. Look at the filename.
+        # 2. Read the PRODUCT header
+        # Reconstructing the filename will be tricky without a header but see how
+        # far we can get
+        $path =~ s/_0001_raw001/_raw001/;
+        my $product;
+        if (defined $hdr) {
+            $product = $hdr->value("PRODUCT");
+        }
+        else {
+            my @parts = dissect_drfile( $path );
+            # raw is special so is not a real product
+            if (defined $parts[5] && $parts[5] ne 'raw') {
+                $product = $parts[5];
             }
-            else {
-                # This hack does not work for multi-subsystem hybrids
-                # since we lose the subscan number
-                $newpath = $path;
-                if ($newpath =~ /_[a-z]+(\d+)/) {
-                    my $newnum = sprintf( "%04d", $1);
-                    $newpath =~ s/_[a-z]+\d+/_$newnum/;
+        }
+
+        # if there is no product it is a raw file so will not be
+        # a FITS CADC filename.
+        my $newpath;
+        if (!$product || !$haspar) {
+            # do nothing if this looks raw
+            if (! looks_like_rawfile($path)) {
+                # Recreate the raw file name
+                if (defined $hdr) {
+                    $newpath = construct_rawfile($hdr);
+                }
+                else {
+                    # This hack does not work for multi-subsystem hybrids
+                    # since we lose the subscan number
+                    $newpath = $path;
+                    if ($newpath =~ /_[a-z]+(\d+)/) {
+                        my $newnum = sprintf( "%04d", $1);
+                        $newpath =~ s/_[a-z]+\d+/_$newnum/;
+                    }
                 }
             }
         }
-    }
-    else {
-        # We need the ASN_TYPE from this parent to correctly make the file name
-        my $asntype = (defined $hdr ? $hdr->value("ASN_TYPE") : undef);
+        else {
+            # We need the ASN_TYPE from this parent to correctly make the file name
+            my $asntype = (defined $hdr ? $hdr->value("ASN_TYPE") : undef);
 
-        # if we do not have a value we need to hope it's an
-        # "obs" product
-        $newpath = drfilename_to_cadc(
-            $path, (defined $asntype ?  (ASN_TYPE => $asntype) : ()));
-    }
+            # if we do not have a value we need to hope it's an
+            # "obs" product
+            $newpath = drfilename_to_cadc(
+                $path,
+                (defined $asntype ?  (ASN_TYPE => $asntype) : ()),
+                ((defined $asntype and $asntype eq 'public')
+                    ? (VERSION => $version) : ()));
+        }
 
-    return $newpath;
+        return $newpath;
+    }
 }
 
 =item B<_create_raw_previews>
