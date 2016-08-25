@@ -40,7 +40,7 @@ use OMP::Constants qw /:status/;
 $OMP::Config::DEBUG = 0;
 
 my %_config = (
-    'db-config' => '/home/jcmtarch/enterdata-cfg/enterdata.cfg',
+    'db-config' => '/jac_sw/etc/enterdata/enterdata.cfg',
 
     'name' => __PACKAGE__,
 
@@ -56,14 +56,14 @@ my %_config = (
 Make a C<JSA::DB> object.  It takes a hash of parameters ...
 
     db-config - pass file name with database log in information in "ini" format;
-                default is /home/jcmtarch/enterdata-cfg/enterdata.cfg;
+                default is /jac_sw/etc/enterdata/enterdata.cfg;
 
     name      - (optional) pass a string to differentiate db connections
                 with same log in configuration; default is 'JSA::DB'.
 
     $jdb = JSA::DB->new(
         'name'      => 'JSA::DB'
-        'db-config' => '/home/jcmtarch/enterdata-cfg/enterdata.cfg');
+        'db-config' => '/jac_sw/etc/enterdata/enterdata.cfg');
 
 Transactions are set to be used (see C<use_transaction> method).
 
