@@ -1,5 +1,66 @@
 package JSA::CADC_Copy;
 
+=head1 NAME
+
+JSA::CADC_Copy - Create links to JCMT data in CADC e-transfer staging area
+
+=head1 SYNOPSIS
+
+Create an object:
+
+    my $copy = JSA::CADC_Copy->new;
+
+
+Shows some progress of the process:
+
+    $copt->verbose(1) ;
+
+
+Upload for current UT date:
+
+    $copy->upload_per_instrument;
+
+
+or, upload for a particular date:
+
+    $copy->date('20080820');
+    $copy->upload_per_instrument;
+
+
+or, upload for a date range:
+
+    $copy->start_date('20080820');
+    $copy->end_date(  '20080821');
+    $copy->upload_per_instrument;
+
+
+Force an upload, overwriting existing symbolic links & F<*.cadc_ok>
+files:
+
+    $copy->force(1);
+    $copy->upload_per_instrument;
+
+
+Or, just create the object with options:
+
+    $copy = JSA::CADC_Copy->new(
+                                'force'   => 0,
+                                'verbose' => 1,
+                                'start-date' => '20080820',
+                                'end-date'   => '20080821',
+                               );
+
+    $copy->upload_per_instrument;
+
+
+=head1 DESCRIPTION
+
+This module prepares data to be transferred to the CADC by creating
+links from the data to the staging area.  It creates F<*.cadc_ok>
+files to skip related data files in future.
+
+=cut
+
 use warnings;
 use strict;
 
@@ -13,6 +74,194 @@ use List::MoreUtils qw/any/;
 use JSA::Command qw/run_command/;
 use JSA::Error qw[ :try ];
 use OMP::Config;
+
+=head2 METHODS
+
+=over 4
+
+=item B<new>
+
+This is the constructor method, which accepts I<cadc-dir>, I<date>,
+I<start-date>, and I<end-date> as options as a "hash".
+
+=over 2
+
+=item I<cadc-dir>
+
+Specify the directory where symbolic needs to be made for upload.
+Default is F</export/jcmtdata/ptransfer/new>.
+
+=item I<date>
+
+Specify the date of data to be linked, either as a L<Time::Piece>
+object or a string in C<YYYYMMDD> format.
+
+If given, it overrides given I<start-> or I<end-date>.
+
+=item I<dry_run>
+
+Show what would have been done, without actually moving or creating files.
+
+=item I<end-date>
+
+Specify the end date of data to be linked, representation as specified
+for I<date>.
+
+=item I<force>
+
+Specify to a true value to force upload (overwrite existing files).
+Default is a false value.
+
+=item I<start-date>
+
+Specify the start date of data to be linked, representation as
+specified for I<date>.
+
+=back
+
+  $copy = JSA::CADC_Copy->new( 'cadc-dir' => '/non/default/path' );
+
+=item B<instrument_list>
+
+Returns a case insensitive sorted list of instrument names.
+
+  @inst = $copy->instrument_list;
+
+=item B<instrument_root>
+
+Returns the instrument specific directory if only the instrument name
+is given.
+
+  $dir = $copy->instrument_root( 'ACSIS' );
+
+Sets the instrument directory  when directory is also given along
+with instrument name; returns nothing.
+
+  $copy->instrument_root( 'ACSIS', '/path/to/jcmt/acsis/spectra' );
+
+=item B<instrument_ok_regex>
+
+Returns the instrument specific regular expression if only the
+instrument name is given.
+
+  $regex = $copy->instrument_ok_regex( 'ACSIS' );
+
+Sets the regular expression when regular expression is also given
+along with instrument name; returns nothing.
+
+  $copy->instrument_ok_regex( 'ACSIS', qr{^\.a\d{8}_(\d{5})\.ok$} );
+
+
+=item B<instrument_path_regex>
+
+Returns the instrument specific regular expression matching the path
+for observation file(s) if only the instrument name is given.
+
+  $regex = $copy->instrument_path_regex( 'ACSIS' );
+
+Default for I<ACSIS> is ...
+
+  qr{ ^
+      # Parent instrument directory with date.
+      ( .+?
+        /
+        \d{8}
+      )
+      [/\d]+?
+      # Base file name.
+      (
+        ([ah])
+        \d{8} _
+        # Observation number.
+        ( \d{5} )
+        _ \d{2} _ \d{4} [.]sdf
+      )
+      $
+    }x;
+
+
+Sets the regular expression when regular expression is also given
+along with instrument name; returns nothing.
+
+  $copy->instrument_path_regex( 'ACSIS',
+                                qr{^(/raw/path/\d{8})/.+?/(([.])[_\d]+\.sdf)$}
+                              );
+
+=item B<verbose>
+
+Returns the verbosity value if no arguments are given.
+
+  warn 'A warning' if $copy->verbose;
+
+Sets the directory to the given argument, returns nothing.
+
+  $copy->verbose( 2 );
+
+=item B<force>
+
+Returns the currently set value if no arguments are specified.
+
+Else, sets the value to the given true value.  If true, existing files
+will be overwritten to force upload.
+
+  $copy->force( 'yes' );
+  ...
+  do { ... } if $copy->force;
+
+=item B<cadc_dir>
+
+Returns the directory name in which to create F<*.cadc_ok> files if no
+arguments are given.
+
+  $dir = $copy->cadc_dir;
+
+Sets the directory to the given argument, returns nothing.
+
+  $copy->cadc_dir( '/path/for/cadc/new' );
+
+=item B<date>
+
+Returns the date of data to be linked if no argument is given.
+
+Else, sets the date to the given argument, and returns nothing.  Date
+should either be a L<Time::Piece> object or a string in C<YYYYMMDD>
+format.
+
+  # Set a date.
+  $copy->date( '20080820' );
+
+  # Retrieve it.
+  $date = $copy->date;
+
+=item B<start_date>
+
+Returns the start date of data to be linked if no argument is given.
+
+Else, sets the start date to the given argument, and returns nothing.
+Date should either be a L<Time::Piece> object or a string in
+C<YYYYMMDD> format.
+
+  # Set a date.
+  $copy->start_date( '20080820' );
+
+  # Retrieve it.
+  $date = $copy->start_date;
+
+=item B<end_date>
+
+Returns the end date of data to be linked if no argument is given.
+
+Else, sets the end date to the given argument, and returns nothing.
+Date should either be a L<Time::Piece> object or a string in
+C<YYYYMMDD> format.
+
+  # Set a date.
+  $copy->end_date( '20080820' );
+
+  # Retrieve it.
+  $date = $copy->end_date;
+
+=cut
 
 BEGIN {
 
@@ -202,9 +451,27 @@ BEGIN {
 
 }
 
-# Given a date value, returns true if it is a Time::Piece object or
-# matches the number of digits in a date specified in 'YYYYMMDD'
-# format.
+=item B<check_date>
+
+Given a date value, returns nothing if it is a Time::Piece object or
+matches the number of digits in a date specified in 'YYYYMMDD' format.
+Else, throws L<JSA::Error::BadArgs> exception.
+
+  for my $date ( 20080820 2008 ) {
+
+      try {
+
+        JSA::CADC_Copy->check_date( $date );
+      }
+      catch with JSA::Error::BadArgs {
+
+        my $e = shift @_;
+        print "$date : $e\n";
+      }
+  }
+
+=cut
+
 sub check_date {
     my ($class, $date) = @_;
 
@@ -218,7 +485,16 @@ sub check_date {
       'Must provide date in "YYYYMMDD" format or as Time::Piece object.';
 }
 
-# Returns the date format.
+=item B<get_date_format>
+
+Returns the date format suitable for C<strftime> format ('%Y%m%d').
+
+  print Time::Piece->strftime( '20080820',
+                                JSA::CADC_Copy->get_date_format,
+                              );
+
+=cut
+
 sub get_date_format {
     my ($class) = @_;
 
@@ -239,10 +515,17 @@ sub verbose {
     return;
 }
 
-# From start date to end date, go through each directory creating symbolic links
-# to each data file.  Once the link has been created, create a .cadc_ok file to
-# indicate that the file should be ignored in the future.  Do this for each
-# instrument in the $self->instrument_list().
+=item B<upload_per_instrument>
+
+For each instrument, creates symbolic links to each data file from
+start date to end date, going through each directory.
+Later, creates a .cadc_ok file to indicate that the file should be
+ignored in the future.
+
+  $copy->upload_per_instrument;
+
+=cut
+
 sub upload_per_instrument {
     my ($self) = @_;
 
@@ -293,8 +576,24 @@ sub upload_per_instrument {
     return;
 }
 
-# Returns an array reference of array references containing base file names (aka
-# file ids).  Returns nothing if SQL query finds nothing.
+=item B<get_file_ids>
+
+Given start and end date strings, returns an array reference of file
+ids existing in database in the date range.
+
+Throws JSA::Error::FatalError if there is a problem with database
+query.
+
+  $file_ids = $self->get_file_ids( '2008-08-20',
+                                    '2008-08-21'
+                                  );
+
+
+Returns an array reference of array references containing base file names (aka
+file ids).  Returns nothing if SQL query finds nothing.
+
+=cut
+
 sub get_file_ids {
     my ($self, $start, $end) = @_;
 
@@ -342,8 +641,20 @@ sub get_file_ids {
     return [map {@$_} @{$files}];
 }
 
-# Returns a hash reference with the keys 'ok' and 'cadc_ok', where the value of
-# each key is a reference to an array of '.ok' or '.cacdc_ok' file names.
+=item B<read_okfiles>
+
+Given a directory name, returns a hash reference with the keys 'ok'
+and 'cadc_ok', where the value of each key is an array reference of
+'.ok' or '.cacdc_ok' file names respectively.
+
+  $files = JSA::CADC_Copy->read_okfiles( $directory );
+
+  $ok      = $files->{'ok'};
+  @cadc_ok = @{$files->{'cadc_ok'}};
+
+
+=cut
+
 sub read_okfiles {
     my ($class, $dir) = @_;
 
@@ -365,13 +676,52 @@ sub read_okfiles {
     return \%ok;
 }
 
-# Loop through normal .ok files, and create links for data files that
-# do not have a corresponding .cadc_ok file.  It takes argument as a hash ...
-#   instrument => ACSIS | SCUBA2
-#   source-dir => /inst/date/dir
-#   obs-date   => 20080820        -- used to generate source directory name
-#   okfiles    => \@okfiles_per_inst_per_date
-#   file-ids   => \@file_id_in_db
+=item B<upload_make_cadc_ok>
+
+For every F<*.ok> file name, makes a symbolic link in CADC upload
+directory and creates a corresponding F<*.cadc_ok> file (in the
+directory name given by I<cadc_dir> method), given a hash of ...
+
+=over 4
+
+=item I<file-ids> as key
+
+A array reference of file ids as present in database as value.
+
+=item I<instrument>
+
+Instrument name involved.
+
+If missing, then L<JSA::Error::BadArgs> exception is thrown.
+
+=item I<obs-date>
+
+UT date for an observation, used to generate source directory path.
+
+If both this and I<source-dir> are missing, then
+L<JSA::Error::BadArgs> exception is thrown.
+
+=item I<okfiles>
+
+Array reference of F<*.ok> file names.
+
+=item I<source-dir>
+
+Directory name where to find observation data for a given date &
+observation number.
+
+If missing, then I<obs-date> is used to generate the path.
+
+=back
+
+  $self->upload_make_cadc_ok( 'file-ids'   => \%file_id,
+                              'instrument' => $inst,
+                              'okfiles'   => $okfiles->{ $inst }->{ $ymd },
+                              'source-dir' => '/instrument/date/path',
+                            );
+
+=cut
+
 sub upload_make_cadc_ok {
     my ($self, %args) = @_;
 
@@ -410,13 +760,30 @@ sub upload_make_cadc_ok {
     return;
 }
 
-# Returns the UT date directory path given the instrument name.
+=item B<make_inst_date_path>
+
+Returns the UT date directory path given the instrument name.
+
+  $acsis_ut = $copy->make_inst_date_path( 'ACSIS', '20080820' );
+
+=cut
+
 sub make_inst_date_path {
     my ($self, $inst, $date) = @_;
     return File::Spec->catdir($self->instrument_root($inst), $date);
 }
 
-# Returns a *.cadc_ok file name given a *.ok base name & the parent directory.
+=item B<make_cadc_ok_path>
+
+Returns a F<*.cadc_ok> file name given a F<*.ok> base name & the
+parent directory.
+
+  $cadc_ok = JSA::CADC_Copy->make_cadc_ok_path( '.a_20080920_0123.ok',
+                                                 '/parent'
+                                                );
+
+=cut
+
 sub make_cadc_ok_path {
     my ($class, $ok, $parent) = @_;
 
@@ -426,9 +793,22 @@ sub make_cadc_ok_path {
     return File::Spec->catfile($parent, $cadc_ok);
 }
 
-# Returns a observation directory name given a *.ok base name; the parent
-# directory; and the instrument name (to extract observation number from a
-# F<*.ok> file).
+=item B<make_obsnum_path>
+
+Returns a observation directory name given 
+the instrument name (to extract observation number from a
+F<*.ok> file, see I<instrument_ok_regex> method),
+the parent directory and a *.ok base name.
+
+  # Returns '/parent/0123'.
+  $obsnum_dir =
+    $copy->make_obsnum_path( $instrument,
+                              '/parent',
+                             '.a_20080920_0123.ok'
+                            );
+
+=cut
+
 sub make_obsnum_path {
     my ($self, $inst, $parent, $ok) = @_;
 
@@ -439,8 +819,20 @@ sub make_obsnum_path {
     return File::Spec->catdir($parent, $obsnum);
 }
 
-# Returns the files in the given directory that have been replicated to the CADC
-# mirror db specified by the hash reference.
+=item B<filter_files>
+
+Given a directory path and a hash reference of files as keys to keep,
+returns the file names which exist in the directory as an array
+reference.
+
+Throws JSA::Error::FatalError if the directory cannot be opened.
+
+  $filtered = JSA::CADC_Copy->filter_files( '/dir/path',
+                                            { 'file-name' -> undef }
+                                          );
+
+=cut
+
 sub filter_files {
     my ($class, $dir, $db_ok) = @_;
 
@@ -455,8 +847,17 @@ sub filter_files {
     return \@files;
 }
 
-# Makes a symbolic link for given source directory and the observation number
-# string.
+=item B<make_symlink>
+
+Creates the link in CADC staging area, given observation number
+directory path and the base file name in there.
+
+Throws JSA::Error::FatalError if the symbolic link cannot be created.
+
+  $copy->make_symlink( '/path/to/obs', 'a_20080820_00820_08_020.sdf' );
+
+=cut
+
 sub make_symlink {
     my ($self, $obsnum, $base) = @_;
 
@@ -481,7 +882,17 @@ sub make_symlink {
     return;
 }
 
-# Creates an empty file at the given path.
+=item B<make_empty_file>
+
+Given a file path, creates an empty file.  Nothing is done if the path
+already exists.
+
+Throws JSA::Error::FatalError if the file cannot be created.
+
+  $copy->make_empty_file( '/file/path' );
+
+=cut
+
 sub make_empty_file {
     my ($self, $path) = @_;
 
@@ -503,8 +914,15 @@ sub make_empty_file {
     return;
 }
 
-# Returns a hash reference with instrument as keys & start date as values, and
-# an end date.
+=item B<find_start_end_dates>
+
+Returns a hash reference with instrument as keys & start date as
+values, and an end date.
+
+  ( $inst_start, $end ) = $copy->find_start_end_dates;
+
+=cut
+
 sub find_start_end_dates {
     my ($self) = @_;
 
@@ -529,10 +947,20 @@ sub find_start_end_dates {
     return ($start_inst, $end);
 }
 
-# Returns a hash reference of instruments as keys and start dates as values.
-#
-# Determines the start date by stepping backwards one day at a time until we've
-# reached a UT-date directory containing a .cadc_ok file.
+=item B<find_start_dates>
+
+Returns a hash reference of instruments as keys and start dates as
+values.
+
+It is called by C<find_start_end_dates()> method when neither
+I<start-date> nor I<date> was specified. Determine the start date by
+stepping backwards one day at a time until we've reached a directory
+containing a .cadc_ok file.
+
+  $inst_start = $self->find_start_dates;
+
+=cut
+
 sub find_start_dates {
     my ($self) = @_;
 
@@ -576,7 +1004,30 @@ sub find_start_dates {
     return \%start;
 }
 
-# To pass same hash reference among various subs.
+=back
+
+=head2 FUNCTIONS
+
+=over 2
+
+=item B<okfiles>
+
+Returns a hash reference to be manipulated by the calling method.  It
+is used to pass around the same hash reference among the methods which
+do not call each other.
+
+  $files = $copy->okfiles;
+  $files->{'ACSIS'}->{'2008-08-20 20:08:00'} = 'file';
+
+=item B<clear_okfiles>
+
+Set the hash reference (returned by I<okfiles> method) to be an empty
+one.
+
+  $copy->clear_okfiles;
+
+=cut
+
 {
   my $okfiles;
 
@@ -592,26 +1043,69 @@ sub find_start_dates {
   }
 }
 
-# This function returns a hash reference, with keys being the files at CADC. If
-# the UT date is in an incorrect format, this method returns undef. If no files
-# are returned, this method returns an empty hash reference.
-#
-# Accepts also an optional array reference of instrument prefixes with
-# key of "prefix", out
-# of...
-#
-#   a,
-#   s4a,
-#   s4b,
-#   s4c,
-#   s4d,
-#   s8a,
-#   s8b,
-#   s8c,
-#   s8d
-#
-# ... and, wait time in seconds to wait between requests to CADC
-# server with key of "wait".
+=item B<at_cadc>
+
+Return a list of files uploaded to CADC for a specific UT date.
+
+  my $at_cadc = at_cadc( $ut );
+
+The UT date must be in YYYYMMDD format. This function returns a hash
+reference, with keys being the files at CADC. If the UT date is in an
+incorrect format, this method returns undef. If no files are returned,
+this method returns an empty hash reference.
+
+Return a list of files uploaded to CADC for a specific UT date.
+
+Accepts optional time (in seconds) with key of C<wait> to wait between
+requests to CADC server; and, an optional array reference of
+instrument prefixes as with key of C<prefix>.
+
+The instrument prefixes are ...
+
+  a,
+  s4a,
+  s4b,
+  s4c,
+  s4d,
+  s8a,
+  s8b,
+  s8c,
+  s8d
+
+
+If no list is given, all of the above prefixes are used.
+
+  my $at_cadc = at_cadc( $ut,
+                          'wait'   => 2,
+                          'prefix' => [ qw[ a s4a s8d ] ]
+                        );
+
+  $at_cadc = at_cadc( $ut, 'prefix' => [ qw[ s4a s8d ] ] );
+
+
+This function returns a hash reference, with keys being the files at CADC. If
+the UT date is in an incorrect format, this method returns undef. If no files
+are returned, this method returns an empty hash reference.
+
+Accepts also an optional array reference of instrument prefixes with
+key of "prefix", out
+of...
+
+  a,
+  s4a,
+  s4b,
+  s4c,
+  s4d,
+  s8a,
+  s8b,
+  s8c,
+  s8d
+
+... and, wait time in seconds to wait between requests to CADC
+server with key of "wait".
+
+=cut
+
 sub at_cadc {
     my ($ut, %opt) = @_;
 
@@ -685,524 +1179,6 @@ sub _filter_curl_output {
 
 1;
 
-=pod
-
-=head1 NAME
-
-JSA::CADC_Copy - Create links to JCMT data in CADC e-transfer staging area
-
-=head1 SYNOPSIS
-
-Create an object:
-
-    my $copy = JSA::CADC_Copy->new;
-
-
-Shows some progress of the process:
-
-    $copt->verbose(1) ;
-
-
-Upload for current UT date:
-
-    $copy->upload_per_instrument;
-
-
-or, upload for a particular date:
-
-    $copy->date('20080820');
-    $copy->upload_per_instrument;
-
-
-or, upload for a date range:
-
-    $copy->start_date('20080820');
-    $copy->end_date(  '20080821');
-    $copy->upload_per_instrument;
-
-
-Force an upload, overwriting existing symbolic links & F<*.cadc_ok>
-files:
-
-    $copy->force(1);
-    $copy->upload_per_instrument;
-
-
-Or, just create the object with options:
-
-    $copy = JSA::CADC_Copy->new(
-                                'force'   => 0,
-                                'verbose' => 1,
-                                'start-date' => '20080820',
-                                'end-date'   => '20080821',
-                               );
-
-    $copy->upload_per_instrument;
-
-
-=head1 DESCRIPTION
-
-This module prepares data to be transferred to the CADC by creating
-links from the data to the staging area.  It creates F<*.cadc_ok>
-files to skip related data files in future.
-
-=head2 FUNCTIONS
-
-=over 2
-
-=item B<at_cadc>
-
-Return a list of files uploaded to CADC for a specific UT date.
-
-  my $at_cadc = at_cadc( $ut );
-
-The UT date must be in YYYYMMDD format. This function returns a hash
-reference, with keys being the files at CADC. If the UT date is in an
-incorrect format, this method returns undef. If no files are returned,
-this method returns an empty hash reference.
-
-Return a list of files uploaded to CADC for a specific UT date.
-
-Accepts optional time (in seconds) with key of C<wait> to wait between
-requests to CADC server; and, an optional array reference of
-instrument prefixes as with key of C<prefix>.
-
-The instrument prefixes are ...
-
-  a,
-  s4a,
-  s4b,
-  s4c,
-  s4d,
-  s8a,
-  s8b,
-  s8c,
-  s8d
-
-
-If no list is given, all of the above prefixes are used.
-
-  my $at_cadc = at_cadc( $ut,
-                          'wait'   => 2,
-                          'prefix' => [ qw[ a s4a s8d ] ]
-                        );
-
-  $at_cadc = at_cadc( $ut, 'prefix' => [ qw[ s4a s8d ] ] );
-
-=back
-
-=head2 CLASS METHODS
-
-=over 4
-
-=item B<new>
-
-This is the constructor method, which accepts I<cadc-dir>, I<date>,
-I<start-date>, and I<end-date> as options as a "hash".
-
-=over 2
-
-=item I<cadc-dir>
-
-Specify the directory where symbolic needs to be made for upload.
-Default is F</export/jcmtdata/ptransfer/new>.
-
-=item I<date>
-
-Specify the date of data to be linked, either as a L<Time::Piece>
-object or a string in C<YYYYMMDD> format.
-
-If given, it overrides given I<start-> or I<end-date>.
-
-=item B<dry_run>
-
-Show what would have been done, without actually moving or creating files.
-
-=item I<end-date>
-
-Specify the end date of data to be linked, representation as specified
-for I<date>.
-
-=item I<force>
-
-Specify to a true value to force upload (overwrite existing files).
-Default is a false value.
-
-=item I<start-date>
-
-Specify the start date of data to be linked, representation as
-specified for I<date>.
-
-=back
-
-  $copy = JSA::CADC_Copy->new( 'cadc-dir' => '/non/default/path' );
-
-
-=item B<check_date>
-
-Given a date value, returns nothing if it is a Time::Piece object or
-matches the number of digits in a date specified in 'YYYYMMDD' format.
-Else, throws L<JSA::Error::BadArgs> exception.
-
-  for my $date ( 20080820 2008 ) {
-
-      try {
-
-        JSA::CADC_Copy->check_date( $date );
-      }
-      catch with JSA::Error::BadArgs {
-
-        my $e = shift @_;
-        print "$date : $e\n";
-      }
-  }
-
-
-=item B<filter_files>
-
-Given a directory path and a hash reference of files as keys to keep,
-returns the file names which exist in the directory as an array
-reference.
-
-Throws JSA::Error::FatalError if the directory cannot be opened.
-
-  $filtered = JSA::CADC_Copy->filter_files( '/dir/path',
-                                            { 'file-name' -> undef }
-                                          );
-
-
-=item B<force>
-
-Returns the currently set value if no arguments are specified.
-
-Else, sets the value to the given true value.  If true, existing files
-will be overwritten to force upload.
-
-  $copy->force( 'yes' );
-  ...
-  do { ... } if $copy->force;
-
-
-=item B<get_date_format>
-
-Returns the date format suitable for C<strftime> format ('%Y%m%d').
-
-  print Time::Piece->strftime( '20080820',
-                                JSA::CADC_Copy->get_date_format,
-                              );
-
-
-=item B<instrument_list>
-
-Returns a case insensitive sorted list of instrument names.
-
-  @inst = $copy->instrument_list;
-
-
-=item B<make_cadc_ok_path>
-
-Returns a F<*.cadc_ok> file name given a F<*.ok> base name & the
-parent directory.
-
-  $cadc_ok = JSA::CADC_Copy->make_cadc_ok_path( '.a_20080920_0123.ok',
-                                                 '/parent'
-                                                );
-
-
-=item B<make_empty_file>
-
-Given a file path, creates an empty file.  Nothing is done if the path
-already exists.
-
-Throws JSA::Error::FatalError if the file cannot be created.
-
-  $copy->make_empty_file( '/file/path' );
-
-
-=item B<make_symlink>
-
-Creates the link in CADC staging area, given observation number
-directory path and the base file name in there.
-
-Throws JSA::Error::FatalError if the symbolic link cannot be created.
-
-  $copy->make_symlink( '/path/to/obs', 'a_20080820_00820_08_020.sdf' );
-
-
-=item B<read_okfiles>
-
-Given a directory name, returns a hash reference with the keys 'ok'
-and 'cadc_ok', where the value of each key is an array reference of
-'.ok' or '.cacdc_ok' file names respectively.
-
-  $files = JSA::CADC_Copy->read_okfiles( $directory );
-
-  $ok      = $files->{'ok'};
-  @cadc_ok = @{$files->{'cadc_ok'}};
-
-
-=back
-
-=head2 INSTANCE METHODS
-
-=over 4
-
-=item B<cadc_dir>
-
-Returns the directory name in which to create F<*.cadc_ok> files if no
-arguments are given.
-
-  $dir = $copy->cadc_dir;
-
-Sets the directory to the given argument, returns nothing.
-
-  $copy->cadc_dir( '/path/for/cadc/new' );
-
-=item B<clear_okfiles>
-
-Set the hash reference (returned by I<okfiles> method) to be an empty
-one.
-
-  $copy->clear_okfiles;
-
-=item B<date>
-
-Returns the date of data to be linked if no argument is given.
-
-Else, sets the date to the given argument, and returns nothing.  Date
-should either be a L<Time::Piece> object or a string in C<YYYYMMDD>
-format.
-
-  # Set a date.
-  $copy->date( '20080820' );
-
-  # Retrieve it.
-  $date = $copy->date;
-
-=item B<end_date>
-
-Returns the end date of data to be linked if no argument is given.
-
-Else, sets the end date to the given argument, and returns nothing.
-Date should either be a L<Time::Piece> object or a string in
-C<YYYYMMDD> format.
-
-  # Set a date.
-  $copy->end_date( '20080820' );
-
-  # Retrieve it.
-  $date = $copy->end_date;
-
-
-=item B<find_start_dates>
-
-Returns a hash reference of instruments as keys and start dates as
-values.
-
-It is called by C<find_start_end_dates()> method when neither
-I<start-date> nor I<date> was specified. Determine the start date by
-stepping backwards one day at a time until we've reached a directory
-containing a .cadc_ok file.
-
-  $inst_start = $self->find_start_dates;
-
-
-=item B<find_start_end_dates>
-
-Returns a hash reference with instrument as keys & start date as
-values, and an end date.
-
-  ( $inst_start, $end ) = $copy->find_start_end_dates;
-
-
-=item B<get_file_ids>
-
-Given start and end date strings, returns an array reference of file
-ids existing in database in the date range.
-
-Throws JSA::Error::FatalError if there is a problem with database
-query.
-
-  $file_ids = $self->get_file_ids( '2008-08-20',
-                                    '2008-08-21'
-                                  );
-
-
-=item B<instrument_ok_regex>
-
-Returns the instrument specific regular expression if only the
-instrument name is given.
-
-  $regex = $copy->instrument_ok_regex( 'ACSIS' );
-
-Sets the regular expression when regular expression is also given
-along with instrument name; returns nothing.
-
-  $copy->instrument_ok_regex( 'ACSIS', qr{^\.a\d{8}_(\d{5})\.ok$} );
-
-
-=item B<instrument_path_regex>
-
-Returns the instrument specific regular expression matching the path
-for observation file(s) if only the instrument name is given.
-
-  $regex = $copy->instrument_path_regex( 'ACSIS' );
-
-Default for I<ACSIS> is ...
-
-  qr{ ^
-      # Parent instrument directory with date.
-      ( .+?
-        /
-        \d{8}
-      )
-      [/\d]+?
-      # Base file name.
-      (
-        ([ah])
-        \d{8} _
-        # Observation number.
-        ( \d{5} )
-        _ \d{2} _ \d{4} [.]sdf
-      )
-      $
-    }x;
-
-
-Sets the regular expression when regular expression is also given
-along with instrument name; returns nothing.
-
-  $copy->instrument_path_regex( 'ACSIS',
-                                qr{^(/raw/path/\d{8})/.+?/(([.])[_\d]+\.sdf)$}
-                              );
-
-
-=item B<instrument_root>
-
-Returns the instrument specific directory if only the instrument name
-is given.
-
-  $dir = $copy->instrument_root( 'ACSIS' );
-
-Sets the instrument directory  when directory is also given along
-with instrument name; returns nothing.
-
-  $copy->instrument_root( 'ACSIS', '/path/to/jcmt/acsis/spectra' );
-
-
-=item B<make_inst_date_path>
-
-Returns the UT date directory path given the instrument name.
-
-  $acsis_ut = $copy->make_inst_date_path( 'ACSIS', '20080820' );
-
-
-=item B<make_obsnum_path>
-
-Returns a observation directory name given a *.ok base name; the
-parent directory; and a hash reference either with a regular
-expression as the value & 'regex' as key, or instrument name as the
-value & 'instrument' as the key (see I<instrument_ok_regex> method).
-
-  # Returns '/parent/0123'.
-  $obsnum_dir =
-    $copy->make_obsnum_path( '.a_20080920_0123.ok',
-                              '/parent',
-                              { 'regex' => qr{ \d{8} _ (\d{4}) \.ok $}x }
-                            );
-
-
-=item B<okfiles>
-
-Returns a hash reference to be manipulated by the calling method.  It
-is used to pass around the same hash reference among the methods which
-do not call each other.
-
-  $files = $copy->okfiles;
-  $files->{'ACSIS'}->{'2008-08-20 20:08:00'} = 'file';
-
-
-=item B<start_date>
-
-Returns the start date of data to be linked if no argument is given.
-
-Else, sets the start date to the given argument, and returns nothing.
-Date should either be a L<Time::Piece> object or a string in
-C<YYYYMMDD> format.
-
-  # Set a date.
-  $copy->start_date( '20080820' );
-
-  # Retrieve it.
-  $date = $copy->start_date;
-
-
-=item B<upload_per_instrument>
-
-For each instrument, creates symbolic links to each data file from
-start date to end date, going through each directory.
-Later, creates a .cadc_ok file to indicate that the file should be
-ignored in the future.
-
-  $copy->upload_per_instrument;
-
-
-=item B<upload_make_cadc_ok>
-
-For every F<*.ok> file name, makes a symbolic link in CADC upload
-directory and creates a corresponding F<*.cadc_ok> file (in the
-directory name given by I<cadc_dir> method), given a hash of ...
-
-=over 4
-
-=item I<file-ids> as key
-
-A array reference of file ids as present in database as value.
-
-=item I<instrument>
-
-Instrument name involved.
-
-If missing, then L<JSA::Error::BadArgs> exception is thrown.
-
-=item I<obs-date>
-
-UT date for an observation, used to generate source directory path.
-
-If both this and I<source-dir> are missing, then
-L<JSA::Error::BadArgs> exception is thrown.
-
-=item I<okfiles>
-
-Array reference of F<*.ok> file names.
-
-=item I<source-dir>
-
-Directory name where to find observation data for a given date &
-observation number.
-
-If missing, then I<obs-date> is used to generate the path.
-
-=back
-
-  $self->upload_make_cadc_ok( 'file-ids'   => \%file_id,
-                              'instrument' => $inst,
-                              'okfiles'   => $okfiles->{ $inst }->{ $ymd },
-                              'source-dir' => '/instrument/date/path',
-                            );
-
-
-
-=item B<verbose>
-
-Returns the verbosity value if no arguments are given.
-
-  warn 'A warning' if $copy->verbose;
-
-Sets the directory to the given argument, returns nothing.
-
-  $copy->verbose( 2 );
-
 =back
 
 =head1 AUTHORS
@@ -1212,7 +1188,7 @@ Brad Cavanagh E<lt>b.cavanagh@jach.hawaii.eduE<gt>.
 
 =head1 COPYRIGHT
 
-Copyright (C) 2008,2009 Science and Technology Facilities Council.
+Copyright (C) 2008, 2009 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify
@@ -1231,4 +1207,3 @@ Foundation, Inc., 59 Temple Place,Suite 330, Boston, MA  02111-1307,
 USA
 
 =cut
-

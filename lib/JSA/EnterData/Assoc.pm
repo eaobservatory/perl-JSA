@@ -1,5 +1,22 @@
 package JSA::EnterData::Assoc;
 
+=head1 NAME
+
+JSA::EnterData::Assoc - Find asn_id.
+
+=head1 SYNOPSIS
+
+To get ASN ID for ACSIS(HARP) or SCUBA2 instrument ...
+
+    use JSA::EnterData::Assoc;
+    $asn_list = JSA::EnterData::Assoc::get_asn_id($obs);
+
+=head1  DESCRIPTION
+
+Currently it is a function based module. Nothing is exported by default.
+
+=cut
+
 use strict; use warnings;
 
 our $VERSION = '0.01';
@@ -14,6 +31,19 @@ use JSA::Headers     (); #get_orac_instrument
 use ORAC::Inst::Defn (); #orac_determine_inst_classes
 
 my %loaded;
+
+=head2 Functions
+
+=over 2
+
+=item B<get_asn_id>
+
+Given a L<OMP::Info::Obs> object, returns a hash of C<obsid_subsysnr> as keys
+asn ASN ID as array reference values. It can be imported in your code.
+
+   $list = get_asn_id($obs);
+
+=cut
 
 sub get_asn_id {
     my ($obs) = @_;
@@ -63,34 +93,6 @@ sub get_asn_id {
 1;
 
 __END__
-
-=pod
-
-=head1 NAME
-
-JSA::EnterData::Assoc - Find asn_id.
-
-=head1 SYNOPSIS
-
-To get ASN ID for ACSIS(HARP) or SCUBA2 instrument ...
-
-    use JSA::EnterData::Assoc;
-    $asn_list = JSA::EnterData::Assoc::get_asn_id($obs);
-
-=head1  DESCRIPTION
-
-Currently it is a function based module. Nothing is exported by default.
-
-=head2 Functions
-
-=over 2
-
-=item B<get_asn_id>
-
-Given a L<OMP::Info::Obs> object, returns a hash of C<obsid_subsysnr> as keys
-asn ASN ID as array reference values. It can be imported in your code.
-
-   $list = get_asn_id($obs);
 
 =back
 

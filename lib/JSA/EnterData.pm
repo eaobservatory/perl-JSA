@@ -36,10 +36,6 @@ no date is supplied the current localtime is used to determine the
 relevant UT date (which means that it will still pick up last night's
 data even if run after 2pm).
 
-=head2 METHODS
-
-=over 2
-
 =cut
 
 use strict;
@@ -84,6 +80,171 @@ BEGIN {
     # Make sure that bad status from SMURF triggers bad exit status
     $ENV{ADAM_EXIT} = 1;
 }
+
+=head2 METHODS
+
+=over 2
+
+=item B<new>
+
+Constructor.  A data dictionary file name is required, which is set by
+default.  It can be overridden as ...
+
+  $enter = JSA::EnterData->new( 'dict' => '/file/path/' );
+
+Configuration values which can be passed as key-value pairs are ...
+
+=over 4
+
+=item I<date> C<yyyymmdd>
+
+Date to set given in C<yyyymmdd> format.
+Default is the current date in local timezone (at the time of creation
+of the object).
+
+=item I<debug> C<1 | 0>
+
+Debugging means interact with the database, but don't actually do any
+inserts, and be very verbose.  Default is false.
+
+=item I<dict> C<file name>
+
+File name for data dictionary.  Default name is in
+"/import/data.dictionary" located in directory containing this module.
+
+=item I<force-disk> C<1 | 0>
+
+A truth value whether to force looking for data on disk, not in
+database.  Default is true.
+
+When the value is true, I<force-db> is marked false.
+
+=item I<force-db> C<1 | 0>
+
+A truth value whether to force looking for data in database, not on
+disk. Default is false.
+
+Currently it does not do anything.
+
+When the value is true, I<force-disk> is marked false.
+
+=item I<verbosity> C< 0 | 1 | 2 | 3 ... >
+
+An integer value indicating message verbosity.
+
+=item I<load-header-db> C<1 | 0>
+
+A truth value to control loading of header database.  Default is true.
+
+=item I<syb-date> C<date format>
+
+Date format for Sybase database.  Default is C<%Y-%m-%d %H:%M:%S>.
+
+=item I<update-mode> C<1 | 0>
+
+A truth value to determine if to do database update (when true; see
+I<update_hash>) or an insert (when false; see I<insert_hash>).
+
+In insert mode, nothing is inserted in "FILES" table.
+
+=back
+
+=item B<sybase_date_format>
+
+Returns the set date format for Sybase database consumption if no
+arguments given.
+
+    $format = $enter->sybase_date_format;
+
+Else, sets the date format; returns nothing.
+
+    $enter->sybase_date_format('%Y-%m-%d %H:%M:%S');
+
+=item B<load_header_db>
+
+Returns the set truth value to indicate where to load in the header
+database, if no arguments given.
+
+    $load = $enter->load_header_db;
+
+Else, sets the truth value to turn on or off loading the header
+database; returns nothing.
+
+    $enter->load_header_db(1);
+
+=item B<update_mode>
+
+Returns the set truth value if no arguments given.
+
+    $update = $enter->update_mode;
+
+Else, sets the value to turn on or off update (off or on insert);
+returns nothing.  In insert mode, nothing is inserted in "FILES"
+table.
+
+    $enter->update_mode(0);
+
+=item B<verbosity>
+
+Returns integer value to indicate message verbosity, if no arguments
+are given.
+
+    $ok = $enter->verbosity;
+
+Else, sets the value for later use; returns nothing.
+
+    # Silence messages.
+    $enter->verbosity(0);
+
+=item B<debug>
+
+Returns the set truth value if no arguments given.
+
+    $debug = $enter->debug;
+
+Else, sets the value to turn on or off debugging; returns nothing.
+
+    $enter->debug(0);
+
+=item B<process_simulation>
+
+Returns the set truth value to indicate whether simulation processing
+is forced, if no arguments given.
+
+    $skip_sim = ! $enter->process_simulation;
+
+Else, sets the truth value to turn on or off simulation processing;
+returns nothing.
+
+    $enter->process_simulation(1);
+
+=item B<update_only_obstime>
+
+Returns a truth value to indicate if to update only the times for an
+observation run if no arguments given.
+
+    print "Only date obs & end will be updated"
+        if $enter->update_only_obstime();
+
+Else, sets the truth value if to update only observation date values;
+returns nothing.
+
+    $enter->update_only_obstime(my $only_obstime = 1);
+
+=item B<update_only_inbeam>
+
+Returns a truth value to indicate if to update only the C<INBEAM> header
+values if no arguments given.
+
+    print "Only INBEAM values will be updated"
+      if $enter->update_only_inbeam();
+
+Else, sets the truth value if to update only C<INBEAM> values;
+returns nothing.
+
+    $enter->update_only_inbeam( my $only_inbeam = 1 );
+
+=cut
 
 {
     my %default = (
@@ -162,72 +323,6 @@ BEGIN {
         }
     }
 
-=item B<new>
-
-Constructor.  A data dictionary file name is required, which is set by
-default.  It can be overridden as ...
-
-  $enter = JSA::EnterData->new( 'dict' => '/file/path/' );
-
-Configuration values which can be passed as key-value pairs are ...
-
-=over 4
-
-=item I<date> C<yyyymmdd>
-
-Date to set given in C<yyyymmdd> format.
-Default is the current date in local timezone (at the time of creation
-of the object).
-
-=item I<debug> C<1 | 0>
-
-Debugging means interact with the database, but don't actually do any
-inserts, and be very verbose.  Default is false.
-
-=item I<dict> C<file name>
-
-File name for data dictionary.  Default name is in
-"/import/data.dictionary" located in directory containing this module.
-
-=item I<force-disk> C<1 | 0>
-
-A truth value whether to force looking for data on disk, not in
-database.  Default is true.
-
-When the value is true, I<force-db> is marked false.
-
-=item I<force-db> C<1 | 0>
-
-A truth value whether to force looking for data in database, not on
-disk. Default is false.
-
-Currently it does not do anything.
-
-When the value is true, I<force-disk> is marked false.
-
-=item I<verbosity> C< 0 | 1 | 2 | 3 ... >
-
-An integer value indicating message verbosity.
-
-=item I<load-header-db> C<1 | 0>
-
-A truth value to control loading of header database.  Default is true.
-
-=item I<syb-date> C<date format>
-
-Date format for Sybase database.  Default is C<%Y-%m-%d %H:%M:%S>.
-
-=item I<update-mode> C<1 | 0>
-
-A truth value to determine if to do database update (when true; see
-I<update_hash>) or an insert (when false; see I<insert_hash>).
-
-In insert mode, nothing is inserted in "FILES" table.
-
-=back
-
-=cut
-
     sub new {
         my ($class, %args) = @_;
 
@@ -292,16 +387,6 @@ sub instruments {
     return;
 }
 
-=item B<debug>
-
-Returns the set truth value if no arguments given.
-
-    $debug = $enter->debug;
-
-Else, sets the value to turn on or off debugging; returns nothing.
-
-    $enter->debug(0);
-
 =item B<date>
 
 Returns the set date if no arguments given.
@@ -336,17 +421,6 @@ sub date {
 
     return;
 }
-
-=item B<sybase_date_format>
-
-Returns the set date format for Sybase database consumption if no
-arguments given.
-
-    $format = $enter->sybase_date_format;
-
-Else, sets the date format; returns nothing.
-
-    $enter->sybase_date_format('%Y-%m-%d %H:%M:%S');
 
 =item B<force_db>
 
@@ -407,69 +481,6 @@ sub force_disk {
 
   return;
 }
-
-
-=item B<load_header_db>
-
-Returns the set truth value to indicate where to load in the header
-database, if no arguments given.
-
-    $load = $enter->load_header_db;
-
-Else, sets the truth value to turn on or off loading the header
-database; returns nothing.
-
-    $enter->load_header_db(1);
-
-=item B<update_mode>
-
-Returns the set truth value if no arguments given.
-
-    $update = $enter->update_mode;
-
-Else, sets the value to turn on or off update (off or on insert);
-returns nothing.  In insert mode, nothing is inserted in "FILES"
-table.
-
-    $enter->update_mode(0);
-
-=item B<update_only_obstime>
-
-Returns a truth value to indicate if to update only the times for an
-observation run if no arguments given.
-
-    print "Only date obs & end will be updated"
-        if $enter->update_only_obstime();
-
-Else, sets the truth value if to update only observation date values;
-returns nothing.
-
-    $enter->update_only_obstime(my $only_obstime = 1);
-
-=item B<update_only_inbeam>
-
-Returns a truth value to indicate if to update only the C<INBEAM> header
-values if no arguments given.
-
-    print "Only INBEAM values will be updated"
-      if $enter->update_only_inbeam();
-
-Else, sets the truth value if to update only C<INBEAM> values;
-returns nothing.
-
-    $enter->update_only_inbeam( my $only_inbeam = 1 );
-
-=item B<verbosity>
-
-Returns integer value to indicate message verbosity, if no arguments
-are given.
-
-    $ok = $enter->verbosity;
-
-Else, sets the value for later use; returns nothing.
-
-    # Silence messages.
-    $enter->verbosity(0);
 
 =item B<get_dict>
 
@@ -536,18 +547,6 @@ sub files_given {
     my $files = $self->files;
     return  !! ($files && scalar @{$files});
 }
-
-=item B<process_simulation>
-
-Returns the set truth value to indicate whether simulation processing
-is forced, if no arguments given.
-
-    $skip_sim = ! $enter->process_simulation;
-
-Else, sets the truth value to turn on or off simulation processing;
-returns nothing.
-
-    $enter->process_simulation(1);
 
 =item B<prepare_and_insert>
 
@@ -1323,24 +1322,6 @@ sub add_subsys_obs {
     return 1;
 }
 
-=item B<insert_hash>
-
-Given a table name, a DBI database handle and a hash reference, insert
-the hash contents into the table.  Basically a named insert.  Returns
-the executed statement output.  (Copied from example in L<DBI>.)
-
-If any of the values in C<%to_insert> are array references multiple
-rows will be inserted corresponding to the content.  If more than one
-row has an array reference the size of those arrays must be identical.
-
-In case of error, returns the value as returned by C<DBI->execute>.
-
-    $status = $enter->insert_hash('table'     => $table,
-                                  'dbhandle' => $dbh,
-                                  'insert'   => \%to_insert);
-
-=cut
-
 sub prepare_insert_hash {
     my ($self, $table, $field_values) = @_;
 
@@ -1403,6 +1384,24 @@ sub _handle_multiple_changes {
 
     return [@change];
 }
+
+=item B<insert_hash>
+
+Given a table name, a DBI database handle and a hash reference, insert
+the hash contents into the table.  Basically a named insert.  Returns
+the executed statement output.  (Copied from example in L<DBI>.)
+
+If any of the values in C<%to_insert> are array references multiple
+rows will be inserted corresponding to the content.  If more than one
+row has an array reference the size of those arrays must be identical.
+
+In case of error, returns the value as returned by C<DBI->execute>.
+
+    $status = $enter->insert_hash('table'     => $table,
+                                  'dbhandle' => $dbh,
+                                  'insert'   => \%to_insert);
+
+=cut
 
 sub insert_hash {
     my ($self, %args) = @_;
@@ -1739,18 +1738,6 @@ sub _fill_in_sql {
     }
 }
 
-=item B<update_hash>
-
-Given a table name, a DBI database handle and a hash reference,
-retrieve the current data values based on OBSID or OBSID_SUBSYSNR,
-decide what has changed and update the values.
-
-    $enter->update_hash($table, $dbh, \%to_update);
-
-No-op for files table at the present time.
-
-=cut
-
 sub prepare_update_hash {
     my ($self, $table, $dbh, $field_values) = @_;
 
@@ -2001,6 +1988,18 @@ sub _get_primary_key {
     return unless exists $keys{$table};
     return $keys{$table};
 }
+
+=item B<update_hash>
+
+Given a table name, a DBI database handle and a hash reference,
+retrieve the current data values based on OBSID or OBSID_SUBSYSNR,
+decide what has changed and update the values.
+
+    $enter->update_hash($table, $dbh, \%to_update);
+
+No-op for files table at the present time.
+
+=cut
 
 sub update_hash {
     my ($self, $table, $dbh, $change) = @_;
