@@ -2127,80 +2127,6 @@ sub transform_value {
     return 1;
 }
 
-=item B<calculate_release_date>
-
-Calculate the release date to be written into the COMMON table
-given an OMP::Info::Obs object.
-
-    my $release_date = calculate_release_date($obs);
-
-Not a method!
-
-Create release date (end of semester + one year) for the general
-case but for OBSTYPE != SCIENCE or STANDARD=T the release date is
-immediate.
-
-CLS special since its data is protected until one year after the
-end of semester 14B.
-
-=cut
-
-sub calculate_release_date {
-    my $obs = shift;
-
-    # Get date of observation
-    my $obsdate = $obs->utdate;
-
-    if ( $obs->projectid =~ /^mjlsc/i && $obs->isScience) {
-        # CLS. Should properly check the SURVEY FITS header
-        return DateTime->new('month' => 3,
-                             'year' => 2016,
-                             'day' => 1,
-                             'hour' => 23,
-                             'minute' => 59,
-                             'second' => 59,
-                             'time_zone' => 'UTC');
-
-    }
-    elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
-        # EC05 is a public calibrator monitoring project
-        return OMP::DateTools->yesterday(1);
-
-    }
-    elsif ($obs->projectid =~ /ec/i) {
-        # Do not release EC data.
-
-        return DateTime->new('month' => 1,
-                             'year' => 2031,
-                             'day' => 1,
-                             'hour' => 0,
-                             'minute' => 0,
-                             'second' => 0,
-                             'time_zone' => 0);
-
-    }
-    elsif ($obs->isScience) {
-        # semester release
-        my $semester = OMP::DateTools->determine_semester(date => $obsdate,
-                                                          tel => 'JCMT');
-        my ($sem_begin, $sem_end) =
-            OMP::DateTools->semester_boundary(semester => $semester,
-                                              tel => 'JCMT');
-
-        # Use DateTime so that we can have proper addition. Add 1 year 1 day because
-        # sem_end refers to the UT date and doesn't specify hours/minutes/seconds
-        return DateTime->from_epoch(epoch => $sem_end->epoch,
-                                    time_zone => 'UTC')
-             + DateTime::Duration->new(years => 1, hours => 23,
-                                       minutes => 59, seconds => 59);
-
-    }
-    else {
-        # immediate release
-        return OMP::DateTools->yesterday(1);
-    }
-}
-
 =item B<fill_headers_COMMON>
 
 Fills in the headers for C<COMMON> database table, given a headers
@@ -3542,7 +3468,83 @@ sub _file_template {
 
 1;
 
-=pod
+=back
+
+=head2 FUNCTIONS
+
+=over 2
+
+=item B<calculate_release_date>
+
+Calculate the release date to be written into the COMMON table
+given an OMP::Info::Obs object.
+
+    my $release_date = calculate_release_date($obs);
+
+Create release date (end of semester + one year) for the general
+case but for OBSTYPE != SCIENCE or STANDARD=T the release date is
+immediate.
+
+CLS special since its data is protected until one year after the
+end of semester 14B.
+
+=cut
+
+sub calculate_release_date {
+    my $obs = shift;
+
+    # Get date of observation
+    my $obsdate = $obs->utdate;
+
+    if ( $obs->projectid =~ /^mjlsc/i && $obs->isScience) {
+        # CLS. Should properly check the SURVEY FITS header
+        return DateTime->new('month' => 3,
+                             'year' => 2016,
+                             'day' => 1,
+                             'hour' => 23,
+                             'minute' => 59,
+                             'second' => 59,
+                             'time_zone' => 'UTC');
+
+    }
+    elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
+        # EC05 is a public calibrator monitoring project
+        return OMP::DateTools->yesterday(1);
+
+    }
+    elsif ($obs->projectid =~ /ec/i) {
+        # Do not release EC data.
+
+        return DateTime->new('month' => 1,
+                             'year' => 2031,
+                             'day' => 1,
+                             'hour' => 0,
+                             'minute' => 0,
+                             'second' => 0,
+                             'time_zone' => 0);
+
+    }
+    elsif ($obs->isScience) {
+        # semester release
+        my $semester = OMP::DateTools->determine_semester(date => $obsdate,
+                                                          tel => 'JCMT');
+        my ($sem_begin, $sem_end) =
+            OMP::DateTools->semester_boundary(semester => $semester,
+                                              tel => 'JCMT');
+
+        # Use DateTime so that we can have proper addition. Add 1 year 1 day because
+        # sem_end refers to the UT date and doesn't specify hours/minutes/seconds
+        return DateTime->from_epoch(epoch => $sem_end->epoch,
+                                    time_zone => 'UTC')
+             + DateTime::Duration->new(years => 1, hours => 23,
+                                       minutes => 59, seconds => 59);
+
+    }
+    else {
+        # immediate release
+        return OMP::DateTools->yesterday(1);
+    }
+}
 
 =back
 
