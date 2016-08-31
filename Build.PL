@@ -34,10 +34,6 @@ my $build = Module::Build->new(
         'Brad Cavanagh <b.cavanagh@jach.hawaii.edu>',
     ],
     dist_version => '0.03',
-    script_files => [qw/
-        dpRetrieve jsawrapdr dpCapture convert_dr_files jsasubmit
-        jsahpxobs jsahpxharpnit
-    /],
     meta_merge => {
         resources =>  {
             repository => "git://github.com/eaobservatory/perl-JSA.git",
