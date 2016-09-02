@@ -162,9 +162,6 @@ provides:
   JSA::Submission:
     file: lib/JSA/Submission.pm
     version: 0
-  JSA::Verbosity:
-    file: lib/JSA/Verbosity.pm
-    version: 0
   JSA::WrapDR:
     file: lib/JSA/WrapDR.pm
     version: 0.03

@@ -37,7 +37,6 @@ lib/JSA/QA.pm
 lib/JSA/QA/Result.pm
 lib/JSA/Starlink.pm
 lib/JSA/Submission.pm
-lib/JSA/Verbosity.pm
 lib/JSA/WrapDR.pm
 lib/JSA/WriteList.pm
 MANIFEST
