@@ -52,6 +52,27 @@ dpRetrieve executable and the contents must match that expected
 by dpRetrieve. dpRetrieve ensures that the files are all available
 in a local working directory.
 
+=item B<--drcommand>
+
+Custom data processing command to be run (instead of automatic selection
+of ORAC-DR or PICARD).  The command will be run with the following
+options:
+
+=over 4
+
+=item I<--id> Execution ID.
+
+=item I<--inputs> File containing a listing of retrieved input data files.
+
+=item I<--fileversion> File version number (if specified).
+
+=item I<--transdir> Transfer directory (for final products,
+      if specified and persist is selected).
+
+=item Any specified DR parameters.
+
+=back
+
 =item B<--drparameters>
 
 These are the parameters that should be passed either to ORAC-DR or to
@@ -198,13 +219,14 @@ print "*** ENV:\n";
 print Dumper \%ENV;
 
 # Options
-my ($cleanup, $debug, $drparameters, $help, $id, $indir, $inputs,
+my ($cleanup, $debug, $drcommand, $drparameters, $help, $id, $indir, $inputs,
     $instrument, $log, $man, $mode, $specified_outdir, $parameters, $persist,
     $tmpdir, $transdir, $ut, $show_version, $version, $debugxfer);
 
 my $status = GetOptions(
     "cleanup=s"     => \$cleanup,
     "debug"         => \$debug,
+    'drcommand=s'   => \$drcommand,
     "drparameters=s"=> \$drparameters,
     "help"          => \$help,
     "id=s"          => \$id,
@@ -261,15 +283,17 @@ if (defined $ut && defined $instrument) {
     $skipdp = 1;
 }
 
-# Die if we don't have the mode.
-if (! defined( $mode)) {
-    die "Must supply -mode parameter to jsawrapdr";
+# Die if we don't have the mode, unless running a custom DR command.
+unless (defined $mode) {
+    die "Must supply -mode parameter to jsawrapdr"
+        unless defined $drcommand;
 }
-
-# Trim any leading or trailing single quotes from mode, which might
-# possibly creep in from database-based submissions.
-$mode =~ s/^\'//;
-$mode =~ s/\'$//;
+else {
+    # Trim any leading or trailing single quotes from mode, which might
+    # possibly creep in from database-based submissions.
+    $mode =~ s/^\'//;
+    $mode =~ s/\'$//;
+}
 
 $cleanup = "cadc" unless defined $cleanup;
 
@@ -396,8 +420,6 @@ unless ($skipdp) {
 
     log_message("Processing the following files:\n". join("\n",@files)."\n");
 
-    # decide whether we are using ORAC-DR or PICARD
-
     # First thing we have to do is to analyze the files to determine how
     # things should be processed. If we are all FITS files then we must
     # convert to NDF prior to processing. If there are some FITS and
@@ -422,70 +444,76 @@ unless ($skipdp) {
             " files and this is a bit confusing";
     }
 
-    # FITS headers, indexed by filename
-    my %FITS = read_headers( @files );
-    if (keys %FITS == 0) {
-        die "Could not open any of the supplied files to read headers: " .
-            join(", ",@files);
-    }
-    elsif (keys %FITS != @files) {
-        die "Some files could not be read: " .
-            join(', ', grep {not exists $FITS{$_}} @files);
-    }
+    unless (defined $drcommand) {
+        # Decide on ORAC-DR vs PICARD
 
-    # Decide on ORAC-DR vs PICARD
-    # FITS files are not processable by ORAC-DR and are not archived as
-    # such at CADC NDF are processed by ORAC-DR unless they have PRODUCT
-    # headers. No check is made for filename compliance with raw time
-    # series ICD.
-
-    # Get PRODUCT information
-    my ($nproduct, %products) = get_header_value("PRODUCT", values %FITS);
-
-    $useoracdr = 0;
-    if ($nfits == @files) {
-        # All of them are FITS so we must use PICARD
-        log_message("Got $nfits fits - using PICARD\n");
-    }
-    elsif ($nsdf == @files) {
-        # we have NDFs so we need to open them and look for PRODUCT
-        # headers Should we check to make sure that the PRODUCT headers
-        # match?
-        log_message("Got $nsdf NDF\n");
-        if ($nproduct == 0) {
-            # oracdr - assume these are raw data. They may be data processed
-            # outside of the DR
-            $useoracdr = 1;
+        # FITS headers, indexed by filename
+        my %FITS = read_headers( @files );
+        if (keys %FITS == 0) {
+            die "Could not open any of the supplied files to read headers: " .
+                join(", ",@files);
         }
-    }
+        elsif (keys %FITS != @files) {
+            die "Some files could not be read: " .
+                join(', ', grep {not exists $FITS{$_}} @files);
+        }
 
-    # Analyze product information for non-ORAC-DR case
-    if (!$useoracdr) {
-        if ($nproduct == @files) {
-            # check product values
-            if (keys %products > 1) {
-                log_warning("Processing different products in a single run may be " .
-                            "incorrect. (".  join(",",keys %products).")\n");
+        # FITS files are not processable by ORAC-DR and are not archived as
+        # such at CADC NDF are processed by ORAC-DR unless they have PRODUCT
+        # headers. No check is made for filename compliance with raw time
+        # series ICD.
+
+        # Get PRODUCT information
+        my ($nproduct, %products) = get_header_value("PRODUCT", values %FITS);
+
+        $useoracdr = 0;
+        if ($nfits == @files) {
+            # All of them are FITS so we must use PICARD
+            log_message("Got $nfits fits - using PICARD\n");
+        }
+        elsif ($nsdf == @files) {
+            # we have NDFs so we need to open them and look for PRODUCT
+            # headers Should we check to make sure that the PRODUCT headers
+            # match?
+            log_message("Got $nsdf NDF\n");
+            if ($nproduct == 0) {
+                # oracdr - assume these are raw data. They may be data processed
+                # outside of the DR
+                $useoracdr = 1;
             }
         }
-        elsif ($nproduct == 0) {
-            die "None of the input files contained PRODUCT FITS headers";
 
-        }
-        else {
-            die "There are $nproduct headers in ".@files.
-              ", making it difficult to determine whether to run ORAC-DR or PICARD";
-        }
-    }
+        # Analyze product information for non-ORAC-DR case
+        if (!$useoracdr) {
+            if ($nproduct == @files) {
+                # check product values
+                if (keys %products > 1) {
+                    log_warning("Processing different products in a single run may be " .
+                                "incorrect. (".  join(",",keys %products).")\n");
+                }
+            }
+            elsif ($nproduct == 0) {
+                die "None of the input files contained PRODUCT FITS headers";
 
-    if ($useoracdr) {
-        $oracinst = determine_instrument(\%FITS);
+            }
+            else {
+                die "There are $nproduct headers in ".@files.
+                  ", making it difficult to determine whether to run ORAC-DR or PICARD";
+            }
+        }
+
+        if ($useoracdr) {
+            $oracinst = determine_instrument(\%FITS);
+        }
     }
 
     # Convert FITS files into NDF and update name supplied to DR. We
     # could do this before we read the FITS headers but it is more
     # efficient to delay conversion in case some other error condition
     # is hit first. Conversion will take a non-trivial amount of time
+
+    # For now assume that we want to convert to NDF even if using a
+    # custom-specified DR command.
     if ($nfits > 0) {
         my @new;
         for my $f (@files) {
@@ -517,53 +545,62 @@ else {
     $oracinst = $instrument;
 }
 
+# Pass additional information to run_pipeline (e.g. id, version, ...)
+# in case we are running a custom DR command.  It may need this information
+# to convert and store its output files.
 run_pipeline($useoracdr, $oracinst, $indir, $outdir,
              ($skipdp ? "$ut" : \@files), $drparameters,
-             {batch => 1});
+             {batch => 1, drcommand => $drcommand,
+              id => $id, version => $version,
+              persist => $persist, transdir => $transdir});
 
-# Process NDF data products and convert them into FITS
-#  - Need to filter provenance
-#  - Run NDF2FITS
+# Assume that the custom command has converted and stored its outputs,
+# since we don't know what its naming conventions, etc. might be.
+unless (defined $drcommand) {
+    # Process NDF data products and convert them into FITS
+    #  - Need to filter provenance
+    #  - Run NDF2FITS
 
-# scan the directory again
-my %post_process = scan_dir();
-my @drfiles = compare_file_lists(\%post_retrieve, \%post_process);
+    # scan the directory again
+    my %post_process = scan_dir();
+    my @drfiles = compare_file_lists(\%post_retrieve, \%post_process);
 
-# Read all the FITS headers from these files
-my %drhdrs = read_headers(@drfiles);
+    # Read all the FITS headers from these files
+    my %drhdrs = read_headers(@drfiles);
 
-# And convert those files that have valid PRODUCT headers.
-convert_dr_files(\%drhdrs, {"mode" => $mode, dpid => $id,
-                            dpdate => DateTime->now->datetime,
-                            version => $version});
+    # And convert those files that have valid PRODUCT headers.
+    convert_dr_files(\%drhdrs, {"mode" => $mode, dpid => $id,
+                                dpdate => DateTime->now->datetime,
+                                version => $version});
 
-# TEMPORARY HACK: copy all log.* files into the ORAC_LOGDIR if defined.
-if (exists $ENV{'ORAC_LOGDIR'}) {
-    my $output_dir = $ENV{'ORAC_LOGDIR'};
-    my %logfiles = scan_dir(qr/log\./);
-    foreach my $f (keys %logfiles) {
-        copy($f, $output_dir) or die "copy from $f to $output_dir failed: $!";
+    # TEMPORARY HACK: copy all log.* files into the ORAC_LOGDIR if defined.
+    if (exists $ENV{'ORAC_LOGDIR'}) {
+        my $output_dir = $ENV{'ORAC_LOGDIR'};
+        my %logfiles = scan_dir(qr/log\./);
+        foreach my $f (keys %logfiles) {
+            copy($f, $output_dir) or die "copy from $f to $output_dir failed: $!";
+        }
     }
+
+    log_listing('pre-cleanup', '.') if $debugxfer;
+
+    if ($cleanup eq 'cadc') {
+        clean_directory_pre_capture($outdir, \%all_existing_files,
+                                    \&looks_like_cadcfile);
+
+        # If working in a temporary directory (e.g. at CADC) or a
+        # specified output directory (e.g. in the jsa_proc system), make sure
+        # all the retrieved files have been deleted.  If we are working
+        # on processed data with PICARD then we don't want to send back
+        # the original files.
+        unlink grep {-e $_} map {File::Spec->catfile($outdir, $_)} @files_retrieved
+            if ($tmpdir or $specified_outdir);
+    }
+
+    log_listing('post-cleanup', '.') if $debugxfer;
+
+    capture_products($persist, $transdir, 0);
 }
-
-log_listing('pre-cleanup', '.') if $debugxfer;
-
-if ($cleanup eq 'cadc') {
-    clean_directory_pre_capture($outdir, \%all_existing_files,
-                                \&looks_like_cadcfile);
-
-    # If working in a temporary directory (e.g. at CADC) or a
-    # specified output directory (e.g. in the jsa_proc system), make sure
-    # all the retrieved files have been deleted.  If we are working
-    # on processed data with PICARD then we don't want to send back
-    # the original files.
-    unlink grep {-e $_} map {File::Spec->catfile($outdir, $_)} @files_retrieved
-        if ($tmpdir or $specified_outdir);
-}
-
-log_listing('post-cleanup', '.') if $debugxfer;
-
-capture_products($persist, $transdir, 0);
 
 log_listing('transdir', $transdir) if $transdir && $debugxfer;
 

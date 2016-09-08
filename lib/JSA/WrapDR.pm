@@ -134,7 +134,30 @@ sub run_pipeline {
     my $tmpfile;
 
     my @drcommand;
-    if ($useoracdr) {
+    if (defined $options->{'drcommand'}) {
+        my $command = $options->{'drcommand'};
+        log_message("Using DR command: $command\n");
+
+        # Write file list as for ORAC-DR.
+        $tmpfile = File::Temp->new() or die "Could not create temporary file";
+        print $tmpfile "$_\n" foreach @$files_or_ut;
+        close $tmpfile or die "Error closing temporary file handle";
+
+        @drcommand = (
+            $command,
+            '--id', $options->{'id'},
+            '--inputs', "$tmpfile",
+        );
+
+        push @drcommand, '--fileversion', $options->{'version'}
+            if defined $options->{'version'};
+
+        push @drcommand, '--transdir', $options->{'transdir'}
+            if ($options->{'persist'} and (defined $options->{'transdir'}));
+
+        push(@drcommand, split /\s+/, $drparameters) if defined $drparameters;
+    }
+    elsif ($useoracdr) {
         log_message("Using ORAC-DR\n");
 
         # Instrument
