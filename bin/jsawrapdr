@@ -73,6 +73,18 @@ options:
 
 =back
 
+Note that most of the Starlink environment will have been set up
+before the data processing command is run.  Notable exceptions:
+
+=over 4
+
+=item I<ORAC_INSTRUMENT> Since this is not determined.
+
+=item I<ORAC_DATA_CAL> Would normally have been set to
+      $ORAC_CAL_ROOT/$ORAC_INSTRUMENT but the instrument is not determined.
+
+=back
+
 =item B<--drparameters>
 
 These are the parameters that should be passed either to ORAC-DR or to
