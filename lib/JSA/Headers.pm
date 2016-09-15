@@ -503,10 +503,15 @@ header.
 
 =cut
 
-sub cadc_ack {
-    my @text = <DATA>;
-    chomp(@text);
-    return @text;
+{
+    my @text = ();
+    sub cadc_ack {
+        unless (scalar @text) {
+            @text = <DATA>;
+            chomp(@text);
+        }
+        return @text;
+    }
 }
 
 =back
