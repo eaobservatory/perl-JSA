@@ -550,17 +550,31 @@ If you have used CADC facilities and products (such as these data)
 for your research, please include the following acknowledgement:
 
 "This research used the facilities of the Canadian Astronomy Data
-Centre operated by the the National Research Council of Canada with
+Centre operated by the National Research Council of Canada with
 the support of the Canadian Space Agency."
 
 The following acknowledgement should appear at some point in any
 published papers containing data obtained with the JCMT:
 
-"The James Clerk Maxwell Telescope is operated by the
-Joint Astronomy Centre on behalf of
-the Science and Technology Facilities Council of the United Kingdom,
-the Netherlands Organisation for Scientific Research, and
-the National Research Council of Canada."
+"The James Clerk Maxwell Telescope is operated by the East Asian
+Observatory on behalf of The National Astronomical Observatory of
+Japan, Academia Sinica Institute of Astronomy and Astrophysics,
+the Korea Astronomy and Space Science Institute, the National
+Astronomical Observatories of China and the Chinese Academy of
+Sciences (Grant No. XDB09000000), with additional funding support
+from the Science and Technology Facilities Council of the United
+Kingdom and participating universities in the United Kingdom and
+Canada."
+
+The following acknowledgement should appear at some point in any
+published papers containing data obtained with the JCMT prior to
+the handover to EAO on March 1 2015:
+
+"The James Clerk Maxwell Telescope has historically been operated by
+the Joint Astronomy Centre on behalf of the Science and Technology
+Facilities Council of the United Kingdom, the Netherlands
+Organisation for Scientific Research, and the National Research
+Council of Canada."
 
 Authors are also asked to give the identification number(s), i.e.
 "Program ID", of the program(s) under which their data were obtained,
