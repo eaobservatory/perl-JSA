@@ -228,9 +228,7 @@ sub can_send_to_cadc_guess {
 Given a list of acceptable PNGs, merge them so that the rsp is on the
 left and the rimg is on the right. The resulting PNGs will be named
 _reduced_ in place of the _rimg_ and _rsp_ in the original file
-names. If the _rimg_ PNG is missing for a given _rsp_ PNG, then the
-output _reduced_ PNG will have a transparent square where the _rimg_
-would be.
+names.
 
     $merged = merge_pngs( @inputs );
 
@@ -297,28 +295,18 @@ sub merge_pngs {
         push(@tryrimg, $hpxrimg, $tanrimg);
 
         # Have we got a rimg?
-        my $have_rimg = 0;
-
         my $rimg;
         for my $test (@tryrimg) {
             if (exists $rimgs{$test}) {
                 $rimg = $test;
-                $have_rimg = 1;
                 last;
             }
-        }
-
-        # If rimg not found, use the
-        # special "null:" keyword for montage.
-        unless (defined $rimg) {
-            $rimg = "null:";
-            $have_rimg = 0;
         }
 
         # Determine which product label to use. Use healpix if either
         # the rsp or the rimg have a hpx prefix.
         my $prodlabel = $label;
-        if ($rsp =~ /_hpx/ || $rimg =~ /_hpx/) {
+        if ($rsp =~ /_hpx/ || (defined $rimg and $rimg =~ /_hpx/)) {
             $prodlabel = "healpix";
         }
 
@@ -328,13 +316,13 @@ sub merge_pngs {
         # Set up and run the command. At this point if there's an error
         # just don't do anything, but if it succeeds, push the name of
         # the resulting file onto our array for return later.
-        if ($usemontage) {
+        if ($usemontage and defined $rimg) {
             my $command = "$montage $rsp $rimg -tile 2x1 -background lightgray -geometry ${size}x${size}+0+0 $reduced";
             my $returnval = system($command);
 
             unless ($returnval) {
                 # We have dealt with the _rimg (if we had one)
-                if ($have_rimg) {
+                if (defined $rimg) {
                     push @toremove, $rimg;
                     delete $rimgs{$rimg};
                 }
@@ -361,7 +349,7 @@ sub merge_pngs {
             }
         }
         else {
-            # No montage so just copy the _rsp to reduced
+            # No montage or no _rimg so just copy the _rsp to reduced
             copy($rsp, $reduced);
         }
 
