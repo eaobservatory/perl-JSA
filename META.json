@@ -100,10 +100,6 @@
          "file" : "lib/JSA/EnterData/ACSIS.pm",
          "version" : 0
       },
-      "JSA::EnterData::Assoc" : {
-         "file" : "lib/JSA/EnterData/Assoc.pm",
-         "version" : "0.01"
-      },
       "JSA::EnterData::DAS" : {
          "file" : "lib/JSA/EnterData/DAS.pm",
          "version" : 0
@@ -119,10 +115,6 @@
       "JSA::EnterData::StarCommand" : {
          "file" : "lib/JSA/EnterData/StarCommand.pm",
          "version" : "0.03"
-      },
-      "JSA::EnterData::TileList" : {
-         "file" : "lib/JSA/EnterData/TileList.pm",
-         "version" : "0.02"
       },
       "JSA::Error" : {
          "file" : "lib/JSA/Error.pm",

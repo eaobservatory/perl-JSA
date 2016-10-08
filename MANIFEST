@@ -17,12 +17,10 @@ lib/JSA/DB/TableCOMMON.pm
 lib/JSA/DB/TableTransfer.pm
 lib/JSA/EnterData.pm
 lib/JSA/EnterData/ACSIS.pm
-lib/JSA/EnterData/Assoc.pm
 lib/JSA/EnterData/DAS.pm
 lib/JSA/EnterData/Instrument.pm
 lib/JSA/EnterData/SCUBA2.pm
 lib/JSA/EnterData/StarCommand.pm
-lib/JSA/EnterData/TileList.pm
 lib/JSA/Error.pm
 lib/JSA/Files.pm
 lib/JSA/Headers.pm
