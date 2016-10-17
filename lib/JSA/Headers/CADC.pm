@@ -22,6 +22,7 @@ use warnings::register;
 
 use Scalar::Util qw/blessed/;
 
+use JSA::Datetime qw/parse_iso8601_datetime/;
 use JSA::Headers qw/read_header/;
 
 use Exporter 'import';
@@ -86,6 +87,20 @@ sub correct_asn_id {
 
         if ($mode eq 'night') {
             $prefix = $header{UTDATE};
+
+            unless (defined $prefix) {
+                # Fall back to DATE-OBS and DATE-END headers, because, if the
+                # observations spanned the UT date change then the UTDATE
+                # header will have been removed.  Check that they don't differ
+                # by more than one day.
+                my $date_start = parse_iso8601_datetime($header{'DATE-OBS'} . 'Z');
+                my $date_end   = parse_iso8601_datetime($header{'DATE-END'} . 'Z');
+
+                die 'DATE-OBS and DATE-END differ by more than 1 day (night mode)'
+                    if abs($date_end->epoch() - $date_start->epoch()) > 86400;
+
+                $prefix = $date_start->ymd('');
+            }
         }
         elsif ($mode eq 'project') {
             my $survey = $header{SURVEY};
