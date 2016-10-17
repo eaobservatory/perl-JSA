@@ -121,7 +121,10 @@ sub correct_asn_id {
             }
         }
 
-        $asn_id = $prefix . '-' . $asn_id if defined $prefix;
+        die "ASN_ID prefix cannot be determined ($mode mode)"
+            unless defined $prefix;
+
+        $asn_id = $prefix . '-' . $asn_id;
     }
 
     return $asn_id;
