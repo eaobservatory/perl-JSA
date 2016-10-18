@@ -849,8 +849,10 @@ sub drfilename_to_cadc {
     # for SCUBA-2 850/450 without breaking ACSIS 2digit.
     my $subsys_format = '%02d';
 
-    # SCUBA currently uses a string for subsys
-    if ($subsys !~ /^\d+$/) {
+    # SCUBA currently uses a string for subsys.  Detect this via the presence
+    # of non-numbers rather than the absense of numbers because dissect_drfile
+    # strips leading zeroes, changing subsystem '00' to '' (e.g. for ACSIS).
+    if ($subsys =~ /[^0-9]/) {
         $subsys_format = '%s';
     }
 
