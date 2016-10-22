@@ -136,10 +136,12 @@ sub correct_asn_id {
             }
         }
 
-        die "ASN_ID prefix cannot be determined ($mode mode)"
-            unless defined $prefix;
+        unless ($mode eq 'obs') {
+            die "ASN_ID prefix cannot be determined ($mode mode)"
+                unless defined $prefix;
 
-        $asn_id = $prefix . '-' . $asn_id;
+            $asn_id = $prefix . '-' . $asn_id;
+        }
     }
 
     return $asn_id;
