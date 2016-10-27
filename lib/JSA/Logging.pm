@@ -31,7 +31,7 @@ sub log_command {
     }
     if ($stderr) {
         for my $line (@$stderr) {
-            log_message("$cmd ERROR: $line\n");
+            log_message("$cmd STDERR: $line\n");
         }
     }
 }
