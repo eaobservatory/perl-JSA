@@ -59,7 +59,6 @@ while (my ($k,$v) = each(%PRODUCT_TYPES)) {
 our @ASSOCS = qw/obs night project public/;
 our @PRODUCTS = qw/healpix reduced rimg rsp/;
 our %EXTRA_PRODUCTS = (
-    obs => [qw/ cube /],
     public => [qw/extent-mask extent-cat extent-moc peak-cat tile-moc/],
 );
 
@@ -831,10 +830,9 @@ sub drfilename_to_cadc {
     # Prefix of "a" is now meant to be "h"
     $prefix = "h" if $prefix eq 'a';
 
-    # _cube has a mandatory count and some earlier pipeline versions
-    # did not support that. _reduced also has a mandatory count and
+    # _reduced has a mandatory count and
     # scuba-2 does not yet include the count in the pipeline.
-    if ($suffix ne 'png' && $product =~ /^(cube|reduced)/ && ! defined $prodcount) {
+    if ($suffix ne 'png' && $product =~ /^reduced/ && ! defined $prodcount) {
         $prodcount = 1;
     }
 

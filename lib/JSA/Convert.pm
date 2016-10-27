@@ -319,7 +319,7 @@ sub convert_dr_files {
     my $reduced = merge_pngs(@pngs);
 
     # If this is a "normal" reduction (obs / night mode) then try
-    # also to use these PNGs as the previews for raw data, cubes, etc.
+    # also to use these PNGs as the previews for raw data, etc.
     if (grep {$mode eq $_} qw/obs night/) {
         my %reduced = map {$_ => 1} @$reduced;
         $reduced{$_} = 1 foreach grep {/_reduced-/} @pngs;
@@ -787,7 +787,7 @@ sub _prov_convert_filename {
 =item B<_create_raw_previews>
 
 Copy obs previews from the given list to make previews for the corresponding
-raw, cube, etc. planes.
+raw, etc. planes.
 
     _create_raw_previews(@pngs);
 
@@ -835,10 +835,6 @@ sub _create_raw_previews {
                 $obs_id, 'raw-' . $prod_id_suffix, $size, '.png');
         }
         elsif ($backend eq 'ACSIS' or $backend eq 'DAS') {
-            # Copy the preview for the "cube" plane.
-            push @copies, _cadc_preview_file_name(
-                $obs_id, 'cube-' . $prod_id_suffix, $size, '.png');
-
             # Raw product name depends on whether it's a hybrid observation
             # or not.
             my $is_hybrid = exists $keywords{'jsa:isHybrid'}
