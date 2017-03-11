@@ -21,7 +21,7 @@ our @EXPORT_OK = qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 =over 4
 
-=item add_jsa_proc_jobs(\%groups, $mode, $priority, $add_info_only, $debug)
+=item add_jsa_proc_jobs(\%groups, $mode, $priority, $add_info_only, $debug, %options)
 
 Adds processing jobs to the JSA local processing system.
 C<\%groups> is a reference to a hash holding groups and information about them.
@@ -60,6 +60,32 @@ Processing task name.
 If the C<$add_info_only> option is set then instead of adding jobs, observation
 info is added to jobs which currently lack it.
 
+Options include:
+
+=over 4
+
+=item allow_update
+
+Call JSA Proc "add_upd_del_job" instead of using plain "add_job" method.
+
+=item jsa_proc_logging
+
+Enables logging from the JSA Proc system.  Should be the name of a Python
+logging level (e.g. INFO or DEBUG).
+
+B<Note:> only applies in first call which creates connection to JSA Proc.
+
+B<Note:> probably only useful in conjunction with "allow_update".
+
+=item jsa_proc_dry_run
+
+Enables dry-run mode in JSA Proc system.
+
+B<Note:> only applies when used in conjunction "allow_update"
+but not with C<$add_info_only>.
+
+=back
+
 =cut
 
 {
@@ -74,6 +100,7 @@ info is added to jobs which currently lack it.
         my $priority = shift;
         my $add_info_only = shift;
         my $debug = shift;
+        my %options = @_;
 
         log_message("\nBeginning to add jobs to local jsa_proc system.\n");
 
@@ -84,7 +111,17 @@ info is added to jobs which currently lack it.
             log_message("Opening connection to jsa_proc.\n");
             $taco = new Alien::Taco(lang => 'python');
             $taco->import_module('jsa_proc.config', args => ['get_database']);
+            $taco->import_module('jsa_proc.submit.update',
+                                 args => ['add_upd_del_job']);
             $jsa_proc_db = $taco->call_function('get_database');
+
+            if ($options{'jsa_proc_logging'}) {
+                $taco->import_module('logging');
+                $taco->call_function(
+                    'logging.basicConfig', kwargs => {level =>
+                        $taco->get_value(
+                            'logging.' . uc($options{'jsa_proc_logging'}))});
+            }
         }
         elsif ($debug) {
             log_message("Skipping connection to jsa_proc. [DEBUG MODE]\n");
@@ -116,7 +153,6 @@ info is added to jobs which currently lack it.
                     mode            => $group->{'mode'} // $mode,
                     parameters      => join(' ', @param),
                     input_file_names=> \@files,
-                    foreign_id      => undef,
                     priority        => $priority,
                     obsinfolist     => $group->{'obsinfolist'},
                     task            => $group->{'task'},
@@ -127,12 +163,21 @@ info is added to jobs which currently lack it.
 
                     log_message("Adding job to jsa_proc database.\n");
                     eval {
-                        my $job_id = $jsa_proc_db->call_method(
-                                        'add_job', kwargs => \%args);
-                        log_message("Job added with ID: $job_id\n");
+                        my $job_id;
+                        unless ($options{'allow_update'}) {
+                            $job_id = $jsa_proc_db->call_method(
+                                'add_job', kwargs => \%args);
+                        }
+                        else {
+                            $args{'db'} = $jsa_proc_db;
+                            $args{'dry_run'} = $options{'jsa_proc_dry_run'};
+                            $job_id = $taco->call_function(
+                                'add_upd_del_job', kwargs => \%args);
+                        }
+                        log_message("Job added/updated with ID: $job_id\n");
                     };
                     if ($@) {
-                        log_message("ERROR: failed to add job:\n$@\n");
+                        log_message("ERROR: failed to add/update job:\n$@\n");
                     }
                 }
                 else {
