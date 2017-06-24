@@ -47,7 +47,6 @@
             "NDF" : "0",
             "Pod::Usage" : "0",
             "Proc::SafeExec" : "0",
-            "Starlink::Versions" : "0",
             "Statistics::Descriptive" : "0",
             "Time::Piece" : "0",
             "URI" : "0",

@@ -49,7 +49,6 @@ my $build = Module::Build->new(
         'Config::IniFiles' => 0,
         'DateTime' => 0,
         'NDF' => 0,
-        'Starlink::Versions' => 0,
         'Statistics::Descriptive' => 0,
         'Time::Piece' => 0,
         'URI' => 0,

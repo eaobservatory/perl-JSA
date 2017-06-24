@@ -32,7 +32,6 @@ use Image::ExifTool qw/:Public/;
 use Proc::SafeExec;
 use File::Basename qw/fileparse/;
 use Starlink::Config qw/:override/;
-use Starlink::Versions qw/starversion_lt starversion_string/;
 
 use JSA::Error qw/:try/;
 use JSA::Headers qw/update_fits_product read_header cadc_ack/;
@@ -544,14 +543,6 @@ sub ndf2fits {
     # Remove the output file before we start
     unlink $outfile if -e $outfile;
 
-    my $has_cadc_prov = 1;
-    if (starversion_lt('convert', '1.5-13')) {
-        my $ver = starversion_string("convert");
-        carp "CADC provenance is not supported by this version of CONVERT NDF2FITS ($ver)."
-           . " Please upgrade to at least v1.5-13.\n";
-        $has_cadc_prov = 0;
-    }
-
     my $comp = 'DV';
     if ($opt{'quality'}) {
         # If outputting a quality array, ensure that the bad-bit mask
@@ -574,7 +565,7 @@ sub ndf2fits {
         "PROFITS",
         "DUPLEX",
         "PROHIS",
-        ($has_cadc_prov ? "PROVENANCE=CADC" : ()),
+        "PROVENANCE=CADC",
         "COMP=$comp",
     );
 
