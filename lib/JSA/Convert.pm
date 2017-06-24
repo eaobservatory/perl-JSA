@@ -110,7 +110,11 @@ sub convert_to_fits {
         unless defined $outfile;
 
     # Now do the conversion
-    ndf2fits($ndf, $outfile, quality => 1)
+    my %opt = (quality => 1);
+
+    $opt{'no_provenance'} = 1 if $type eq 'public';
+
+    ndf2fits($ndf, $outfile, %opt)
         or JSA::Error::Conversion->throw( "Could not convert $ndf to FITS" );
 
     return $outfile;
@@ -569,6 +573,7 @@ sub ndf2fits {
         "COMP=$comp",
     );
 
+    push @args, 'PROPROV=NO' if $opt{'no_provenance'};
 
     print join(" ",@args)."\n" if $DEBUG;
 
