@@ -1,140 +1,101 @@
 package JSA::EnterData::StarCommand;
 
-use strict; use warnings;
-
-our $VERSION = '0.03';
-
-=pod
-
 =head1 NAME
 
 JSA::EnterData::StarCommand - Functions related to Starlink command execution.
 
 =head1 SYNOPSIS
 
-    use JSA::EnterData::StarCommand;
+    use JSA::EnterData::StarCommand qw/try_star_command/;
 
-    $starcom = new JSA::EnterData::StarCommand-();
 
-    $starcom->try_command('command' => [qw/command and arguments/])
-        or die "Could not run the command";
+    $values = try_star_command(
+            command => [qw/command and arguments/],
+            values => [qw/.../]);
 
 =head1 DESCRIPTION
 
-This object oriented module has methods related to Starlink command execution.
+This module has functions related to Starlink command execution.
 
-=head2 METHODS
+=head2 FUNCTIONS
 
 =over 2
 
 =cut
 
-use Log::Log4perl ;
+use strict;
+use warnings;
+
+our $VERSION = '0.03';
+
+use base qw/Exporter/;
+
+use File::Basename;
+use File::Temp;
+use Log::Log4perl;
 
 use JSA::Error qw/:try/;
-use JSA::Starlink ();
+use JSA::Starlink qw/run_star_command/;
 
-our $Par_Get = '/star/bin/kappa/parget';
+our @EXPORT_OK = qw/try_star_command/;
+our $PARGET = '/star/bin/kappa/parget';
 
-=pod
-
-=item B<new> (constructor)
-
-Returns a L<JSA::EnterData::StarCommand> object.
-
-    $starcom = new JSA::EnterData::StarCommand();
-
-=cut
-
-sub new {
-    my ($class, %arg) = @_;
-
-    my $obj = {};
-    $obj = bless $obj, $class;
-    $obj->verbose(0);
-    return $obj;
-}
-
-=item B<verbose>
-
-Sets the anount of verbosity when an argument is given. Else, returns the
-current value.
-
-=cut
-
-sub verbose {
-    my $self = shift @_;
-
-    my $key = 'verbose';
-
-    scalar @_ or return $self->{ $key };
-
-    require Scalar::Util;
-    $self->{$key} = Scalar::Util::looks_like_number($_[0]) ? $_[0] : 0;
-    return;
-}
-
-=pod
-
-=item B<try_command>
+=item B<try_star_command>
 
 Given a hash of I<command> key and Starlink command and arguments as array
-reference value, returns a truth value to indicate that the execution was
-successful (return code is 0).
+reference value, returns a reference to a hash containing the requested
+I<values> retrieved from the command's output.  Values which could not be
+retrieved are given a value of undef.
 
-It catches and logs L<JSA::Error::StarlinkCommand> errors; passes along
-L<JSA::Error::BadExec> ones.
+It catches and logs L<JSA::Error::StarlinkCommand> errors,
+returning undef.  It passes along L<JSA::Error::BadExec> errors.
 
-Optionally, provide I<return-code> key and a true value to receive and test the
-return code yourself.
+If no values are requested and an error did not occur, returns 1.
 
-Optionally, provide I<error-text> key and a string value to print when the error
-during command execution is L<JSA::Error::StarlinkCommand> type.
-
-    try_command('command' => [qw/command and arguments/])
-        or die "Could not run the command";
+    $values = try_star_command(
+        command => [qw/command and arguments/],
+        values => [qw/values to fetch/])
 
 =cut
 
-sub try_command {
-    my ($self, %arg) = @_;
+sub try_star_command {
+    my %arg = @_;
 
-    my $err_text = $arg{'error-text'};
-    my @com      = @{$arg{'command'}}
+    my @com = @{$arg{'command'}}
         or throw JSA::Error::BadArgs 'No Starlink command given to run.';
 
-    $self->_command_name($com[0]);
-
     my $cmd_run = join ' ', @com;
+    my $com_name = shift @com;
 
     my $log = Log::Log4perl->get_logger('');
-    $log->debug("# Command to be run: $cmd_run\n");
+    $log->debug("# Command to be run: $cmd_run");
 
-    my ($stdout, $stderr, $rc);
+    # Set temporary ADAM directory to ensure we retrieve parameters from the
+    # correct instance of the command.
+    my $adam_dir = File::Temp->newdir();
+    local $ENV{'ADAM_USER'} = "$adam_dir";
+    $log->debug("# Using temporary ADAM directory: $adam_dir");
+
+    my $rc;
     try {
-        ($stdout, $stderr, $rc) =
-            JSA::Starlink::run_star_command($com[0], @com[1 .. $#com]);
+        my ($stdout, $stderr);
+        ($stdout, $stderr, $rc) = run_star_command($com_name, @com);
 
-        print "# Standard output ...\n", join("\n", @{$stdout}), "\n"
-            if defined $stdout && scalar @{$stdout} && $self->verbose();
+        $log->debug("# Standard output ...\n", join("\n", @{$stdout}))
+            if defined $stdout && scalar @{$stdout};
 
-        if (1 < $self->verbose()) {
-            print "# Standard error ...\n", join("\n", @{$stderr}), "\n"
-                if defined $stderr && scalar @{$stdout};
+        $log->debug("# Standard error ...\n", join("\n", @{$stderr}))
+            if defined $stderr && scalar @{$stdout};
 
-            print "# Exit code: ", $rc, "\n"
-                if defined $rc;
-        }
+        $log->debug("# Exit code: ", $rc, "\n")
+            if defined $rc;
     }
     catch JSA::Error::StarlinkCommand with {
         my ($err) = @_;
 
-        $err_text = join "\n", ($err_text // ()),
-                               "Error executing \"$cmd_run\" ...",
-                               $err->text();
-
-        my $fx = $self->verbose() ? 'error_warn' : 'error';
-        $log->$fx($err_text);
+        $log->error_warn(join "\n",
+            "Error executing \"$cmd_run\" ...",
+            $err->text());
 
         throw JSA::Error::FatalError $err
             if $err->text() =~ /No such file or directory/;
@@ -142,103 +103,46 @@ sub try_command {
 
     # Allow JSA::Error::BadExec error to move up.
 
-    $arg{'return-code'} and return $rc;
-
     # run_star_command() throws Error when $rc != 0.
-    return defined $rc && $rc == 0;
-}
+    return undef unless defined $rc && $rc == 0;
 
-=pod
+    return 1 unless exists $arg{'values'};
 
-=item B<get_value>
+    my @values = @{$arg{'values'}};
 
-Given a list of fields related to the command run, returns a hash with fields
-as keys and rleated values as values.
+    my $base = File::Basename::fileparse($com_name);
 
-    %value = $starcom->get_value('A', 'B');
+    $log->debug("# Command for which to fetch values: $base");
 
-=cut
+    my %out;
 
-{
-    my %base;
+    local $ENV{'ADAM_EXIT'} = '1';
 
-    sub get_value {
-        my ($self, @field) = @_;
+    for my $f (@values) {
+        $log->debug("# Fetching value for $f");
 
-        my $com = $self->_command_name()
-            or throw JSA::Error::BadArgs(
-                'A command name has not been set. (Hint: has the command been run yet?)');
+        my $v = `$PARGET $f $base`;
 
-        my $log = Log::Log4perl->get_logger('');
-        unless (scalar @field) {
-            my $fx = $self->verbose() ? 'logwarn' : 'warn';
-            $log->$fx("No fields given to fetch values for command $com .");
-            return;
+        if ($?) {
+            $log->warn("# Could not fetch value for $f");
+            $out{$f} = undef;
+            next;
         }
 
-        require File::Basename;
-        exists $base{$com} or ($base{$com}) = File::Basename::fileparse($com);
-        my $alt = $base{$com};
+        $v =~ s/^\s+//;
+        $v =~ s/\s+$//;
 
-        print "# Command for which to fetch values: $alt\n"
-            if 1 < $self->verbose();
+        $log->debug(sprintf("# %s : %s", $f, $v));
 
-        my %out;
-
-        for my $f ( @field ) {
-            print "# Fetching value for $f\n"
-                if 2 < $self->verbose();
-
-            $out{$f} = `$Par_Get $f $alt`;
-            for ($out{$f}) {
-                next unless defined $_;
-
-                s/^\s+//;
-                s/\s+$//;
-
-                printf "# %s : %s\n", $f, $out{ $f }
-                    if $self->verbose();
-            }
-        }
-
-        return %out;
+        $out{$f} = $v;
     }
+
+    return \%out;
 }
-
-
-=pod
-
-=back
-
-=head2 INTERNAL METHODS
-
-=over 2
-
-=item B<_command_name>
-
-Sets command name for internal use when an argument is given. Else, returns the
-command name.
-
-=cut
-
-sub _command_name {
-    my $self = shift @_;
-
-    my $key = 'command-name';
-
-    scalar @_ or return $self->{$key};
-
-    $self->{$key} = $_[0];
-    return;
-}
-
-
 
 1;
 
 __END__
-
-=pod
 
 =back
 

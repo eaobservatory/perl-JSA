@@ -56,7 +56,7 @@ use JSA::DB::TableCOMMON;
 use JSA::EnterData::ACSIS;
 use JSA::EnterData::DAS;
 use JSA::EnterData::SCUBA2;
-use JSA::EnterData::StarCommand;
+use JSA::EnterData::StarCommand qw/try_star_command/;
 use JSA::Error qw/:try/;
 use JSA::Files qw/looks_like_rawfile/;
 use JSA::WriteList ();
@@ -2575,38 +2575,34 @@ sub calc_radec {
 
     my @command  = $inst->get_bound_check_command($temp->filename(), $pa);
 
-    my $err_text = sprintf "Bound calculation error with files starting with %s; see log\n",
-                           $filenames[0];
-
-    my $starcom = JSA::EnterData::StarCommand->new();
-    $starcom->verbose($self->debug() ? 3 : $self->verbosity());
-    $starcom->try_command('error-text' => $err_text,
-                          'command'    => \@command)
-        or return;
+    $log->info(sprintf(
+        "Performing bound calculation for files starting %s", $filenames[0]));
 
     # Get the bounds
     my @corner     = qw/TL BR TR BL/;
     my %par_corner = map {; $_ => 'F' . $_ } @corner;
 
+    my $values = try_star_command(
+        command => \@command,
+        values => [qw/REFLAT REFLON/, values %par_corner]);
+
+    return unless defined $values;
+
     my %result = ('REFLAT' => undef,
                   'REFLON' => undef);
 
-    my $prog = _basename($command[0]);
-
     foreach my $k (sort values %par_corner) {
-        my $res = `/star/bin/kappa/parget $k $prog`;
+        my $res = $values->{$k};
 
         # Rarely happens but when it does, produces warnings about operations on
         # undef values.
         # XXX Need to ask if it is important enough to log.
         unless ($res) {
-            $log->logwarn("No value found for \"parget $k $prog\" after successful run of \"$prog\"!");
+            $log->logwarn("No value found for parameter $k");
             # XXX return from sub instead?
             next;
         }
 
-        $res =~ s/^\s+//;
-        $res =~ s/\s+$//;
         $result{$k} = [
             map {
                 Astro::Coords::Angle->new($_, units => 'rad')
@@ -2652,17 +2648,17 @@ sub calc_radec {
             || (exists $state{TCS_TR_SYS}
                 && $not_app_azel->($state{TCS_TR_SYS}))) {
         foreach my $k (qw/REFLON REFLAT/) {
-            my $res = `/star/bin/kappa/parget $k $prog`;
-            chomp($res);
-            $result{$k} = $res;
+            $result{$k} = $values->{$k};
         }
 
         # convert to radians
         $result{REFLON} = Astro::Coords::Angle::Hour->new(
-            $result{REFLON}, units => 'sex', range => '2PI')->degrees;
+            $result{REFLON}, units => 'sex', range => '2PI')->degrees
+            if defined $result{'REFLON'};
 
         $result{REFLAT} = Astro::Coords::Angle->new(
-            $result{REFLAT}, units => 'sex', range => 'PI')->degrees;
+            $result{REFLAT}, units => 'sex', range => 'PI')->degrees
+            if defined $result{'REFLAT'};
     }
 
     $headerref->{obsra}  = $result{REFLON};
