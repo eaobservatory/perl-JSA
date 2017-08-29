@@ -17,7 +17,7 @@ use Test::More;
 use File::Find;
 
 # Set path for external modules.
-use JAC::Setup 'omp';
+use JAC::Setup qw/omp archiving/;
 
 our @modules;
 
