@@ -5,6 +5,8 @@ use warnings;
 
 use base 'JSA::EnterData::Instrument';
 
+use Log::Log4perl;
+
 =head1 NAME
 
 JSA::EnterData::ACSIS - ACSIS specific methods.
@@ -192,10 +194,10 @@ sub _fill_headers_obsid_subsys {
     # Create obsid_subsysnr
     $header->{'obsid_subsysnr'} = join '_', $obsid,  $header->{'SUBSYSNR'};
 
-    $self->_print_text(
-        sprintf "Created header [obsid_subsysnr] with value [%s]\n",
-                $header->{'obsid_subsysnr'})
-        if $self->debug;
+    my $log = Log::Log4perl->get_logger('');
+    $log->trace(sprintf(
+        "Created header [obsid_subsysnr] with value [%s]",
+        $header->{'obsid_subsysnr'}));
 
     return;
 }

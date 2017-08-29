@@ -42,6 +42,7 @@ use strict;
 use warnings;
 use FindBin;
 
+use Data::Dumper;
 use File::Temp;
 use List::MoreUtils qw/any all/;
 use List::Util qw/min max/;
@@ -105,7 +106,7 @@ of the object).
 =item I<debug> C<1 | 0>
 
 Debugging means interact with the database, but don't actually do any
-inserts, and be very verbose.  Default is false.
+inserts.  Default is false.
 
 =item I<dict> C<file name>
 
@@ -127,10 +128,6 @@ disk. Default is false.
 Currently it does not do anything.
 
 When the value is true, I<force-disk> is marked false.
-
-=item I<verbosity> C< 0 | 1 | 2 | 3 ... >
-
-An integer value indicating message verbosity.
 
 =item I<load-header-db> C<1 | 0>
 
@@ -183,18 +180,6 @@ returns nothing.  In insert mode, nothing is inserted in "FILES"
 table.
 
     $enter->update_mode(0);
-
-=item B<verbosity>
-
-Returns integer value to indicate message verbosity, if no arguments
-are given.
-
-    $ok = $enter->verbosity;
-
-Else, sets the value for later use; returns nothing.
-
-    # Silence messages.
-    $enter->verbosity(0);
 
 =item B<debug>
 
@@ -273,13 +258,8 @@ returns nothing.
         # To make OMP::Info::Obs out of given files.
         'files'             => [],
 
-        # If false, then nothing is printed (other than fatal messages).
-        # Else, messages are printed with increasing verbosity.
-        'verbosity'         => 1,
-
         # Debugging.  Set to true to turn on.  Debugging means interact
-        # with the database, but don't actually do any inserts, and be
-        # very verbose.
+        # with the database, but don't actually do any inserts.
         'debug'             => 0,
 
         # Force processing of simulation if true.
@@ -338,10 +318,6 @@ returns nothing.
                 unless $obj->can($sub);
 
             $obj->$sub($obj->$sub);
-        }
-
-        if ($obj->debug) {
-            $_->debug(1) for $obj->instruments;
         }
 
         $obj->skip_state_setting(0);
@@ -579,6 +555,8 @@ set.
     sub prepare_and_insert {
         my ($self, %arg) = @_;
 
+        my $log = Log::Log4perl->get_logger('');
+
         my $key_use_list = 'given-files';
 
         my ($date, $use_list) = @arg{('date', $key_use_list)};
@@ -590,8 +568,7 @@ set.
         $arg{$key_use_list} = 0 unless defined $use_list;
 
         if (defined $old_date && $date->ymd ne $old_date->ymd) {
-            $self->_print_text("clearing file cache\n")
-                if 1 < $self->verbosity;
+            $log->trace("clearing file cache");
 
             undef %touched;
         }
@@ -638,14 +615,14 @@ set.
                 'OBS_TYPE' => [qw/FLATFIELD/],
             );
 
-            $self->_print_text(
+            $log->debug(
                 ! $self->files_given
-                ? sprintf("Inserting data for %s. Date [%s]\n",
+                ? sprintf("Inserting data for %s. Date [%s]",
                           $name, $date->ymd)
-                : "Inserting given files\n");
+                : "Inserting given files");
 
             unless ($obs[0]) {
-                $self->_print_text( "\tNo observations found for instrument $name\n\n" );
+                $log->debug("No observations found for instrument $name");
                 next;
             }
 
@@ -789,6 +766,8 @@ It is called by I<prepare_and_insert> method.
     sub insert_obs_set {
         my ($self, %arg) = @_;
 
+        my $log = Log::Log4perl->get_logger('');
+
         my ($inst, $db, $run_obs, $files) =
            map {$arg{$_}} qw/instrument db run-obs file-id/;
 
@@ -799,8 +778,7 @@ It is called by I<prepare_and_insert> method.
 
         foreach (@file) {
           if (exists $touched{$_}) {
-              $self->_print_text( "\talready processed: $_\n")
-                  if 1 < $self->verbosity;
+              $log->trace("already processed: $_");
 
               return;
           }
@@ -825,7 +803,7 @@ It is called by I<prepare_and_insert> method.
 
         my $common_obs = $run_obs->[0]
             or do {
-                $self->_print_text('XXX First run obs is undefined|false; nothing to do.');
+                $log->debug('XXX First run obs is undefined|false; nothing to do.');
                 return ('nothing-to-do', 'First run obs is undef|false');
             };
 
@@ -835,10 +813,10 @@ It is called by I<prepare_and_insert> method.
         # contained with in).
         my $common_hdrs = {%{$common_obs->hdrhash}};
 
-        $self->_print_text(sprintf "\t[%s]... ", join ', ', @file);
+        $log->debug(sprintf "[%s]...", join ', ', @file);
 
         if (! $self->process_simulation && $self->is_simulation($common_hdrs)) {
-            $self->_print_text( "simulation data; skipping\n" );
+            $log->debug("simulation data; skipping" );
             return ( 'simulation', '' );
         }
 
@@ -856,11 +834,11 @@ It is called by I<prepare_and_insert> method.
                 my $val = $invalid{$_}->[0];
 
                 if ($val =~ /does not match/i) {
-                    $self->_print_text( "$_ : $val\n" );
+                    $log->debug("$_ : $val");
                     undef $common_hdrs->{$_};
                 }
                 elsif ($val =~ /should not/i) {
-                    $self->_print_text( "$_ : $val\n" );
+                    $log->debug("$_ : $val");
                     undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
                 }
             }
@@ -870,7 +848,7 @@ It is called by I<prepare_and_insert> method.
                 && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
 
             unless ($self->calc_radec($inst, $common_obs, $common_hdrs)) {
-                $self->_print_text("problem while finding bounds; skipping\n");
+                $log->debug("problem while finding bounds; skipping");
                 return ('error', $inst->name() . ': could not find bounds');
             }
         }
@@ -890,10 +868,13 @@ It is called by I<prepare_and_insert> method.
             my $text = $dbh->errstr();
 
             $db->rollback_trans();
-            $self->_print_error_simple_dup($text);
 
-            return ('nothing-to-do' , 'ignored duplicate insert')
-                if $self->_is_insert_dup_error( $text );
+            if ($self->_is_insert_dup_error($text)) {
+                $log->debug('File metadata already present');
+                return ('nothing-to-do' , 'ignored duplicate insert')
+            }
+
+            $log->debug($text) if defined $text;
 
             return ('error', $text);
         }
@@ -915,7 +896,7 @@ It is called by I<prepare_and_insert> method.
             throw JSA::Error $e;
         }
 
-        $self->_print_text("successful\n");
+        $log->debug("successful");
 
         return ('inserted', '');
     }
@@ -947,6 +928,8 @@ sub skip_state_setting {
 
 sub _filter_header {
     my ($self, $inst, $obs, %ignore) = @_;
+
+    my $log = Log::Log4perl->get_logger('');
 
     return unless scalar @{$obs};
 
@@ -980,9 +963,9 @@ sub _filter_header {
 
         IGNORE: foreach my $key (keys %ignore) {
             if ($remove_ok->($header, $key)) {
-                $self->_print_text(
-                  sprintf 'Ignoring observation with %s = %s',
-                          $key, $header->{$key});
+                $log->debug(sprintf
+                    'Ignoring observation with %s = %s',
+                    $key, $header->{$key});
 
                 next OBS;
             }
@@ -996,9 +979,9 @@ sub _filter_header {
 
             SUBHEAD: foreach my $sub (@subhead) {
                 if ($remove_ok->($sub, $key)) {
-                    $self->_print_text(
-                        sprintf 'Ignoring subheader with %s = %s',
-                                $key, $sub->{$key});
+                    $log->debug(sprintf
+                        'Ignoring subheader with %s = %s',
+                        $key, $sub->{$key});
 
                     next SUBHEAD;
                 }
@@ -1244,6 +1227,8 @@ It is called by I<insert_observations> method.
 sub add_subsys_obs {
     my ($self, %args) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
+
     foreach my $k (qw/instrument db columns dict obs/) {
         next if exists $args{$k} && $args{$k} && ref $args{$k};
 
@@ -1262,7 +1247,7 @@ sub add_subsys_obs {
 
     foreach my $subsys_obs (@{$obs}) {
         $subsysnr++;
-        $self->_print_text( "Processing subsysnr $subsysnr of $totsub\n" );
+        $log->debug("Processing subsysnr $subsysnr of $totsub");
 
         # Obtain instrument table values from this Obs object.  Break hash tie.
         my $subsys_hdrs = {%{$subsys_obs->hdrhash}};
@@ -1311,7 +1296,7 @@ sub add_subsys_obs {
                 my $text = $dbh->errstr();
 
                 $db->rollback_trans() if $self->load_header_db;
-                $self->_print_text("$error\n\n");
+                $log->debug("$error");
 
                 return ( 'error', $text);
             }
@@ -1787,7 +1772,8 @@ sub prepare_update_hash {
     foreach my $row (@{$rows}) {
         my @unique_val = map $row->{$_}, @unique_key;
 
-        $self->_show_debug(\@unique_key , \@unique_val);
+        $log->trace(Dumper(\@unique_key));
+        $log->trace(Dumper(\@unique_val));
 
         my $ref = $dbh->selectall_arrayref($sql, {Columns=>{}}, @unique_val)
             or $log->logdie("Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n");
@@ -1829,8 +1815,7 @@ sub prepare_update_hash {
                           && $self->update_only_inbeam();
 
         foreach my $key (sort keys %{$indb}) {
-            $self->_show_debug("testing field: $key")
-                if $self->verbosity() > 1;
+            $log->debug("testing field: $key");
 
             next
                 # since that will update automatically
@@ -1842,8 +1827,7 @@ sub prepare_update_hash {
 
             next unless (defined $old || defined $new);
 
-            $self->_show_debug("continuing with $key")
-                if $self->verbosity();
+            $log->debug("continuing with $key");
 
             my %test = (
                 'start' => exists $start{$key},
@@ -1863,7 +1847,7 @@ sub prepare_update_hash {
             # Not defined currently - inserting new value.
             if (defined $new && ! defined $old) {
                 $differ{$key} = $new;
-                $self->_show_debug( qq[$key = ] . $new );
+                $log->debug( qq[$key = ] . $new );
                 next;
             }
 
@@ -1871,7 +1855,7 @@ sub prepare_update_hash {
             # this means a null.
             if (! defined $new && defined $old) {
                 $differ{$key} = undef;
-                $self->_show_debug("$key = <undef>");
+                $log->debug("$key = <undef>");
                 next;
             }
 
@@ -1881,12 +1865,12 @@ sub prepare_update_hash {
                 if ($in_range) {
                     $new = _find_extreme_value(%test,
                                                'new>old' => _compare_dates($new, $old));
-                    $self->_show_debug("  possible new value for $key = " . $new );
+                    $log->debug("  possible new value for $key = " . $new );
                 }
 
                 if ($new ne $old) {
                     $differ{$key} = $new;
-                    $self->_show_debug("$key = " . $new);
+                    $log->debug("$key = " . $new);
                 }
 
                 next;
@@ -1897,14 +1881,14 @@ sub prepare_update_hash {
                 # & end values; these are weather dependent.
                 if ($key =~ $tau_val && $new != $old) {
                     $differ{$key} = $new;
-                    $self->_show_debug("$key = " . $new);
+                    $log->debug("$key = " . $new);
                 }
                 elsif ($in_range) {
                     $new = _find_extreme_value(%test, 'new>old' => $new > $old);
 
                     if ($new != $old) {
                         $differ{$key} = $new if $new != $old;
-                        $self->_show_debug("$key = " . $new);
+                        $log->debug("$key = " . $new);
                     }
                 }
                 else {
@@ -1913,12 +1897,12 @@ sub prepare_update_hash {
                       my $diff = abs($old - $new);
                       if ($diff > 0.000001) {
                           $differ{$key} = $new;
-                          $self->_show_debug("$key = " . $new);
+                          $log->debug("$key = " . $new);
                       }
                     }
                     elsif ( $new != $old ) {
                         $differ{$key} = $new;
-                        $self->_show_debug("$key = " . $new );
+                        $log->debug("$key = " . $new );
                     }
                 }
 
@@ -1928,11 +1912,11 @@ sub prepare_update_hash {
             # String.
             if ($new ne $old) {
                 $differ{$key} = $new;
-                $self->_show_debug("$key = " . $new);
+                $log->debug("$key = " . $new);
             }
         }
 
-        $self->_show_debug("differences to update: " . keys %differ);
+        $log->debug("differences to update: " . (join ' ', keys %differ));
 
         push @update_hash, {
             'differ'        => {%differ},
@@ -2017,26 +2001,16 @@ sub update_hash {
     my @unique_key = @{$change[0]->{'unique_key'}};
 
     # Now have to do an UPDATE
-    my $changes = join ', ',
-        map {
-            join ' = ', $_,
-                (! $self->debug && $self->load_header_db
-                    ? ' ? '
-                    : # debug version with unquoted values.
-                      # XXX should show the change per value instead of repeating the
-                      #     whole set of change for each header/column.
-                      $self->_debug_text($change));
-        } @sorted;
+    my $changes = join ', ', map {" $_ = ? "} @sorted;
 
     my $sql = sprintf "UPDATE %s SET %s WHERE %s",
                       $table,
                       $changes,
                       join ' AND ', map {" $_ = ? "} @unique_key;
 
-    if ($self->debug) {
-        $self->_print_text("$sql\n");
-        return 1;
-    }
+    $log->trace($sql);
+
+    return 1 if $self->debug;
 
     if ($self->load_header_db) {
         my $sth = $dbh->prepare($sql)
@@ -2070,6 +2044,8 @@ format than that of the headers.
 sub transform_value {
     my ($self, $table, $columns, $values) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
+
     # Transform data hash.  Each data type name contains a hash mapping
     # values from the headers to the values the database expects.
     my %transform_data = (
@@ -2096,9 +2072,9 @@ sub transform_value {
               unless ($non_zero) {
                   undef $values->{$column};
 
-                  $self->_print_text(sprintf "Converted date [%s] to [undef] for column [%s]\n",
-                                             $val, $column)
-                      if $self->debug;
+                  $log->trace(sprintf
+                      "Converted date [%s] to [undef] for column [%s]",
+                      $val, $column);
               }
           }
           elsif (exists $transform_data{$data_type}) {
@@ -2107,9 +2083,9 @@ sub transform_value {
                   # defined in the %transform_data hash
                   $values->{$column} = $transform_data{$data_type}{$val};
 
-                  $self->_print_text(sprintf "Transformed value [%s] to [%s] for column [%s]\n",
-                                             $val, $values->{$column}, $column)
-                      if $self->debug;
+                  $log->trace(sprintf
+                      "Transformed value [%s] to [%s] for column [%s]",
+                      $val, $values->{$column}, $column);
               }
           }
           elsif ($column eq 'lststart' or $column eq 'lstend') {
@@ -2117,9 +2093,9 @@ sub transform_value {
               my $ha = new Astro::Coords::Angle::Hour($val, units => 'sex');
               $values->{$column} = $ha->hours;
 
-              $self->_print_text(sprintf "Converted time [%s] to [%s] for column [%s]\n",
-                                         $val, $values->{$column}, $column)
-                  if $self->debug;
+              $log->trace(sprintf
+                  "Converted time [%s] to [%s] for column [%s]",
+                  $val, $values->{$column}, $column);
           }
       }
     }
@@ -2139,21 +2115,23 @@ hash reference and an L<OMP::Info::Obs> object.
 sub fill_headers_COMMON {
     my ($self, $header, $obs) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
+
     my $release_date = calculate_release_date($obs);
 
     $header->{'release_date'} = $release_date->strftime($self->sybase_date_format);
 
-    $self->_print_text(sprintf "Created header [release_date] with value [%s]\n",
-                               $header->{'release_date'})
-        if $self->debug;
+    $log->trace(sprintf
+        "Created header [release_date] with value [%s]",
+        $header->{'release_date'});
 
     # Create last_modified
     my $today = gmtime;
     $header->{'last_modified'} = $today->strftime($self->sybase_date_format);
 
-    $self->_print_text(sprintf "Created header [last_modified] with value [%s]\n",
-                               $header->{'last_modified'})
-        if $self->debug;
+    $log->trace(sprintf
+        "Created header [last_modified] with value [%s]",
+        $header->{'last_modified'});
 
     if (exists $header->{'INSTRUME'} && ! defined $header->{'BACKEND'}) {
         $header->{'BACKEND'} = $header->{'INSTRUME'};
@@ -2223,9 +2201,9 @@ sub fill_headers_FILES {
         }
     }
 
-    $self->_print_text(sprintf "Created header [file_id] with value [%s]\n",
-                               join ',', @{$header->{'file_id'}})
-        if $self->debug;
+    $log->trace(sprintf
+        "Created header [file_id] with value [%s]",
+        join ',', @{$header->{'file_id'}});
 
     $inst->_fill_headers_obsid_subsys($header, $obs->obsid);
 
@@ -2356,11 +2334,12 @@ sub get_insert_values {
 sub extract_column_headers {
     my ($self, %args) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
+
     my ($hdrhash, $table, $columns, $dict) =
         map {$args{$_}} qw/headers table columns dict/;
 
-    $self->_print_text(">Processing table: $table\n")
-        if $self->debug;
+    $log->trace(">Processing table: $table");
 
     my %values;
 
@@ -2376,14 +2355,11 @@ sub extract_column_headers {
             my $alias = $dict->{$alt_head};
             $values{$alias} = $hdrhash->{$header};
 
-            $self->_print_text("  MAPPED header [$header] to column [$alias]\n")
-                if $self->debug;
+            $log->trace("  MAPPED header [$header] to column [$alias]");
         }
 
-        $self->_print_text("  Could not find alias for header [$header].  Skipped.\n")
-            if $self->debug
-            && $self->verbosity > 1
-            && ! exists $values{$alt_head};
+        $log->trace("  Could not find alias for header [$header].  Skipped.")
+            unless exists $values{$alt_head};
     }
 
     return \%values;
@@ -2474,6 +2450,8 @@ missing or C<test> hash reference value is missing.
 sub skip_obs_calc {
     my ($self, %arg) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
+
     # Skip list.
     my %test =
         exists $arg{'test'} && defined $arg{'test'} ? %{$arg{'test' }} : ();
@@ -2502,7 +2480,7 @@ sub skip_obs_calc {
                             'value-regex' => $test{$name})
             or next;
 
-        $self->_show_debug("Matched \"$name\" with $test{$name}; obs may be skipped.");
+        $log->debug("Matched \"$name\" with $test{$name}; obs may be skipped.");
 
         return 1;
     }
@@ -2688,6 +2666,8 @@ On error, flushes error to standard error and returns empty list.
 sub read_ndf {
     my ($self, $file, @statekeys) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
+
     my $wcs;
     my $E;
 
@@ -2700,7 +2680,7 @@ sub read_ndf {
     };
 
     if (defined $E) {
-        print STDERR $E;
+        $log->error("$E");
         return ();
     }
 
@@ -2717,7 +2697,7 @@ sub read_ndf {
         };
 
         if (defined $E) {
-            print STDERR $E;
+            $log->error("$E");
             return ();
         }
     }
@@ -2727,6 +2707,8 @@ sub read_ndf {
 
 sub _change_FILES {
     my ($self, %arg) = @_;
+
+    my $log = Log::Log4perl->get_logger('');
 
     my $table = 'FILES';
 
@@ -2769,7 +2751,12 @@ sub _change_FILES {
 
     if ( $dbh->err() ) {
         $db->rollback_trans() if $self->load_header_db();
-        $self->_print_error_simple_dup($error);
+
+        $log->debug($self->_is_insert_dup_error($error)
+                ? "File metadata already present"
+                : $error)
+            if defined $error;
+
         return;
     }
 
@@ -2793,6 +2780,8 @@ column values.
 sub _show_insert_sql {
     my ($self, $table, $fields, $values) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
+
     my @val = @{$values};
 
     # print out some SQL that is not going to be executed
@@ -2806,10 +2795,11 @@ sub _show_insert_sql {
         }
     }
 
-    $self->_print_text(sprintf "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
-                               $table,
-                               join(', ', @{$fields}),
-                               join(', ', @val));
+    $log->trace(sprintf
+        "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
+        $table,
+        join(', ', @{$fields}),
+        join(', ', @val));
 
     return;
 }
@@ -3196,28 +3186,6 @@ sub _is_dup_ignored {
     return $text && $text =~ /Duplicate key.+ignored/i;
 }
 
-=item <_print_error_simple_dup>
-
-Given a error string, prints the it.  If the string matches Sybase duplicate
-insert error message, then prints "File metadata already present".
-
-    $self->_print_error_simple_dup($dbh->errstr);
-
-=cut
-
-sub _print_error_simple_dup {
-    my ($self, $err) = @_;
-
-    return unless defined $err;
-
-    return $self->_print_text(
-        $self->_is_insert_dup_error($err)
-            ? "File metadata already present\n"
-            : ref $err
-                ? $err->text . "\n\n"
-                : "$err\n\n");
-}
-
 =item B<_dataverify_obj_fail_text>
 
 Given an observation returns a string to log, to die with when JCMT::DataVerify
@@ -3317,61 +3285,6 @@ sub _verify_file_name {
 
     throw JSA::Error sprintf "Bad file name%s: %s\n",
                              ($size > 1 ? 's' : ''), join ', ', @bad ;
-}
-
-=item B<_print_text>
-
-Prints a given string on currently selected file handle (standard
-output normally) if I<verbosity> attribute is true.
-
-=cut
-
-sub _print_text {
-    my ($self, $text) = @_;
-
-    return unless $self->verbosity && defined $text;
-
-    my $log = Log::Log4perl->get_logger('');
-    $log->info($text);
-
-    return;
-}
-
-sub _show_debug {
-    my ($self, @text) = @_;
-
-    my $text = $self->_debug_text(@text)
-        or return;
-
-    print $text;
-    return;
-}
-
-sub _debug_text {
-    my ($self, @text) = @_;
-
-    $self->debug() && scalar @text
-        or return;
-
-    my @data;
-    for my $t (@text) {
-        unless (defined $t) {
-            push @data, '<undef>';
-            next;
-        }
-
-        if (Scalar::Util::blessed($t) || ref $t) {
-            require Data::Dumper;
-            push @data, Data::Dumper->Dump($t);
-            next;
-        }
-
-        push @data, $t;
-    }
-
-    $text[-1] =~ /\n$/s or $data[-1] .= "\n";
-
-    return join "\n", @data ;
 }
 
 # JSA::DB::TableTransfer object, to be created as needed.
