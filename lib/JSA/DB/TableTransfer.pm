@@ -49,7 +49,6 @@ use OMP::Config;
 $OMP::Config::DEBUG = 0;
 
 my $_state_table = 'transfer';
-my $_state_descr_table = 'transfer_state';
 
 =head1 METHODS
 
@@ -367,9 +366,8 @@ sub get_found_files {
 
     my $sql = sprintf
         " SELECT s.file_id , s.location
-            FROM $_state_table s , $_state_descr_table d
+            FROM $_state_table s
             WHERE s.status = ?
-              AND s.status = d.state
               AND s.location IS NOT NULL";
 
     $sql .= ' AND file_id like ? '
@@ -525,7 +523,7 @@ sub get_files_not_end_state {
                           /};
 
     my $sql = sprintf
-        "SELECT s.file_id, s.status, d.descr, s.error, s.comment,
+        "SELECT s.file_id, s.status, s.error, s.comment,
            -- Extract date from file name.
            CASE
               WHEN SUBSTRING( file_id, 1, 1 ) = 's'
@@ -535,11 +533,10 @@ sub get_files_not_end_state {
                 -- ACSIS files.
                 SUBSTRING( file_id, 2, 8 )
             END AS date
-            FROM $_state_table s , $_state_descr_table d
+            FROM $_state_table s
             WHERE (  s.status NOT IN ( %s )
                   OR s.error = 1
-                  )
-            AND s.status = d.state",
+                  )",
         join ', ', ('?') x scalar @state;
 
     $sql .= ' AND file_id like ? '
