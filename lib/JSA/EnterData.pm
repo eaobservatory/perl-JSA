@@ -894,7 +894,7 @@ It is called by I<prepare_and_insert> method.
         catch Error::Simple with {
             my ($e) = @_;
             throw JSA::Error $e;
-        }
+        };
 
         $log->debug("successful");
 
