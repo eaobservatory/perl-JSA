@@ -159,8 +159,6 @@ provides:
   JSA::WriteList:
     file: lib/JSA/WriteList.pm
     version: 0.01
-recommends:
-  DBD::Sybase: 0
 requires:
   Astro::Coords: 0
   Astro::FITS::HdrTrans: 1

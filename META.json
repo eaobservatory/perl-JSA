@@ -29,9 +29,6 @@
          }
       },
       "runtime" : {
-         "recommends" : {
-            "DBD::Sybase" : "0"
-         },
          "requires" : {
             "Astro::Coords" : "0",
             "Astro::FITS::HdrTrans" : "1",
