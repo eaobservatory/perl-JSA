@@ -10,7 +10,6 @@ lib/JSA/CADC_Copy.pm
 lib/JSA/Command.pm
 lib/JSA/Convert.pm
 lib/JSA/Datetime.pm
-lib/JSA/Datetime/Sybase.pm
 lib/JSA/DB.pm
 lib/JSA/DB/Sybase.pm
 lib/JSA/DB/TableCOMMON.pm

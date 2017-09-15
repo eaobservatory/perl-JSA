@@ -42,9 +42,6 @@ provides:
   JSA::Datetime:
     file: lib/JSA/Datetime.pm
     version: 0
-  JSA::Datetime::Sybase:
-    file: lib/JSA/Datetime/Sybase.pm
-    version: 0
   JSA::EnterData:
     file: lib/JSA/EnterData.pm
     version: 0
