@@ -566,8 +566,6 @@ set.
         my $db = OMP::DBbackend::Archive->new;
         my $dbh = $db->handle;
 
-        $dbh->{'syb_show_eed'} = $dbh->{'syb_show_sql'} = 1;
-
         # The %columns hash will contain a key for each table, each key's value
         # being an anonymous hash containing the column information.  Store this
         # information for the COMMON table initially.
@@ -1456,8 +1454,6 @@ sub conditional_insert_hash {
 
     my ($table, $dbh, $insert) =
       @args{qw/table dbhandle insert/};
-
-    $dbh->{'syb_show_eed'} = $dbh->{'syb_show_sql'} = 1;
 
     return $self->insert_hash(%args)
         unless $self->conditional_insert;
