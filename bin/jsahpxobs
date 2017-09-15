@@ -81,7 +81,7 @@ Print version information.
 =cut
 
 
-use JAC::Setup qw/omp sybase/;
+use JAC::Setup qw/omp/;
 
 use strict;
 use warnings;

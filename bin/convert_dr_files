@@ -97,7 +97,7 @@ use warnings;
 use Getopt::Long;
 use Pod::Usage;
 
-use JAC::Setup qw/omp oracdr sybase/;
+use JAC::Setup qw/omp oracdr/;
 
 use JSA::Convert qw/convert_dr_files list_convert_plan/;
 use JSA::Files qw/scan_dir/;
