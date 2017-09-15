@@ -30,8 +30,8 @@ provides:
   JSA::DB:
     file: lib/JSA/DB.pm
     version: 0
-  JSA::DB::Sybase:
-    file: lib/JSA/DB/Sybase.pm
+  JSA::DB::MySQL:
+    file: lib/JSA/DB/MySQL.pm
     version: 0
   JSA::DB::TableCOMMON:
     file: lib/JSA/DB/TableCOMMON.pm
