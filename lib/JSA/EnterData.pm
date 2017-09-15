@@ -133,10 +133,6 @@ When the value is true, I<force-disk> is marked false.
 
 A truth value to control loading of header database.  Default is true.
 
-=item I<syb-date> C<date format>
-
-Date format for Sybase database.  Default is C<%Y-%m-%d %H:%M:%S>.
-
 =item I<update-mode> C<1 | 0>
 
 A truth value to determine if to do database update (when true; see
@@ -145,17 +141,6 @@ I<update_hash>) or an insert (when false; see I<insert_hash>).
 In insert mode, nothing is inserted in "FILES" table.
 
 =back
-
-=item B<sybase_date_format>
-
-Returns the set date format for Sybase database consumption if no
-arguments given.
-
-    $format = $enter->sybase_date_format;
-
-Else, sets the date format; returns nothing.
-
-    $enter->sybase_date_format('%Y-%m-%d %H:%M:%S');
 
 =item B<load_header_db>
 
@@ -234,7 +219,6 @@ returns nothing.
 {
     my %default = (
         'date'              => undef,
-        'sybase-date-format'=> '%Y-%m-%d %H:%M:%S',
 
         'load-header-db'    => 1,
 
@@ -2119,7 +2103,7 @@ sub fill_headers_COMMON {
 
     my $release_date = calculate_release_date($obs);
 
-    $header->{'release_date'} = $release_date->strftime($self->sybase_date_format);
+    $header->{'release_date'} = $release_date->strftime('%F %T');
 
     $log->trace(sprintf
         "Created header [release_date] with value [%s]",
@@ -2127,7 +2111,7 @@ sub fill_headers_COMMON {
 
     # Create last_modified
     my $today = gmtime;
-    $header->{'last_modified'} = $today->strftime($self->sybase_date_format);
+    $header->{'last_modified'} = $today->strftime('%F %T');
 
     $log->trace(sprintf
         "Created header [last_modified] with value [%s]",
