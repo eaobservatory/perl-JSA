@@ -2254,15 +2254,15 @@ sub get_columns {
 
     return {} unless defined $dbh;
 
-    # Do query to retrieve column info (using the sp_columns stored procedure)
-    my $col_href = $dbh->selectall_hashref("sp_columns $table", "column_name")
+    # Do query to retrieve column info
+    my $col_href = $dbh->selectall_hashref("SHOW COLUMNS FROM $table", "Field")
         or throw JSA::Error
             "Could not obtain column information for table [$table]: "
             . $dbh->errstr . "\n";
 
     my %result;
     for my $col (keys %$col_href) {
-        $result{$col} = $col_href->{$col}{type_name};
+        $result{$col} = $col_href->{$col}{'Type'};
     }
 
     return \%result;
