@@ -1730,19 +1730,11 @@ sub prepare_update_hash {
     my (%start, %end);
 
     if ($table eq 'COMMON') {
-        my %col_date;
-        @col_date{JSA::DB::TableCOMMON::date_columns()} = ();
-
         my %range = JSA::DB::TableCOMMON::range_columns();
         @start{keys %range} = ();
         @end{values %range} = ();
 
-        $sql = 'select ' . join ', ', map {
-            ! exists $col_date{$_}
-                ? $_
-                : "CONVERT( VARCHAR, $_, 23 ) AS $_"
-            }
-            JSA::DB::TableCOMMON::column_names();
+        $sql = 'select ' . join ', ', JSA::DB::TableCOMMON::column_names();
     }
 
     $sql .= " from $table where "
