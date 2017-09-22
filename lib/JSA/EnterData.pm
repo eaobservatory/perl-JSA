@@ -40,7 +40,6 @@ data even if run after 2pm).
 
 use strict;
 use warnings;
-use FindBin;
 
 use Data::Dumper;
 use File::Temp;
