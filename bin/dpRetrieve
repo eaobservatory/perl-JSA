@@ -60,7 +60,7 @@ use File::Spec;
 # Work out where we are so that we can run from a build directory
 # and still find the JSA classes
 use FindBin;
-use lib $FindBin::RealBin."/lib";
+use lib $FindBin::RealBin."/../lib";
 
 # Options
 my ($help, $man, $version, $inputs, $debug, $outdir );
