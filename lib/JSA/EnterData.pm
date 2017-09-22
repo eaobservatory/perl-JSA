@@ -1599,17 +1599,9 @@ sub _fill_in_sql {
 }
 
 {
-    my (%types, %val_format, $num_re);
+    my $num_re = qr/\b ( decimal | boolean | float | real | (?:tiny|big)? int | bit )/xi;
 
-    sub _init_num_regex {
-      $num_re = qr/\b ( decimal | boolean | float | real | (?:tiny|big)? int | bit )/xi
-          unless $num_re;
-
-      return;
-    }
-
-    sub _init_val_format {
-        %val_format = (
+    my %val_format = (
             'int'       => '%d',
             'tinyint'   => '%d',
             'bigint'    => '%d',
@@ -1622,22 +1614,16 @@ sub _fill_in_sql {
             undef       => '%s',
             'char'      => '%s',
             'varchar'   => '%s',
-          )
-
-          unless scalar keys %val_format;
-
-        return;
-    }
+          );
 
     sub _get_format {
         my ($type) = @_;
 
-        _init_num_regex();
-        _init_val_format();
-
         no warnings 'uninitialized';
         return $val_format{($type =~ $num_re)[0]};
     }
+
+    my %types;
 
     sub _get_types {
         my ($self, $dbh, $table) = @_;
@@ -1684,7 +1670,6 @@ sub _fill_in_sql {
 
       # Handle number type values (for consumption in Sybase ASE 15.0) outside of
       # &DBI::quote as it puts quotes around such values.
-      _init_num_regex();
 
       my @val;
 
