@@ -281,8 +281,9 @@ sub convert_dr_files {
         elsif( looks_like_drthumb($file) && want_to_send_to_cadc($mode, filename => $file)) {
             print "Converting file $file\n" if $DEBUG;
 
-            my $outfile = rename_png($file, {
+            my ($outfile, $asn_id) = rename_png($file, {
                 mode => $mode,
+                version => (($mode eq 'public') ? $version : undef),
                 dry_run => $dry_run,
             });
 
@@ -291,7 +292,7 @@ sub convert_dr_files {
                 next;
             }
 
-            write_dpinfo_png($outfile, $dpdate, $dpid);
+            write_dpinfo_png($outfile, $dpdate, $dpid, asn_id => $asn_id);
             push @pngs, $outfile;
 
         }
@@ -350,25 +351,17 @@ sub list_convert_plan {
 =item B<rename_png>
 
 Rename a PNG as created by ORAC-DR to the filename convention for CADC
-ingest. Returns the name of the copied PNG.
+ingest. Returns the name of the copied PNG and ASN_ID, if any.
 
-   $pngout = rename_png($pngin, \%options);
+   ($pngout, $asn_id) = rename_png($pngin, \%options);
 
 Where the options hash can include:
 
    - mode: Processing mode ("obs", "night", "project", "public").
 
-The JSA naming convention for preview images is
-
-   jcmt_<asn_id>_<product_id>_preview_SIZE.png
-
-where <asn_id> is the observation identifier in frame products
-and is the association identifier for group products. The
-product ID is a combination of the product type and
-subsystem number.
-
 Note that the ASN_ID value stored in the header is the
-base value and should be modified depending on the
+base value so this function also returns
+a value modified depending on the
 processing mode (night, project, public). See
 C<JSA::Headers::CADC::correct_asn_id> for more
 information.
@@ -383,6 +376,7 @@ sub rename_png {
     my $opts = shift;
 
     my $mode = $opts->{'mode'};
+    my $version = $opts->{'version'};
 
     # Sanity check
     JSA::Error::BadArgs->throw("Supplied PNG: '$infile' does not exist")
@@ -412,10 +406,7 @@ sub rename_png {
 
     if (defined($assoc)) {
         # Use the association ID unless obs
-        if ($assoc =~ /^obs/i) {
-            $asn_id = $keywords{"jsa:obsid"};
-        }
-        else {
+        if ($assoc !~ /^obs/i) {
             # Convert the ASN_ID to unique form
             # First need to convert jsa: headers to a hash
             # like a FITS header
@@ -430,23 +421,13 @@ sub rename_png {
             $asn_id = correct_asn_id($assoc, \%hdr);
         }
     }
-    else {
-        # Assume OBS product
-        $asn_id = $keywords{"jsa:obsid"};
-    }
 
-    my $productID = $keywords{'jsa:productID'};
-
-    JSA::Error::BadFITSHeader->throw("jsa:productID header is missing from PNG file $infile")
-        unless defined $productID;
-
-    my $size = $exif->GetValue("ImageHeight");
-
-    $outfile = _cadc_preview_file_name($asn_id, $productID, $size, $suffix);
+    $outfile = drfilename_to_cadc(
+        $infile, ASN_TYPE => $assoc, VERSION => $version);
 
     copy($infile, $outfile) unless $opts->{'dry_run'};
 
-    return $outfile;
+    return ($outfile, $asn_id);
 
 }
 
@@ -455,9 +436,13 @@ sub rename_png {
 Write data processing information to the PNG EXIF
 header.
 
-    write_dpinfo_png($png, $dpdate, $dpid);
+    write_dpinfo_png($png, $dpdate, $dpid, %opt);
 
-No action if the data processing date or ID are undef.
+Extra options:
+
+    asn_id - new value for jsa:asn_id keyword
+
+No action if the data processing date and ID and asn_id are undef.
 
 =cut
 
@@ -465,7 +450,10 @@ sub write_dpinfo_png {
     my $png = shift;
     my $dpdate = shift;
     my $dpid = shift;
-    return if (!defined $dpdate && !defined $dpid);
+    my %opt = @_;
+
+    my $asn_id = $opt{'asn_id'};
+    return if (!defined $dpdate && !defined $dpid && !defined $asn_id);
 
     my $exif = Image::ExifTool->new();
 
@@ -473,8 +461,13 @@ sub write_dpinfo_png {
     $exif->ExtractInfo($png);
     my @keywords = $exif->GetValue('Keywords');
 
+    $exif->SetNewValue(Keywords => 'jsa:asn_id=' . $asn_id)
+        if defined $asn_id;
+
     # and write it out
     foreach my $k (@keywords) {
+        next if $k =~ /^jsa:asn_id/ and defined $asn_id;
+
         $exif->SetNewValue(Keywords => $k);
     }
 
@@ -584,25 +577,6 @@ sub fits2ndf {
     run_star_command(@args);
     return 1;
 }
-
-=item B<_cadc_preview_file_name>
-
-Create CAOM-2 style preview file name.
-
-    my $outfile = _cadc_preview_file_name($obs_id, $prod_id, $size, '.png');
-
-=cut
-
-sub _cadc_preview_file_name {
-    my ($obs_id, $product_id, $size, $suffix) = @_;
-
-    # CADC requested during the teleconference of 2014/05/13 that all file names
-    # be lower case.
-    return lc(
-        join('_', 'jcmt', $obs_id, $product_id, 'preview', $size)
-        . $suffix);
-}
-
 
 =item B<_prov_check_file>
 

@@ -524,9 +524,6 @@ sub looks_like_cadcfile {
   elsif ($filename =~ /^jcmts\d{8}_\d{5}_(lon|sho|p20|p13|p11|mix)_\w+_[a-z]{3}_\d{3}(_\d{2,4})?\.(fits|png)/) {
       return 1; # SCUBA
   }
-  elsif ($filename =~ /^jcmt_.*_preview_\d+\.png$/) {
-      return 1; # CAOM-2 style preview filename: <collection>_<observationID>_<productID>_preview_(64|256|1024)
-  }
   elsif ($filename =~/^jcmts[48]50um_[-a-z]+\d{6}_pub_\d{3}\.fits$/) {
       return 1; # SCUBA-2 co-added JSA tile
   }
