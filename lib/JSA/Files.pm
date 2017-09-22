@@ -515,13 +515,13 @@ sub looks_like_cadcfile {
   $filename = _strip_path($filename);
 
   # These pattern matches are not bulletproof
-  if ($filename =~ /^jcmth\d{8}_\d{5}_\d{2}_\w+_[a-z]{3}_\d{3}(_\d{2,4})?\.(fits|png)/) {
+  if ($filename =~ /^jcmth\d{8}_\d{5}_\d{2}_\w+_[a-z]{3}_\d{3}(_preview_\d{2,4})?\.(fits|png)/) {
       return 1; # Heterodyne
   }
-  elsif ($filename =~ /^jcmts\d{8}_\d{5}_\d{3}_\w+_[a-z]{3}_\d{3}(_\d{2,4})?\.(fits|png)/) {
+  elsif ($filename =~ /^jcmts\d{8}_\d{5}_\d{3}_\w+_[a-z]{3}_\d{3}(_preview_\d{2,4})?\.(fits|png)/) {
       return 1; # SCUBA-2
   }
-  elsif ($filename =~ /^jcmts\d{8}_\d{5}_(lon|sho|p20|p13|p11|mix)_\w+_[a-z]{3}_\d{3}(_\d{2,4})?\.(fits|png)/) {
+  elsif ($filename =~ /^jcmts\d{8}_\d{5}_(lon|sho|p20|p13|p11|mix)_\w+_[a-z]{3}_\d{3}(_preview_\d{2,4})?\.(fits|png)/) {
       return 1; # SCUBA
   }
   elsif ($filename =~/^jcmts[48]50um_[-a-z]+\d{6}_pub_\d{3}\.fits$/) {
@@ -851,7 +851,7 @@ sub drfilename_to_cadc {
         $subsys_format = '%s';
     }
 
-    my $res_format = (defined( $resolution ) ? '_%d' : "");
+    my $res_format = (defined( $resolution ) ? '_preview_%d' : "");
 
     # Now form the new filename
     my $new;
