@@ -314,14 +314,6 @@ sub convert_dr_files {
 
     # And merge the PNGs we've created.
     my $reduced = merge_pngs(@pngs);
-
-    # If this is a "normal" reduction (obs / night mode) then try
-    # also to use these PNGs as the previews for raw data, etc.
-    if (grep {$mode eq $_} qw/obs night/) {
-        my %reduced = map {$_ => 1} @$reduced;
-        $reduced{$_} = 1 foreach grep {/_reduced-/} @pngs;
-        _create_raw_previews(keys %reduced);
-    }
 }
 
 =item B<list_convert_plan>
@@ -748,73 +740,6 @@ sub _prov_convert_filename {
         }
 
         return $newpath;
-    }
-}
-
-=item B<_create_raw_previews>
-
-Copy obs previews from the given list to make previews for the corresponding
-raw, etc. planes.
-
-    _create_raw_previews(@pngs);
-
-Code to extract the identifying information from the previews is based on that
-in the rename_png subroutine.  However creating the raw previews has to be
-done separately because it should be done after the PNGs have been merged.
-
-=cut
-
-sub _create_raw_previews {
-    foreach my $infile (@_) {
-        # Quick sanity-check.
-        next unless -e $infile
-                and $infile =~ /^jcmt_/
-                and $infile =~ /\.png/;
-
-        # Read the image's EXIF data again.
-        my $exif = new Image::ExifTool();
-        $exif->ExtractInfo($infile);
-        my $size = $exif->GetValue('ImageHeight');
-        my %keywords = map {split '=', $_, 2} $exif->GetValue('Keywords');
-
-        my $assoc = $keywords{'jsa:asn_type'};
-        my $obs_id = $keywords{'jsa:obsid'};
-        my $prod_id = $keywords{'jsa:productID'};
-
-        # We only want to copy the preview image if it's an "obs" product,
-        # and we also need to know the Observation ID and Product ID.
-        next unless $assoc eq 'obs'
-                and defined $obs_id
-                and defined $prod_id;
-
-        # Check that this is the "reduced" product (which may also have
-        # inherited a product ID like "rsp").
-        my ($prod_name, $prod_id_suffix) = split '-', $prod_id, 2;
-        next unless grep {$prod_name eq $_} qw/reduced rsp rimg/;
-
-        my $instrume = $keywords{'jsa:instrume'};
-        my $backend = $keywords{'jsa:backend'};
-        my @copies = ();
-
-        if ($instrume eq 'SCUBA-2') {
-            # Copy the preview as the preview for the "raw" plane.
-            push @copies, _cadc_preview_file_name(
-                $obs_id, 'raw-' . $prod_id_suffix, $size, '.png');
-        }
-        elsif ($backend eq 'ACSIS' or $backend eq 'DAS') {
-            # Raw product name depends on whether it's a hybrid observation
-            # or not.
-            my $is_hybrid = exists $keywords{'jsa:isHybrid'}
-                         && defined $keywords{'jsa:isHybrid'}
-                         && $keywords{'jsa:isHybrid'} eq 'true';
-
-            push @copies, _cadc_preview_file_name(
-                $obs_id,
-                join('-', 'raw', ($is_hybrid ? 'hybrid' : ()), $prod_id_suffix),
-                $size, '.png');
-        }
-
-        copy($infile, $_) foreach @copies;
     }
 }
 
