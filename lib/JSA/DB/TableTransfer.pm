@@ -344,44 +344,6 @@ sub get_files_not_end_state {
     return $out;
 }
 
-=item B<mark_transferred_as_deleted>
-
-I<Marks> given list of files as I<deleted> which have been already marked as
-being transferred.
-
-    $xfer->mark_transferred_as_deleted([@file]);
-
-=cut
-
-sub mark_transferred_as_deleted {
-    my ($self, $files) = @_;
-
-    my $sql = sprintf
-        "UPDATE %s SET status = '%s' WHERE status = ? AND file_id IN (%s)",
-        $_state_table,
-        $_state{'deleted'},
-        join ', ', ('?') x scalar @{$files};
-
-    # Use the same $dbh during a transaction.
-    my $dbh = $self->_dbhandle();
-
-    my $log = Log::Log4perl->get_logger('');
-    $log->info('Before marking files as deleted');
-
-    $dbh->begin_work if $self->_use_trans();
-
-    my @file = sort @{$files};
-    my @alt  = map {_fix_file_name($_)} @file;
-
-    $log->debug(join("  \n", @alt));
-
-    my $affected = $self->_run_change_sql($sql, $_state{'transferred'}, @file);
-
-    $dbh->commit if $self->_use_trans();
-
-    return $affected;
-}
-
 =item B<name>
 
 Returns the name of the table in which to collect, change states for
@@ -531,35 +493,6 @@ sub _check_filename_part {
   }
 }
 
-sub _run_select_sql {
-    my ($self, $dbh, %bind) = @_;
-
-    my ($file, $state) = @bind{qw/file state/};
-
-    my $sql = "SELECT file_id from $_state_table";
-
-    if (any {$_} ($file, $state)) {
-        (my $state_col, undef) = _alt_state($state);
-
-        my @where;
-        push @where, ' file_id like ?' if $file;
-        push @where, " $state_col = ?" if defined $state;
-
-        $sql .= ' WHERE ' . join ' AND ', @where;
-    }
-
-    $sql .= ' ORDER BY file_id';
-
-    my $out = $dbh->selectall_arrayref($sql, undef, $file, $state)
-        or throw JSA::Error::DBError $dbh->errstr;
-
-    return unless $out && scalar @{$out};
-
-    require JSA::DB;
-    return JSA::DB->_simplify_arrayref($out);
-}
-
-
 =item B<put_state>
 
     $xfer->put_state(state => $state, files => [...], comment => '...');
@@ -585,18 +518,6 @@ sub put_state {
         'columns'       => ['file_id', $state_col, 'comment'],
         'values'        => [map {[$_, $state, $args{'comment'}]} @alt],
         'dbhandle'      => $self->_dbhandle());
-}
-
-sub _run_change_sql {
-    my ($self, $sql, @bind) = @_;
-
-    my $dbh = $self->_dbhandle();
-
-    return $dbh->do($sql, undef, @bind)
-        or do {
-            $dbh->rollback if $self->_use_trans();
-            throw JSA::Error::DBError $dbh->errstr;
-        };
 }
 
 sub _check_hashref {
