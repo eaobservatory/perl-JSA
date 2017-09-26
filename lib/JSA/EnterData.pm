@@ -1376,8 +1376,7 @@ sub insert_hash {
 
     my ($table, $dbh, $insert) = @args{qw/table dbhandle insert/};
 
-    return $self->conditional_insert_hash(%args)
-        if $self->conditional_insert;
+    my $conditional = $self->conditional_insert;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1387,302 +1386,97 @@ sub insert_hash {
 
     my @insert_hashes = @{$insert};
 
-    my @fields = sort keys %{$insert_hashes[0]}; # sort required
+    my (@prim_key);
+    do {
+        my $prim_key = _get_primary_key($table);
+        @prim_key = ref $prim_key ? @{$prim_key} : $prim_key;
+    };
+    $log->logdie('Primary key not defined for table: ', $table)
+        unless scalar @prim_key;
 
     my ($sql, $sth);
 
-    $sql = sprintf "INSERT INTO %s (%s) VALUES (%s)",
-                   $table,
-                   join("\n, ", @fields),
-                   join("\n, ", ('?') x scalar @fields);
+    # Conditional insert mode: for now pre-filter the list of hashes to
+    # be inserted.  Could probably replace this for MySQL with a
+    # INSERT ... ON DUPLICATE KEY statement at some point.
+    if ($conditional) {
+        my @insert_hashes_filtered = ();
 
-    if (! $self->debug && $self->load_header_db) {
+        $sql = sprintf
+            'SELECT COUNT(*) FROM %s WHERE %s ',
+            $table,
+            join(' AND ', map {" $_ = ? "} @prim_key);
+
+        unless ($self->debug or not $self->load_header_db) {
+            $sth = $dbh->prepare($sql)
+                or $log->logdie(
+                    "Could not prepare SQL statement for insert check\n",
+                    $dbh->errstr);
+        }
+
+        for my $row (@insert_hashes) {
+            my @prim_val = map {$row->{$_}} @prim_key;
+
+            $log->trace('-----> SQL: ' . $sql);
+            $log->trace(Dumper(\@prim_val));
+
+            next if ($self->debug or not $self->load_header_db);
+
+            $sth->execute(@prim_val)
+                or $log->logdie('SQL query for insert check failed: ', $dbh->errstr);
+
+            my $result = $sth->fetchall_arrayref();
+
+            $log->logdie('SQL query for insert check did not return 1 row')
+                unless 1 == scalar @$result;
+
+            # If there was no match (i.e. COUNT(*) = 0) then include this in
+            # the filtered list of hashes.
+            push @insert_hashes_filtered, $row unless $result->[0][0];
+        }
+
+        @insert_hashes = @insert_hashes_filtered;
+    }
+
+    my @fields = sort keys %{$insert_hashes[0]}; # sort required
+
+    $sql = sprintf
+        "INSERT INTO %s (%s) VALUES (%s)",
+        $table,
+        join(', ', @fields),
+        join(', ', ('?') x scalar @fields);
+
+    unless ($self->debug or not $self->load_header_db) {
         $sth = $dbh->prepare($sql)
-            or $log->logdie("Could not prepare sql statement for insert\n", $dbh->errstr, "\n");
+            or $log->logdie(
+                "Could not prepare SQL statement for insert\n",
+                $dbh->errstr);
     }
 
-    my (@prim_key);
-    if (any {$table eq $_} 'FILES') {
-        my $prim_key = _get_primary_key($table);
-        @prim_key = ref $prim_key ? @{$prim_key} : $prim_key ;
-    }
-
-    my @file;
+    my ($sum, @file);
     # and insert all the rows
     for my $row (@insert_hashes) {
         my @values = @{$row}{@fields}; # hash slice
 
-        if ($self->debug) {
-            $self->_show_insert_sql($table, \@fields, \@values);
-            next;
-        }
+        $log->trace('-----> SQL: ' . $sql);
+        $log->trace(Dumper(\@values));
 
-        next unless $self->load_header_db;
+        next if ($self->debug or not $self->load_header_db);
 
-        my $status = $sth->execute(@values);
+        my $affected = $sth->execute(@values);
 
-        if ($table eq 'FILES' && defined $status && $status > 0
+        if ($table eq 'FILES' && defined $affected && $affected > 0
                 && ! $self->skip_state_setting()) {
             push @file, $row->{'file_id'};
         }
 
-       return ($status, scalar @file ? [@file] : ())
-           if !$status;
-    }
-
-    return (undef, scalar @file ? [@file] : ());
-}
-
-=item B<conditional_insert_hash>
-
-Given a table name, a DBI database handle and a hash reference, insert
-the hash contents into the table.  Basically a named insert.  Returns
-a list or number of rows affected.
-
-    $status = $enter->conditional_insert_hash('table' => $table,
-                                              'dbhandle' => $dbh,
-                                              'insert' => \%to_insert);
-
-=cut
-
-sub conditional_insert_hash {
-    #my ($self, $table, $dbh, $insert) = @_;
-    my ($self, %args) = @_;
-
-    my ($table, $dbh, $insert) =
-      @args{qw/table dbhandle insert/};
-
-    return $self->insert_hash(%args)
-        unless $self->conditional_insert;
-
-    # Get the fields in sorted order (so that we can match with values)
-    # and create a template SQL statement. This can be done with the
-    # first hash from @insert_hashes
-
-    my @insert_hashes = @{$insert};
-
-    my @fields = sort keys %{$insert_hashes[0]}; # sort required
-
-    my $prim_key = _get_primary_key($table);
-
-    # &DBI::prepare is not used for this SQL string as place holders do not work
-    # after SELECT clause, need to place the values directly.  See
-    # _make_insert_select_sql() && _fill_in_sql() methods.
-    my $sql = $self->_make_insert_select_sql('dbhandle' => $dbh,
-                                             'table'    => $table,
-                                             'primary'  => $prim_key,
-                                             'columns'  => \@fields);
-
-    my ($err, @prim_key, @affected);
-    @prim_key = ref $prim_key ? @{$prim_key} : ($prim_key);
-
-    my ($sum, @file);
-    foreach my $row (@insert_hashes) {
-        my @values = @{$row}{@fields};
-
-        if ($self->debug) {
-            $self->_show_insert_sql($table, \@fields, \@values);
-            next;
-        }
-
-        last unless $self->load_header_db;
-
-        my $format = join ' , ',
-            $self->_get_cols_format('dbhandle' => $dbh,
-                                     'table'   => $table,
-                                     'columns' => \@fields,
-                                     'values'  => \@values);
-
-        my $tmp = sprintf $sql, $format;
-
-        my $filled = sprintf $tmp,
-            $self->_quote_vals('dbhandle' => $dbh,
-                               'table'   => $table,
-                               'columns' => \@fields,
-                               'values'  => \@values);
-
-        my @prim_val = map {$row->{$_}} @prim_key;
-
-        my $affected = $dbh->do($filled,
-                                $prim_key ? (undef, @prim_val) : ());
-
-        if ($table eq 'FILES' && $affected && $affected > 0
-                && ! $self->skip_state_setting()) {
-            push @file, $row->{'file_id'};
-        }
-
-        return ($sum, scalar @file ? [@file] : ()) unless $affected;
+       return ($sum, scalar @file ? [@file] : ())
+           unless $affected;
 
         $sum += $affected;
     }
 
     return ($sum, scalar @file ? [@file] : ());
-}
-
-=item B<_make_insert_select_sql>
-
-Returns a SQL INSERT query string (to be first processed by
-C<sprintf>, see I<_fill_in_sql>), given a hash of ...
-
-    table - table name,
-    columns - array reference of ordered column names, and
-    primary - primary key name.
-
-Purpose of the generated INSERT query string is to avoid adding
-duplicate row by checking if the primary key already does not exist.
-
-    $string = $self->_make_insert_select_sql('table' => $table_name,
-                                             'columns' => [ @column_names ],
-                                             'primary' => $key);
-
-The string returned has a DBI placeholder only for primary key value.
-(In DBD::Sybase, possibly within Sybase ASE 15 itself, placeholders
-are not allowed after "SELECT" clause.) Something like ...
-
-    INSERT INTO <table>
-      SELECT %s, %s, ...
-      WHERE NOT EXISTS
-        (SELECT 1 FROM <table> WHERE <primary key> = ?)
-
-=cut
-
-sub _make_insert_select_sql {
-    my ($self, %args) = @_;
-
-    my ($dbh, $table, $cols, $primary) =
-        @args{qw/dbhandle table columns primary/};
-
-    throw JSA::Error::BadArgs "No primary keys given."
-        unless defined $primary;
-
-    my @primary = ref $primary ? @{$primary} : ($primary);
-
-    my $where = '';
-
-    foreach my $k (@primary) {
-      $where .= ($where ? ' AND ' : ' ') . " $k = ? ";
-    }
-
-    return sprintf ' INSERT INTO %s (%s) SELECT %%s '
-                   . ' WHERE NOT EXISTS ( SELECT 1 FROM %s WHERE %s ) ',
-                   $table,
-                   join(' , ', @{$cols}),
-                   $table,
-                   $where;
-}
-
-=item B<_fill_in_sql>
-
-Returns a given format string substituted with given row values (as an
-array reference), in addition to a valid database handle, table name,
-and column names (as an array reference) in a hash.
-
-    $filled = $self->_fill_in_sql('sql' => $sql_string,
-                                  'dbhandle' => $dbh,
-                                  'table' => $table,
-                                  'columns' => [@column_name]
-                                  'values' => [@value]);
-
-This is a workaround for lack of support of place holders in subquery
-(for the values to be SELECT'd; see definition of
-I<_make_insert_select_sql> method).
-
-=cut
-
-sub _fill_in_sql {
-    my ($self, %args) = @_;
-
-    return sprintf $args{'sql'}, $self->_quote_vals(%args);
-}
-
-{
-    my $num_re = qr/\b ( decimal | boolean | float | real | (?:tiny|big)? int | bit )/xi;
-
-    my %val_format = (
-            'int'       => '%d',
-            'tinyint'   => '%d',
-            'bigint'    => '%d',
-            'bit'       => '%d',
-            'boolean'   => '%d',
-            'decimal'   => '%0.16f',
-            'float'     => '%0.16f',
-            'real'      => '%0.16f',
-            ''          => '%s',
-            undef       => '%s',
-            'char'      => '%s',
-            'varchar'   => '%s',
-          );
-
-    sub _get_format {
-        my ($type) = @_;
-
-        no warnings 'uninitialized';
-        return $val_format{($type =~ $num_re)[0]};
-    }
-
-    my %types;
-
-    sub _get_types {
-        my ($self, $dbh, $table) = @_;
-
-        return $types{$table}
-            if $types{$table};
-
-        return $types{$table} = $self->get_columns($table, $dbh);
-    }
-
-    sub _get_cols_format {
-        my ($self, %args) = @_;
-
-        my ($dbh, $table, $cols, $vals) =
-            @args{qw/dbhandle table columns values/};
-
-        my $size = scalar @{$cols};
-
-        my $types = $self->_get_types($dbh, $table);
-
-        my @format;
-        for (my $i = 0; $i < $size; $i++) {
-            push @format, _get_format($types->{$cols->[$i]});
-
-            if ($vals && '%s' ne $format[$i]) {
-                my $v = $vals->[ $i ];
-
-                $format[ $i ] = '%s'
-                    if ! defined $v
-                    || ($v && $v =~ /\bNULL\b/i);
-            }
-        }
-
-        return @format;
-    }
-
-    sub _quote_vals {
-      my ($self, %args) = @_;
-
-      my ($dbh, $table, $values) = @args{qw/dbhandle table values/};
-      my $size = scalar @{$values};
-
-      my $types = $self->_get_types($dbh, $table);
-
-      # Handle number type values (for consumption in Sybase ASE 15.0) outside of
-      # &DBI::quote as it puts quotes around such values.
-
-      my @val;
-
-      for (my $i = 0; $i < $size; $i++) {
-          my $val = $values->[$i];
-          my $type = $types->{$args{'columns'}->[$i]};
-
-          push @val, ! defined $val
-                        ? 'NULL'
-                        : $type =~ /$num_re/
-                            ? $val
-                            : $dbh->quote($val, $type);
-      }
-
-      return @val;
-    }
 }
 
 sub prepare_update_hash {
@@ -2719,42 +2513,6 @@ sub _change_FILES {
         $xfer->put_state(
             state => 'ingested', files => [map _basename($_), @{$files}]);
     }
-
-    return;
-}
-
-=item B<_show_insert_sql>
-
-Prints insert SQL statement, given table name, column names, and
-column values.
-
-    $enter->_show_insert_sql('FILES', \@names, \@values);
-
-=cut
-
-sub _show_insert_sql {
-    my ($self, $table, $fields, $values) = @_;
-
-    my $log = Log::Log4perl->get_logger('');
-
-    my @val = @{$values};
-
-    # print out some SQL that is not going to be executed
-    foreach (@val) {
-        unless (defined $_) {
-            $_ = 'NULL';
-        }
-        else {
-            $_ = "\'$_\'"
-                if /([a-zA-Z]|\s+)/ and $_ !~ /e\+/;
-        }
-    }
-
-    $log->trace(sprintf
-        "-----> SQL: INSERT INTO %s (%s) VALUES (%s)\n",
-        $table,
-        join(', ', @{$fields}),
-        join(', ', @val));
 
     return;
 }
