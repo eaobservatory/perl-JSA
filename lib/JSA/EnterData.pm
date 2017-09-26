@@ -1363,10 +1363,6 @@ Given a table name, a DBI database handle and a hash reference, insert
 the hash contents into the table.  Basically a named insert.  Returns
 the executed statement output.  (Copied from example in L<DBI>.)
 
-If any of the values in C<%to_insert> are array references multiple
-rows will be inserted corresponding to the content.  If more than one
-row has an array reference the size of those arrays must be identical.
-
 In case of error, returns the value as returned by C<DBI->execute>.
 
     $status = $enter->insert_hash('table'     => $table,
@@ -1442,10 +1438,6 @@ sub insert_hash {
 Given a table name, a DBI database handle and a hash reference, insert
 the hash contents into the table.  Basically a named insert.  Returns
 a list or number of rows affected.
-
-If any of the values in C<%to_insert> are array references multiple
-rows will be inserted corresponding to the content.  If more than one
-row has an array reference the size of those arrays must be identical.
 
     $status = $enter->conditional_insert_hash('table' => $table,
                                               'dbhandle' => $dbh,
