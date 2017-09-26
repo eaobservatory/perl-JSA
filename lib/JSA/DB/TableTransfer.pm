@@ -12,14 +12,16 @@ Make an object ...
 
     $xfer = new JSA::DB::TableTransfer('dbhandle' => $dbh);
 
-Set copied state for a file ...
+Set copied state for some files ...
 
-    $xfer->set_copied(['a20100612_00005_01_0001.sdf',
-                       'a20100612_00006_01_0001.sdf']);
+    $xfer->put_state(
+        state => 'copied',
+        files => ['a20100612_00005_01_0001.sdf',
+                  'a20100612_00006_01_0001.sdf']);
 
 Find copied files ...
 
-    $xfer->get_copied_files(20100612);
+    $xfer->get_files(state => 'copied', date => 20100612);
 
 =head1 DESCRIPTION
 
@@ -105,252 +107,39 @@ sub new {
     return $obj;
 }
 
-BEGIN {
-    our %_state = (
-        #  File found on JAC disk (table has full path).
-        'found' => 'f',
+our %_state = (
+    #  File found on JAC disk (table has full path).
+    'found' => 'f',
 
-        #  Error causing file.
-        'error' => 'e',
+    #  Error causing file.
+    'error' => 'e',
 
-        # File is a deletion candidate.
-        'delete' => 'd',
+    # File is a deletion candidate.
+    'delete' => 'd',
 
-        # File has been deleted.
-        'deleted' => 'D',
+    # File has been deleted.
+    'deleted' => 'D',
 
-        'ignored' => 'x',
+    'ignored' => 'x',
 
-        'simulation' => 's',
+    'simulation' => 's',
 
-        #  File has been locally ingested.
-        'ingested' => 'i',
+    #  File has been locally ingested.
+    'ingested' => 'i',
 
-        #  File has been put in CADC transfer directory.
-        'copied' => 'c',
+    #  File has been put in CADC transfer directory.
+    'copied' => 'c',
 
-        #  File has been put in intermediate directory.
-        'copied_pre_cadc' => 'p',
+    #  File has been put in intermediate directory.
+    'copied_pre_cadc' => 'p',
 
-        #  File present in CADC directory.
-        'transferred' => 't',
+    #  File present in CADC directory.
+    'transferred' => 't',
 
-        'final' => 'z',
-    );
+    'final' => 'z',
+);
 
-=item B<get_copied_pre_cadc_files>
-
-Return a array reference of files with C<copied_pre_cadc> state, given a partial
-file name.
-
-    $files = $xfer->get_copied_pre_cadc_files(20100612);
-
-=item B<add_copied_pre_cadc>
-
-Add state of C<copied_pre_cadc> of given array reference of files (base names).
-
-    $xfer->add_copied_pre_cadc([@files]);
-
-=item B<set_copied_pre_cadc>
-
-Set state to C<copied_pre_cadc> of given array reference of files (base names).
-
-    $xfer->set_copied_pre_cadc([@files]);
-
-=item B<get_copied_files>
-
-Return a array reference of files with C<copied> state, given a partial file
-name.
-
-    $files = $xfer->get_copied_files(20100612);
-
-=item B<add_copied>
-
-Add state of C<copied> of given array reference of files (base names).
-
-    $xfer->add_copied([@files]);
-
-=item B<set_copied>
-
-Set state to C<copied> of given array reference of files (base names).
-
-    $xfer->set_copied([@files]);
-
-=item B<get_error_files>
-
-Return a array reference of files with C<error> state, given a partial file
-name.
-
-    $files = $xfer->get_error_files(20100612);
-
-=item B<add_error>
-
-Add state of C<error> of given array reference of files (base names).
-
-    $xfer->add_error([@files]);
-
-=item B<set_error>
-
-Set state to C<error> of given array reference of files (base names).
-
-    $xfer->set_error([@files]);
-
-=item B<get_final_files>
-
-Return a array reference of files with C<final> state, given a partial file
-name.
-
-    $files = $xfer->get_final_files(20100612);
-
-=item B<add_final>
-
-Add state of C<final> of given array reference of files (base names).
-
-    $xfer->add_final([@files]);
-
-=item B<set_final>
-
-Set state to C<final> of given array reference of files (base names).
-
-    $xfer->set_final([@files]);
-
-=item B<get_ignored_files>
-
-Return a array reference of files with C<ignored> state, given a partial file
-name.
-
-    $files = $xfer->get_ignored_files(20100612);
-
-=item B<add_ignored>
-
-Add state of C<ignored> of given array reference of files (base names).
-
-    $xfer->add_ignored([@files]);
-
-=item B<set_ignored>
-
-Set state to C<ignored> of given array reference of files (base names).
-
-    $xfer->set_ignored([@files]);
-
-=item B<get_ingested_files>
-
-Return a array reference of files with C<ingested> state, given a partial file
-name.
-
-    $files = $xfer->get_ingested_files(20100612);
-
-=item B<add_ingested>
-
-Add state of C<ingested> of given array reference of files (base names).
-
-    $xfer->add_ingested([@files]);
-
-=item B<set_ingested>
-
-Set state to C<ingested> of given array reference of files (base names).
-
-    $xfer->set_ingested([@files]);
-
-=item B<get_simulation_files>
-
-Return a array reference of files with C<simulation> state, given a partial file
-name.
-
-    $files = $xfer->get_simulation_files(20100612);
-
-=item B<add_simulation>
-
-Add state of C<simulation> of given array reference of files (base names).
-
-    $xfer->add_simulation([@files]);
-
-=item B<set_simulation>
-
-Set state to C<simulation> of given array reference of files (base names).
-
-    $xfer->set_simulation([@files]);
-
-=item B<get_transferred_files>
-
-Return a array reference of files with C<transferred> state, given a partial file
-name.
-
-    $files = $xfer->get_transferred_files(20100612);
-
-=item B<add_transferred>
-
-Add state of C<transferred> of given array reference of files (base names).
-
-    $xfer->add_transferred([@files]);
-
-=item B<set_transferred>
-
-Set state to C<transferred> of given array reference of files (base names).
-
-    $xfer->set_transferred([@files]);
-
-=cut
-
-    for my $key (sort keys %_state) {
-        my $set = "set_${key}";
-        my $add = "add_${key}";
-        my $put = "put_${key}";
-        my $get = "get_${key}_files";
-
-        next if $key eq 'found';
-
-        no strict 'refs';
-
-        *$get = sub {
-            my ($self, %filter) = @_;
-
-            return $self->_get_files(%filter, 'state' => $key);
-        };
-
-        *$set = sub {
-            my ($self, $files, $text) = @_;
-
-            my %opt;
-            $opt{'comment'} = $text if 2 < scalar @_;
-
-            return $self->_change_add_state('mode'    => 'change',
-                                            'state'   => $key,
-                                            'file'    => $files,
-                                            %opt);
-        };
-
-        *$add = sub {
-            my ( $self, $files, $text ) = @_;
-
-            my %opt;
-            $opt{'comment'} = $text if 2 < scalar @_;
-
-            return $self->_change_add_state('mode'    => 'add',
-                                            'state'   => $key,
-                                            'file'    => $files,
-                                            %opt);
-        };
-
-        *$put = sub {
-            my ($self, $files, $text) = @_;
-
-            my %opt;
-            $opt{'comment'} = $text if 2 < scalar @_;
-
-            return $self->_put_state('state'   => $key,
-                                     'file'    => $files,
-                                     %opt);
-        };
-    }
-}
-
-our %_state;
-
-my %_rev_state;
-while (my ($k, $v) = each %_state) {
-    push @{$_rev_state{$v}}, $k;
-}
+my %_rev_state = map {$_state{$_} => $_} keys %_state;
 
 =item B<get_found_files>
 
@@ -474,7 +263,7 @@ sub _process_paths {
 
 Returns a descriptive text given a state code.
 
-    $text = JSA::DB::TableTransfer('f');
+    $text = JSA::DB::TableTransfer::code_to_descr('f');
 
 =cut
 
@@ -485,11 +274,11 @@ sub code_to_descr {
     return $_rev_state{$code};
 }
 
-=item B<code_to_descr>
+=item B<descr_to_code>
 
-Returns a state code given kwown descriptive text.
+Returns a state code given known descriptive text.
 
-    $code = JSA::DB::TableTransfer('found');
+    $code = JSA::DB::TableTransfer::descr_to_code('found');
 
 =cut
 
@@ -638,7 +427,15 @@ sub _use_trans {
     return $self->{'transactions'};
 }
 
-sub _get_files {
+=item B<get_files>
+
+Return a array reference of files in the given state.
+
+    $files = $xfer->get_files(state => $state, %filter);
+
+=cut
+
+sub get_files {
     my ($self, %filter) = @_;
 
     my $log = Log::Log4perl->get_logger('');
@@ -763,19 +560,18 @@ sub _run_select_sql {
 }
 
 
-# This would be eventual replacement of _change_add_state() after references to
-# add*state() & set*state() have been updated.  This does not care if going to
-# INSERT or UPDATE (JSA::DB->update_or_insert() takes care of that).
-sub _put_state {
+=item B<put_state>
+
+    $xfer->put_state(state => $state, files => [...], comment => '...');
+
+=cut
+
+sub put_state {
     my ($self, %args) = @_;
 
-    my ($files, $state) = map {$args{$_}} qw/file state/;
+    my ($files, $state) = map {$args{$_}} qw/files state/;
 
-    eval {
-        _check_state( $state )
-    };
-
-    croak $@ if $@;
+    _check_state( $state );
 
     (my $state_col, $state) = _alt_state($_state{$state});
 
@@ -789,92 +585,6 @@ sub _put_state {
         'columns'       => ['file_id', $state_col, 'comment'],
         'values'        => [map {[$_, $state, $args{'comment'}]} @alt],
         'dbhandle'      => $self->_dbhandle());
-}
-
-sub _change_add_state {
-    my ($self, %args) = @_;
-
-    my ($mode, $files, $state) = map {$args{$_}} qw/mode file state/;
-
-    eval {
-        _check_state($state);
-    };
-
-    croak $@ if $@;
-
-    (my $state_col, $state) = _alt_state($_state{$state});
-
-    # Use the same $dbh during a transaction.
-    my $dbh = $self->_dbhandle();
-
-    $dbh->begin_work if $self->_use_trans();
-
-    my $run = 'add' eq $mode
-            ? sub {return $self->_insert(@_);}
-            : sub {return $self->_update(@_);};
-
-    my $log = Log::Log4perl->get_logger('');
-    $log->info(( 'add' eq $mode
-                    ? "Before adding"
-                    : "Before setting"),
-               " '${state}' state for files\n");
-    $log->debug('  ' . join "\n  ", map {$_} @{$files});
-
-    my @affected;
-    foreach my $file (sort @{$files}) {
-        my $alt = _fix_file_name($file);
-
-        #$log->debug("  ${alt}\n");
-
-        # Explicitly pass $dbh.
-        my $affected = $run->('file'        => $alt,
-                              'state'       => $state,
-                              'state-col'   => $state_col,
-                              'comment'     => $args{'text'});
-
-        push @affected, $affected if $affected;
-    }
-
-    $dbh->commit if $self->_use_trans();
-
-    my $sum = 0;
-    $sum += $_ foreach @affected;
-    return $sum;
-}
-
-sub _insert {
-    my ($self, %arg) = @_;
-
-    my $state_col = $arg{'state-col'} || 'status';
-
-    my $sql =
-        "INSERT INTO $_state_table (file_id, $state_col, comment) VALUES (? , ?  , ?)";
-
-    return $self->_run_change_sql($sql, map {$arg{$_}} qw/file state comment/);
-}
-
-sub _update {
-    my ($self, %arg) = @_;
-
-    my $state_col = $arg{'state-col'} || 'status';
-
-    my $sql =
-      "UPDATE $_state_table SET $state_col = ?, comment = ? WHERE file_id = ?";
-
-    my (@bind) = map {$arg{$_}} qw/state comment file/;
-
-    # Avoid resetting 't' multiple times when the transferred file list is same as
-    # the list generated by jcmtInfo, where state of some of the files would have
-    # been already been changed to transferred.
-    #
-    # As of Jul 16, 2010, other of the states is changed from one to the other, so
-    # same rows are not updated with the old information.
-    if ('t' eq $arg{'state'}) {
-        $sql = join ' AND ', $sql, 'status <> ?';
-        push @bind, $arg{'state'};
-    }
-
-    return $self->_run_change_sql($sql, @bind);
 }
 
 sub _run_change_sql {

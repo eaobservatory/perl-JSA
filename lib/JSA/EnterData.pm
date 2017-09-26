@@ -685,7 +685,8 @@ It is called by I<prepare_and_insert> method.
                 return if $self->skip_state_setting();
 
                 my $xfer  = $self->_get_xfer_unconnected_dbh();
-                $xfer->put_simulation($arg{'file-id'});
+                $xfer->put_state(
+                    state => 'simulation', files => $arg{'file-id'});
                 return;
             },
 
@@ -695,7 +696,9 @@ It is called by I<prepare_and_insert> method.
                 return if $self->skip_state_setting();
 
                 my $xfer  = $self->_get_xfer_unconnected_dbh();
-                $xfer->put_error($arg{'file-id'}, $arg{'comment'});
+                $xfer->put_state(
+                    state => 'error', files => $arg{'file-id'},
+                    comment => $arg{'comment'});
                 return;
             },
 
@@ -1040,16 +1043,17 @@ sub _get_obs_group {
         unless (-r $file && -s _) {
             my $ignored = 'Unreadable or empty file';
 
-            $self->skip_state_setting()
-                or $xfer->add_ignored([$base], $ignored);
+            $xfer->put_state(
+                    state => 'ignored', files => [$base], comment => $ignored)
+                unless $self->skip_state_setting();
 
             $log->warn("$ignored: $file; skipped.\n");
 
             next;
         }
 
-        $self->skip_state_setting()
-            or $xfer->add_found([$base], '');
+        $xfer->add_found([$base], '')
+            unless $self->skip_state_setting();
 
         my $text = '';
         my $err;
@@ -1073,8 +1077,9 @@ sub _get_obs_group {
         if ( $err ) {
             $text .=  ': ' . $err->text();
 
-            $self->skip_state_setting()
-                or $xfer->put_error([$base], $text);
+            $xfer->put_state(
+                    state => 'error', files => [$base], comment => $text)
+                unless $self->skip_state_setting();
 
             $log->error($text);
         }
@@ -2719,7 +2724,8 @@ sub _change_FILES {
 
     if (! $self->skip_state_setting() && $files && scalar @{$files}) {
         my $xfer = $self->_get_xfer_unconnected_dbh();
-        $xfer->put_ingested([map _basename($_), @{$files}]);
+        $xfer->put_state(
+            state => 'ingested', files => [map _basename($_), @{$files}]);
     }
 
     return;
