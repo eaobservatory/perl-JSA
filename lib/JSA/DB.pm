@@ -407,11 +407,6 @@ sub insert {
                       join(', ', @cols),
                       join(', ', ('?') x $size);
 
-    # Append the string if given, say something like
-    # 'WHERE NOT EXIST IN ( SELECT ... )'.
-    $sql .= ' ' . $arg{'_append'}
-        if $arg{'_append'};
-
     return $self->_run_change_loop('sql'    => $sql,
                                    'values' => $arg{'values'});
 }
