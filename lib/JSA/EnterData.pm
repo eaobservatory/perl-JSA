@@ -2516,7 +2516,7 @@ regular expressions ...
 sub skip_calc_radec {
     my ($self, %arg) = @_;
 
-    $self->acsis_calc_radec() or return;
+    $self->acsis_calc_radec() or return 1;
 
     my $skip = qr/\b skydips? \b/xi;
 
