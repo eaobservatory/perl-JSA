@@ -2113,32 +2113,6 @@ sub extract_column_headers {
     return \%values;
 }
 
-=item B<get_max_idkey>
-
-Given the COMMON table name and a database handle object, return the
-highest idkey/index in the COMMON table.
-
-    $idkey = $enter->get_max_idkey($common_table, $dbh);
-
-=cut
-
-sub get_max_idkey {
-    my ($self, $table, $dbh) = @_;
-
-    return 1 unless $self->load_header_db;
-
-    my $log = Log::Log4perl->get_logger('');
-
-    my $sth = $dbh->prepare_cached("select max(idkey) from $table");
-    $sth->execute
-        or $log->logdie("Could not obtain max idkey: ", $dbh->errstr, "\n");
-
-    my $result = $sth->fetchall_arrayref;
-    my $max = $result->[0]->[0];
-
-    return $max;
-}
-
 =item B<create_dictionary>
 
 Given the location of the data dictionary, return a hash containing
