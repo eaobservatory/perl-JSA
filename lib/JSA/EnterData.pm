@@ -1794,14 +1794,12 @@ sub transform_value {
 
     my $log = Log::Log4perl->get_logger('');
 
-    # Transform data hash.  Each data type name contains a hash mapping
+    # Transform boolean data hash.  Contains a hash mapping
     # values from the headers to the values the database expects.
-    my %transform_data = (
-                          bit => {T => 1,
-                                  F => 0,},
-                          int => {T => 1,
-                                  F => 0,},
-                         );
+    my %transform_bool = (
+        T => 1,
+        F => 0,
+    );
 
     foreach my $column (keys %$values) {
       # Store column's current value
@@ -1825,11 +1823,11 @@ sub transform_value {
                       $val, $column);
               }
           }
-          elsif (exists $transform_data{$data_type}) {
-              if (exists $transform_data{$data_type}{$val}) {
+          elsif ($data_type =~ /^tinyint/ or $data_type =~ /^int/) {
+              if (exists $transform_bool{$val}) {
                   # This value needs to be transformed to the new value
-                  # defined in the %transform_data hash
-                  $values->{$column} = $transform_data{$data_type}{$val};
+                  # defined in the %transform_bool hash
+                  $values->{$column} = $transform_bool{$val};
 
                   $log->trace(sprintf
                       "Transformed value [%s] to [%s] for column [%s]",
