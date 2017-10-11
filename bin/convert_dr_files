@@ -22,15 +22,15 @@ files will be considered.
 
 =over 4
 
-=item B<-debug>
+=item B<--verbose>
 
-Enable debug messages.
+Enable verbose debugging messages.
 
 =item B<-help>
 
 Print help information.
 
-=item B<-list>
+=item B<--dry-run>
 
 List what would and would not be converted without actually doing the conversion.
 
@@ -103,13 +103,13 @@ use JSA::Convert qw/convert_dr_files list_convert_plan/;
 use JSA::Files qw/scan_dir/;
 use JSA::Headers qw/read_headers/;
 
-my ($help, $show_version, $version, $man, $debug, $list, $mode);
+my ($help, $show_version, $version, $man, $verbose, $dry_run, $mode);
 my $status = GetOptions(
     "help" => \$help,
     "version" => \$show_version,
     "man" => \$man,
-    "list" => \$list,
-    "debug" => \$debug,
+    "dry-run" => \$dry_run,
+    "verbose" => \$verbose,
     "mode=s" => \$mode,
     'fileversion:i' => \$version,
 );
@@ -122,7 +122,7 @@ if ($show_version) {
     exit;
 }
 
-if ($debug) {
+if ($verbose) {
     $JSA::Convert::DEBUG = 1;
     $JSA::Files::DEBUG = 1;
     $JSA::Starlink::DEBUG = 1;
@@ -141,13 +141,13 @@ else {
     @files = sort keys %files;
 }
 
-print "Opening ".@files." file".(@files == 1 ? "" : "s")."\n" if $debug;
+print "Opening ".@files." file".(@files == 1 ? "" : "s")."\n" if $verbose;
 my %drhdrs = read_headers(@files);
-if ($debug) {
+if ($verbose) {
     my @files = keys %drhdrs;
     print "Read ".@files." header".(@files == 1 ? "" : "s")."\n";
 }
-if ($list) {
+if ($dry_run) {
     # List what would happen (assuming headers are okay)
     list_convert_plan( \%drhdrs, {mode => $mode, version => $version} );
 }
