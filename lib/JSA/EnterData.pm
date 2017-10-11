@@ -9,9 +9,6 @@ JSA::EnterData - Parse headers and store in database
     # Create new object, with specific header dictionary.
     my $enter = new JSA::EnterData('dict' => '/path/to/dict');
 
-    # Do not actually insert into database.
-    #$enter->debug(1);
-
     # Upload metadata for Jun 25, 2008.
     $enter->date(20080625);
 
@@ -103,11 +100,6 @@ Date to set given in C<yyyymmdd> format.
 Default is the current date in local timezone (at the time of creation
 of the object).
 
-=item I<debug> C<1 | 0>
-
-Debugging means interact with the database, but don't actually do any
-inserts.  Default is false.
-
 =item I<dict> C<file name>
 
 File name for data dictionary.  Default name is in
@@ -129,10 +121,6 @@ Currently it does not do anything.
 
 When the value is true, I<force-disk> is marked false.
 
-=item I<load-header-db> C<1 | 0>
-
-A truth value to control loading of header database.  Default is true.
-
 =item I<update-mode> C<1 | 0>
 
 A truth value to determine if to do database update (when true; see
@@ -141,18 +129,6 @@ I<update_hash>) or an insert (when false; see I<insert_hash>).
 In insert mode, nothing is inserted in "FILES" table.
 
 =back
-
-=item B<load_header_db>
-
-Returns the set truth value to indicate where to load in the header
-database, if no arguments given.
-
-    $load = $enter->load_header_db;
-
-Else, sets the truth value to turn on or off loading the header
-database; returns nothing.
-
-    $enter->load_header_db(1);
 
 =item B<update_mode>
 
@@ -165,16 +141,6 @@ returns nothing.  In insert mode, nothing is inserted in "FILES"
 table.
 
     $enter->update_mode(0);
-
-=item B<debug>
-
-Returns the set truth value if no arguments given.
-
-    $debug = $enter->debug;
-
-Else, sets the value to turn on or off debugging; returns nothing.
-
-    $enter->debug(0);
 
 =item B<process_simulation>
 
@@ -220,8 +186,6 @@ returns nothing.
     my %default = (
         'date'              => undef,
 
-        'load-header-db'    => 1,
-
         # $OMP::ArchiveDB::SkipDBLookup is changed.
         'force-disk'        => 1,
         'force-db'          => 0,
@@ -241,10 +205,6 @@ returns nothing.
 
         # To make OMP::Info::Obs out of given files.
         'files'             => [],
-
-        # Debugging.  Set to true to turn on.  Debugging means interact
-        # with the database, but don't actually do any inserts.
-        'debug'             => 0,
 
         # Force processing of simulation if true.
         'process_simulation'=> 0,
@@ -530,6 +490,10 @@ set.
     # there is no reason to.
     $enter->prepare_and_insert('given-files' => 1);
 
+Options:
+
+    dry_run - do not write to the database
+
 =cut
 
 {
@@ -544,6 +508,7 @@ set.
         my $key_use_list = 'given-files';
 
         my ($date, $use_list) = @arg{('date', $key_use_list)};
+        my $dry_run = $arg{'dry_run'};
 
         # Format date first before getting it back.
         $self->date($date) if defined $date;
@@ -629,7 +594,8 @@ set.
                                                    'instrument' => $inst,
                                                    'columns' => $columns,
                                                    'dict'    => \%dict,
-                                                   'obs' => $observations);
+                                                   'obs' => $observations,
+                                                   'dry_run' => $dry_run);
 
             push @files_added, @{$added}
                 if $added && scalar @{$added};
@@ -655,7 +621,8 @@ of columns (see I<get_columns>); and a hash reference of dictionary
                                 'instrument' => $inst,
                                 'columns' => \%cols,
                                 'dict'    => \%dict,
-                                'obs'     => \%obs);
+                                'obs'     => \%obs,
+                                'dry_run' => $dry_run);
 
 It is called by I<prepare_and_insert> method.
 
@@ -667,7 +634,7 @@ It is called by I<prepare_and_insert> method.
         my ($obs) = map {$args{$_}} qw/obs/;
 
         # Pass everything but observations hash reference to other subs.
-        my %pass_args = map {$_ => $args{$_}} qw/instrument db columns dict/;
+        my %pass_args = map {$_ => $args{$_}} qw/instrument db columns dict dry_run/;
 
         my @success;
 
@@ -753,8 +720,8 @@ It is called by I<prepare_and_insert> method.
 
         my $log = Log::Log4perl->get_logger('');
 
-        my ($inst, $db, $run_obs, $files) =
-           map {$arg{$_}} qw/instrument db run-obs file-id/;
+        my ($inst, $db, $run_obs, $files, $dry_run) =
+           map {$arg{$_}} qw/instrument db run-obs file-id dry_run/;
 
         my $dbh  = $db->handle();
         my @file = @{$files};
@@ -839,15 +806,15 @@ It is called by I<prepare_and_insert> method.
         }
 
         # COMMON table.
-        #$dbh->begin_work if $self->load_header_db;
-        $db->begin_trans() if $self->load_header_db;
+        $db->begin_trans() if not $dry_run;
 
         $self->fill_headers_COMMON($common_hdrs, $common_obs);
 
         my $error = $self->_modify_db_on_obsend(%pass_arg,
                                                 'dbhandle' => $dbh,
                                                 'table'    => 'COMMON',
-                                                'headers'  => $common_hdrs);
+                                                'headers'  => $common_hdrs,
+                                                dry_run    => $dry_run);
 
         if ($dbh->err()) {
             my $text = $dbh->errstr();
@@ -869,12 +836,13 @@ It is called by I<prepare_and_insert> method.
                 || $self->update_only_inbeam()) {
             $self->add_subsys_obs(%pass_arg,
                                   'db'  => $db,
-                                  'obs' => $run_obs)
+                                  'obs' => $run_obs,
+                                  dry_run => $dry_run)
                 or return ('error', "while adding subsys obs: $run_obs");
         }
 
         try {
-            $db->commit_trans() if $self->load_header_db;
+            $db->commit_trans() if not $dry_run;
         }
         catch Error::Simple with {
             my ($e) = @_;
@@ -1195,17 +1163,14 @@ and a hash reference of dictionary (see I<create_dictionary>).
 The observations hash reference is for a given run number, not the
 the I<OMP::Info::Objects> in its entirety.
 
-If "load header db" has been set to true (see I<load_header_db>
-method), then the database transactions will be rolled back on
-a database related error.
-
 Returns true on success, false on failure.
 
     $ok = $enter->add_subsys_obs('dbhandle' => $dbh,
                                  'instrument' => $inst,
                                  'columns' => \%cols,
                                  'dict'    => \%dict,
-                                 'obs'     => \%obs_per_runnr);
+                                 'obs'     => \%obs_per_runnr,
+                                 dry_run   => $dry_run);
 
 It is called by I<insert_observations> method.
 
@@ -1222,7 +1187,7 @@ sub add_subsys_obs {
         throw JSA::Error::BadArgs("No suitable value given for ${k}.");
     }
 
-    my ($inst, $db, $obs) = map {$args{$_}} qw/instrument db obs/;
+    my ($inst, $db, $obs, $dry_run) = map {$args{$_}} qw/instrument db obs dry_run/;
 
     my $dbh = $db->handle();
 
@@ -1261,7 +1226,7 @@ sub add_subsys_obs {
                                      'instrument'   => $inst,
                                      'db'           => $db,
                                      map({$_ => $pass_args{$_}}
-                                         qw/columns dict/));
+                                         qw/columns dict dry_run/));
             }
 
             if ($inst->can('merge_by_obsidss')
@@ -1277,12 +1242,13 @@ sub add_subsys_obs {
             $error = $self->_modify_db_on_obsend(%pass_args,
                                                  'dbhandle' => $dbh,
                                                  'table'   => $inst->table,
-                                                 'headers' => $subh);
+                                                 'headers' => $subh,
+                                                 dry_run   => $dry_run);
 
             if ($dbh->err()) {
                 my $text = $dbh->errstr();
 
-                $db->rollback_trans() if $self->load_header_db;
+                $db->rollback_trans() if not $dry_run;
                 $log->debug("$error");
 
                 return ( 'error', $text);
@@ -1367,14 +1333,15 @@ In case of error, returns the value as returned by C<DBI->execute>.
 
     $status = $enter->insert_hash('table'     => $table,
                                   'dbhandle' => $dbh,
-                                  'insert'   => \%to_insert);
+                                  'insert'   => \%to_insert
+                                  dry_run    => $dry_run);
 
 =cut
 
 sub insert_hash {
     my ($self, %args) = @_;
 
-    my ($table, $dbh, $insert) = @args{qw/table dbhandle insert/};
+    my ($table, $dbh, $insert, $dry_run) = @args{qw/table dbhandle insert dry_run/};
 
     my $conditional = $self->conditional_insert;
 
@@ -1407,7 +1374,7 @@ sub insert_hash {
             $table,
             join(' AND ', map {" $_ = ? "} @prim_key);
 
-        unless ($self->debug or not $self->load_header_db) {
+        unless ($dry_run) {
             $sth = $dbh->prepare($sql)
                 or $log->logdie(
                     "Could not prepare SQL statement for insert check\n",
@@ -1420,7 +1387,7 @@ sub insert_hash {
             $log->trace('-----> SQL: ' . $sql);
             $log->trace(Dumper(\@prim_val));
 
-            next if ($self->debug or not $self->load_header_db);
+            next if $dry_run;
 
             $sth->execute(@prim_val)
                 or $log->logdie('SQL query for insert check failed: ', $dbh->errstr);
@@ -1446,7 +1413,7 @@ sub insert_hash {
         join(', ', @fields),
         join(', ', ('?') x scalar @fields);
 
-    unless ($self->debug or not $self->load_header_db) {
+    unless ($dry_run) {
         $sth = $dbh->prepare($sql)
             or $log->logdie(
                 "Could not prepare SQL statement for insert\n",
@@ -1461,7 +1428,7 @@ sub insert_hash {
         $log->trace('-----> SQL: ' . $sql);
         $log->trace(Dumper(\@values));
 
-        next if ($self->debug or not $self->load_header_db);
+        next if $dry_run;
 
         my $affected = $sth->execute(@values);
 
@@ -1727,17 +1694,19 @@ Given a table name, a DBI database handle and a hash reference,
 retrieve the current data values based on OBSID or OBSID_SUBSYSNR,
 decide what has changed and update the values.
 
-    $enter->update_hash($table, $dbh, \%to_update);
+    $enter->update_hash($table, $dbh, \%to_update, dry_run => $dry_run);
 
 No-op for files table at the present time.
 
 =cut
 
 sub update_hash {
-    my ($self, $table, $dbh, $change) = @_;
+    my ($self, $table, $dbh, $change, %args) = @_;
 
     return if $table eq 'FILES'
            || ! $change;
+
+    my $dry_run = $args{'dry_run'};
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1758,9 +1727,7 @@ sub update_hash {
 
     $log->trace($sql);
 
-    return 1 if $self->debug;
-
-    if ($self->load_header_db) {
+    unless ($dry_run) {
         my $sth = $dbh->prepare($sql)
             or $log->logdie("Could not prepare sql statement for UPDATE\n", $dbh->errstr, "\n");
 
@@ -2432,8 +2399,8 @@ sub _change_FILES {
 
     my $table = 'FILES';
 
-    my ($headers, $obs, $db, $inst) =
-        @arg{qw/headers obs db instrument/};
+    my ($headers, $obs, $db, $inst, $dry_run) =
+        @arg{qw/headers obs db instrument dry_run/};
 
     my $dbh = $db->handle();
 
@@ -2458,7 +2425,8 @@ sub _change_FILES {
 
         ($error, $files) = $self->insert_hash('table'   => $table,
                                               'dbhandle'=> $dbh,
-                                              'insert'  => $hash);
+                                              'insert'  => $hash,
+                                              dry_run   => $dry_run);
 
         $error = $dbh->errstr
             if $dbh->err();
@@ -2470,7 +2438,7 @@ sub _change_FILES {
     $self->conditional_insert($old_cond);
 
     if ( $dbh->err() ) {
-        $db->rollback_trans() if $self->load_header_db();
+        $db->rollback_trans() if not $dry_run;
 
         $log->debug($self->_is_insert_dup_error($error)
                 ? "File metadata already present"
@@ -2510,19 +2478,22 @@ sub _update_or_insert {
     my $vals = $self->get_insert_values(%args);
 
     my $table = $args{'table'};
+    my $dry_run = $args{'dry_run'};
 
     my $ok;
     if ($self->update_mode) {
         my $change = $self->prepare_update_hash(
             @args{qw/table dbhandle/}, $vals);
 
-        $ok = $self->update_hash(@args{qw/table dbhandle/}, $change);
+        $ok = $self->update_hash(@args{qw/table dbhandle/}, $change,
+                                 dry_run => $dry_run);
 
         $ok = defined $ok;
     }
     else {
         $ok = $self->_combined_prepare_insert_hash(
             $vals,
+            dry_run => $dry_run,
             map {$_ => $args{$_}} qw/table dbhandle/);
     }
 
@@ -2572,7 +2543,7 @@ sub _modify_db_on_obsend {
 
         return $self->_combined_prepare_insert_hash(
             $self->get_insert_values(%args),
-            map {$_ => $args{$_}} qw/table dbhandle/);
+            map {$_ => $args{$_}} qw/table dbhandle dry_run/);
     }
 
     my $old_insert = $self->conditional_insert;
@@ -2604,7 +2575,8 @@ sub _modify_db_on_obsend {
                 unless $err->text =~ /Can.+update if the row exists previously/i;
         };
 
-        $affected = $self->update_hash(@args{qw/table dbhandle/}, $change);
+        $affected = $self->update_hash(@args{qw/table dbhandle/}, $change,
+                                       dry_run => $args{'dry_run'});
     }
 
     if (! $affected || $val_count > $affected) {
@@ -2616,7 +2588,7 @@ sub _modify_db_on_obsend {
 
         $self->_combined_prepare_insert_hash(
             $vals,
-            map {$_ => $args{$_}} qw/table dbhandle/);
+            map {$_ => $args{$_}} qw/table dbhandle dry_run/);
     }
 
     $self->update_mode($old_mode);
@@ -2629,6 +2601,7 @@ sub _combined_prepare_insert_hash {
     my ($self, $vals, %args) = @_;
 
     my $table = $args{'table'};
+    my $dry_run = $args{'dry_run'};
 
     $vals = $self->prepare_insert_hash($table, $vals);
 
@@ -2636,7 +2609,8 @@ sub _combined_prepare_insert_hash {
         if 'COMMON' eq $table ;
 
     return $self->insert_hash(%args,
-                              'insert' => $vals);
+                              'insert' => $vals,
+                              dry_run => $dry_run);
 }
 
 =item B<_find_header>
