@@ -631,50 +631,16 @@ It is called by I<prepare_and_insert> method.
     sub insert_observations {
         my ($self, %args) = @_ ;
 
-        my ($obs) = map {$args{$_}} qw/obs/;
+        my ($obs, $dry_run) = map {$args{$_}} qw/obs dry_run/;
 
         # Pass everything but observations hash reference to other subs.
         my %pass_args = map {$_ => $args{$_}} qw/instrument db columns dict dry_run/;
 
         my @success;
 
-        my %run = (
-            'inserted' => sub {
-                my ($self, %arg) = @_;
-
-                push @success, map {$_->filename} @{ $arg{'obs'} };
-                return;
-            },
-
-            'simulation' => sub {
-                my ($self, %arg) = @_;
-
-                return if $self->skip_state_setting();
-
-                my $xfer  = $self->_get_xfer_unconnected_dbh();
-                $xfer->put_state(
-                    state => 'simulation', files => $arg{'file-id'});
-                return;
-            },
-
-            'error' => sub {
-                my ($self, %arg) = @_;
-
-                return if $self->skip_state_setting();
-
-                my $xfer  = $self->_get_xfer_unconnected_dbh();
-                $xfer->put_state(
-                    state => 'error', files => $arg{'file-id'},
-                    comment => $arg{'comment'});
-                return;
-            },
-
-            'nothing-to-do' => sub {},
-        );
-
         my (@sub_obs, @base);
 
-        RUN: foreach my $runnr (sort {$a <=> $b} keys %{$obs}) {
+        foreach my $runnr (sort {$a <=> $b} keys %{$obs}) {
             @sub_obs =  grep {$_} @{$obs->{$runnr}};
 
             @base = map {$_->simple_filename} @sub_obs;
@@ -695,11 +661,25 @@ It is called by I<prepare_and_insert> method.
 
             next unless defined $ans;
 
-            if (exists $run{$ans}) {
-                $run{$ans}->($self,
-                             'obs'     => \@sub_obs,
-                             'file-id' => \@base,
-                             'comment' =>  $comment);
+            if ($ans eq 'inserted') {
+                push @success, map {$_->filename} @base;
+            }
+            elsif ($ans eq 'simulation') {
+                unless ($dry_run or $self->skip_state_setting()) {
+                    my $xfer = $self->_get_xfer_unconnected_dbh();
+                    $xfer->put_state(
+                        state => 'simulation', files => \@base);
+                }
+            }
+            elsif ($ans eq 'error') {
+                unless ($dry_run or $self->skip_state_setting()) {
+                    my $xfer = $self->_get_xfer_unconnected_dbh();
+                    $xfer->put_state(
+                        state => 'error', files => \@base,
+                        comment => $comment);
+                }
+            }
+            elsif ($ans eq 'nothing-to-do') {
             }
             else {
                 throw JSA::Error::BadArgs "Do not know what to run for state '$ans'."
