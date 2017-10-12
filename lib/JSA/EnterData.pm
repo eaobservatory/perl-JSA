@@ -550,6 +550,7 @@ Options:
             # <no. of subscans objects returned per observation>.
             $group = $self->_get_obs_group('name' => $name,
                                            'date' => $date,
+                                           dry_run => $dry_run,
                                            map {($_ => $arg{ $_ })}
                                                ($key_use_list));
 
@@ -935,7 +936,8 @@ When no files are provided, returns a L<OMP::Info::ObsGroup> object
 given instrument name and date as a hash.
 
     $obs = $enter->_get_obs_group('name' => 'ACSIS',
-                                  'date' => '2009-06-09'
+                                  'date' => '2009-06-09',
+                                  dry_run => $dry_run,
                                  );
 
 Else, returns a L<OMP::Info::ObsGroup> object created with already
@@ -943,10 +945,14 @@ given files (see I<files> method).
 
     $obs = $enter->_get_obs_group;
 
+Note: writes the file state in the transfer table unless the
+dry_run argument is given.
+
 =cut
 
 sub _get_obs_group {
     my ($self, %args) = @_;
+    my $dry_run = $args{'dry_run'};
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -993,7 +999,7 @@ sub _get_obs_group {
 
             $xfer->put_state(
                     state => 'ignored', files => [$base], comment => $ignored)
-                unless $self->skip_state_setting();
+                unless $dry_run || $self->skip_state_setting();
 
             $log->warn("$ignored: $file; skipped.\n");
 
@@ -1001,7 +1007,7 @@ sub _get_obs_group {
         }
 
         $xfer->add_found([$base], '')
-            unless $self->skip_state_setting();
+            unless $dry_run || $self->skip_state_setting();
 
         my $text = '';
         my $err;
@@ -1027,7 +1033,7 @@ sub _get_obs_group {
 
             $xfer->put_state(
                     state => 'error', files => [$base], comment => $text)
-                unless $self->skip_state_setting();
+                unless $dry_run || $self->skip_state_setting();
 
             $log->error($text);
         }
