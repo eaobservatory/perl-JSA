@@ -2433,7 +2433,8 @@ sub _change_FILES {
         return;
     }
 
-    if (! $self->skip_state_setting() && $files && scalar @{$files}) {
+    if ((not ($dry_run || $self->skip_state_setting()))
+            and $files and scalar @{$files}) {
         my $xfer = $self->_get_xfer_unconnected_dbh();
         $xfer->put_state(
             state => 'ingested', files => [map _basename($_), @{$files}]);
