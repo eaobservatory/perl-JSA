@@ -264,8 +264,6 @@ returns nothing.
             $obj->$sub($obj->$sub);
         }
 
-        $obj->skip_state_setting(0);
-
         return $obj;
     }
 
@@ -493,6 +491,7 @@ set.
 Options:
 
     dry_run - do not write to the database
+    skip_state - do not set file state in transfer table
 
 =cut
 
@@ -509,6 +508,7 @@ Options:
 
         my ($date, $use_list) = @arg{('date', $key_use_list)};
         my $dry_run = $arg{'dry_run'};
+        my $skip_state = $arg{'skip_state'};
 
         # Format date first before getting it back.
         $self->date($date) if defined $date;
@@ -551,6 +551,7 @@ Options:
             $group = $self->_get_obs_group('name' => $name,
                                            'date' => $date,
                                            dry_run => $dry_run,
+                                           skip_state => $skip_state,
                                            map {($_ => $arg{ $_ })}
                                                ($key_use_list));
 
@@ -596,7 +597,8 @@ Options:
                                                    'columns' => $columns,
                                                    'dict'    => \%dict,
                                                    'obs' => $observations,
-                                                   'dry_run' => $dry_run);
+                                                   dry_run => $dry_run,
+                                                   skip_state => $skip_state);
 
             push @files_added, @{$added}
                 if $added && scalar @{$added};
@@ -623,7 +625,8 @@ of columns (see I<get_columns>); and a hash reference of dictionary
                                 'columns' => \%cols,
                                 'dict'    => \%dict,
                                 'obs'     => \%obs,
-                                'dry_run' => $dry_run);
+                                dry_run   => $dry_run,
+                                skip_state=> $skip_state);
 
 It is called by I<prepare_and_insert> method.
 
@@ -632,10 +635,12 @@ It is called by I<prepare_and_insert> method.
     sub insert_observations {
         my ($self, %args) = @_ ;
 
-        my ($obs, $dry_run) = map {$args{$_}} qw/obs dry_run/;
+        my ($obs, $dry_run, $skip_state) =
+            map {$args{$_}} qw/obs dry_run skip_state/;
 
         # Pass everything but observations hash reference to other subs.
-        my %pass_args = map {$_ => $args{$_}} qw/instrument db columns dict dry_run/;
+        my %pass_args = map {$_ => $args{$_}}
+            qw/instrument db columns dict dry_run skip_state/;
 
         my @success;
 
@@ -666,14 +671,14 @@ It is called by I<prepare_and_insert> method.
                 push @success, map {$_->filename} @base;
             }
             elsif ($ans eq 'simulation') {
-                unless ($dry_run or $self->skip_state_setting()) {
+                unless ($dry_run or $skip_state) {
                     my $xfer = $self->_get_xfer_unconnected_dbh();
                     $xfer->put_state(
                         state => 'simulation', files => \@base);
                 }
             }
             elsif ($ans eq 'error') {
-                unless ($dry_run or $self->skip_state_setting()) {
+                unless ($dry_run or $skip_state) {
                     my $xfer = $self->_get_xfer_unconnected_dbh();
                     $xfer->put_state(
                         state => 'error', files => \@base,
@@ -701,8 +706,8 @@ It is called by I<prepare_and_insert> method.
 
         my $log = Log::Log4perl->get_logger('');
 
-        my ($inst, $db, $run_obs, $files, $dry_run) =
-           map {$arg{$_}} qw/instrument db run-obs file-id dry_run/;
+        my ($inst, $db, $run_obs, $files, $dry_run, $skip_state) =
+           map {$arg{$_}} qw/instrument db run-obs file-id dry_run skip_state/;
 
         my $dbh  = $db->handle();
         my @file = @{$files};
@@ -818,7 +823,8 @@ It is called by I<prepare_and_insert> method.
             $self->add_subsys_obs(%pass_arg,
                                   'db'  => $db,
                                   'obs' => $run_obs,
-                                  dry_run => $dry_run)
+                                  dry_run => $dry_run,
+                                  skip_state => $skip_state)
                 or return ('error', "while adding subsys obs: $run_obs");
         }
 
@@ -834,30 +840,6 @@ It is called by I<prepare_and_insert> method.
 
         return ('inserted', '');
     }
-}
-
-=item B<skip_state_setting>
-
-Returns truth value to indicate if to skip state setting in transfer
-table, when no arguments given.  Default is not to skip.
-
-    print "Not setting state" if $enter->skip_state_setting();
-
-If a truth value is given, it is stored for later use.
-
-    $enter->skip_state_setting( 0 );
-
-=cut
-
-sub skip_state_setting {
-    my $self = shift @_;
-
-    my $store = 'skip-state';
-
-    return $self->{$store} unless scalar @_;
-
-    $self->{$store} = !! $_[0];
-    return;
 }
 
 sub _filter_header {
@@ -938,6 +920,7 @@ given instrument name and date as a hash.
     $obs = $enter->_get_obs_group('name' => 'ACSIS',
                                   'date' => '2009-06-09',
                                   dry_run => $dry_run,
+                                  skip_state => $skip_state,
                                  );
 
 Else, returns a L<OMP::Info::ObsGroup> object created with already
@@ -953,6 +936,7 @@ dry_run argument is given.
 sub _get_obs_group {
     my ($self, %args) = @_;
     my $dry_run = $args{'dry_run'};
+    my $skip_state = $args{'skip_state'};
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -999,7 +983,7 @@ sub _get_obs_group {
 
             $xfer->put_state(
                     state => 'ignored', files => [$base], comment => $ignored)
-                unless $dry_run || $self->skip_state_setting();
+                unless $dry_run || $skip_state;
 
             $log->warn("$ignored: $file; skipped.\n");
 
@@ -1007,7 +991,7 @@ sub _get_obs_group {
         }
 
         $xfer->add_found([$base], '')
-            unless $dry_run || $self->skip_state_setting();
+            unless $dry_run || $skip_state;
 
         my $text = '';
         my $err;
@@ -1033,7 +1017,7 @@ sub _get_obs_group {
 
             $xfer->put_state(
                     state => 'error', files => [$base], comment => $text)
-                unless $dry_run || $self->skip_state_setting();
+                unless $dry_run || $skip_state;
 
             $log->error($text);
         }
@@ -1156,7 +1140,8 @@ Returns true on success, false on failure.
                                  'columns' => \%cols,
                                  'dict'    => \%dict,
                                  'obs'     => \%obs_per_runnr,
-                                 dry_run   => $dry_run);
+                                 dry_run   => $dry_run,
+                                 skip_state=> $skip_state);
 
 It is called by I<insert_observations> method.
 
@@ -1173,7 +1158,8 @@ sub add_subsys_obs {
         throw JSA::Error::BadArgs("No suitable value given for ${k}.");
     }
 
-    my ($inst, $db, $obs, $dry_run) = map {$args{$_}} qw/instrument db obs dry_run/;
+    my ($inst, $db, $obs, $dry_run, $skip_state) =
+        map {$args{$_}} qw/instrument db obs dry_run skip_state/;
 
     my $dbh = $db->handle();
 
@@ -1211,8 +1197,10 @@ sub add_subsys_obs {
                                      'headers'      => $subsys_hdrs,
                                      'instrument'   => $inst,
                                      'db'           => $db,
+                                     dry_run        => $dry_run,
+                                     skip_state     => $skip_state,
                                      map({$_ => $pass_args{$_}}
-                                         qw/columns dict dry_run/));
+                                         qw/columns dict/));
             }
 
             if ($inst->can('merge_by_obsidss')
@@ -1418,8 +1406,7 @@ sub insert_hash {
 
         my $affected = $sth->execute(@values);
 
-        if ($table eq 'FILES' && defined $affected && $affected > 0
-                && ! $self->skip_state_setting()) {
+        if ($table eq 'FILES' && defined $affected && $affected > 0) {
             push @file, $row->{'file_id'};
         }
 
@@ -2384,8 +2371,8 @@ sub _change_FILES {
 
     my $table = 'FILES';
 
-    my ($headers, $obs, $db, $inst, $dry_run) =
-        @arg{qw/headers obs db instrument dry_run/};
+    my ($headers, $obs, $db, $inst, $dry_run, $skip_state) =
+        @arg{qw/headers obs db instrument dry_run skip_state/};
 
     my $dbh = $db->handle();
 
@@ -2433,8 +2420,7 @@ sub _change_FILES {
         return;
     }
 
-    if ((not ($dry_run || $self->skip_state_setting()))
-            and $files and scalar @{$files}) {
+    if ((not ($dry_run || $skip_state)) and $files and scalar @{$files}) {
         my $xfer = $self->_get_xfer_unconnected_dbh();
         $xfer->put_state(
             state => 'ingested', files => [map _basename($_), @{$files}]);
