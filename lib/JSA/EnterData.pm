@@ -2066,10 +2066,9 @@ sub extract_column_headers {
 
 =item B<create_dictionary>
 
-Given the location of the data dictionary, return a hash containing
-the dictionary contents.
+Return a hash containing the dictionary contents.
 
-    %dictionary = $enter->create_dictionary($dictionary);
+    %dictionary = $enter->create_dictionary();
 
 =cut
 
