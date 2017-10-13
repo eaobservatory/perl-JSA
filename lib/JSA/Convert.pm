@@ -165,8 +165,6 @@ Optional arguments are passed in a hash reference with the following
 allowed keys:
 
  - indir: the input directory
- - outdir: the output directory
- - tempdir: a temporary directory for file conversion.
  - mode: Processing mode ("obs", "night", "project", "public").
  - dpid: Recipe instance ID for data processing
  - dpdate: ISO8601 date to assign to each converted file
@@ -196,26 +194,10 @@ sub convert_dr_files {
             if (can_send_to_cadc($mode, $href->{$file}) && want_to_send_to_cadc($mode, header => $href->{$file})) {
                 print "Converting file $file\n" if $DEBUG;
 
-                # Copy the file to the temporary directory, if necessary.
-                my $tfile = $file;
-                if (defined($opts->{tempdir})) {
-                    $tfile = File::Spec->catfile( $opts->{tempdir}, $file );
-
-                    if (defined($opts->{indir})) {
-                        my $ifile = File::Spec->catfile($opts->{indir}, $file);
-
-                        print "copying $ifile to $tfile\n" if $DEBUG;
-                        copy($ifile, $tfile) or die "Copy failed: $!";
-                    }
-                    else {
-                        copy($file, $tfile) or die "Copy failed: $!";
-                    }
-                }
-
                 # is exportable so first fix up provenance
                 my $skip = 0;
                 try {
-                    prov_update_parent_path($tfile,
+                    prov_update_parent_path($file,
                                             \&looks_like_drfile,
                                             \&looks_like_cadcfile,
                                             \&_prov_check_file,
@@ -233,41 +215,19 @@ sub convert_dr_files {
 
                 # Modify the WCS attributes so that we generate the correct FITS
                 # headers regardless of how the pipeline was configured.
-                set_wcs_attribs($tfile);
+                set_wcs_attribs($file);
 
-                update_fits_headers($tfile, \%fits_options);
+                update_fits_headers($file, \%fits_options);
 
                 my @comments = cadc_ack();
-                add_fits_comments($tfile, \@comments) if @comments;
+                add_fits_comments($file, \@comments) if @comments;
 
                 # then convert to fits
                 my $outfile = convert_to_fits(
-                    $tfile, (($mode eq 'public') ? $version : undef));
+                    $file, (($mode eq 'public') ? $version : undef));
 
                 # Now need to fix up PRODUCT names in extensions
                 update_fits_product($outfile);
-
-                # At this point, the output file is in either the same
-                # directory as the input file (if $opts->{tempdir} isn't
-                # defined) or in the temporary directory (if $opts->{tempdir}
-                # is defined). If we have been given an output directory, copy
-                # the output file to a temporary filename in the output
-                # directory, then rename it to the proper filename.
-                if (defined($opts->{outdir})) {
-                    my $tempfilename = "cadc$$";
-                    my ($vol, $dir, $ofile) = File::Spec->splitpath($outfile);
-
-                    copy($outfile,
-                         File::Spec->catfile($opts->{outdir}, $tempfilename));
-                    rename(File::Spec->catfile($opts->{outdir}, $tempfilename),
-                           File::Spec->catfile($opts->{outdir}, $ofile));
-                    unlink($outfile);
-                }
-
-                # Clean up temporary directory.
-                if (defined($opts->{tempdir})) {
-                    unlink $tfile;
-                }
             }
             else {
                 if ($DEBUG) {
