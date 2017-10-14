@@ -176,6 +176,13 @@ cleanups. Default is "cadc".
 File version number.  This currently only applies to files with the
 "public" grouping mode.
 
+=item B<--rawoutput>
+
+Do not post-process output files.  Instead of the desired output
+files being renamed, converted to FITS and/or merged, and then captured
+using dpCapture, they are simply copied to the transfer directory
+(provided that the --persist option is given).
+
 =back
 
 =head1 QUESTIONS
@@ -232,7 +239,8 @@ print Dumper \%ENV;
 # Options
 my ($cleanup, $debug, $drcommand, $drparameters, $help, $id, $indir, $inputs,
     $instrument, $log, $man, $mode, $specified_outdir, $parameters, $persist,
-    $tmpdir, $transdir, $ut, $show_version, $version, $debugxfer);
+    $tmpdir, $transdir, $ut, $show_version, $version, $debugxfer,
+    $raw_output);
 
 my $status = GetOptions(
     "cleanup=s"     => \$cleanup,
@@ -256,6 +264,7 @@ my $status = GetOptions(
     "version"       => \$show_version,
     'debugxfer'     => \$debugxfer,
     'fileversion:i' => \$version,
+    'rawoutput'     => \$raw_output,
 );
 
 pod2usage(1) if $help;
@@ -572,18 +581,6 @@ unless (defined $drcommand) {
     #  - Need to filter provenance
     #  - Run NDF2FITS
 
-    # scan the directory again
-    my %post_process = scan_dir();
-    my @drfiles = compare_file_lists(\%post_retrieve, \%post_process);
-
-    # Read all the FITS headers from these files
-    my %drhdrs = read_headers(@drfiles);
-
-    # And convert those files that have valid PRODUCT headers.
-    convert_dr_files(\%drhdrs, {"mode" => $mode, dpid => $id,
-                                dpdate => DateTime->now->datetime,
-                                version => $version});
-
     # TEMPORARY HACK: copy all log.* files into the ORAC_LOGDIR if defined.
     if (exists $ENV{'ORAC_LOGDIR'}) {
         my $output_dir = $ENV{'ORAC_LOGDIR'};
@@ -593,24 +590,51 @@ unless (defined $drcommand) {
         }
     }
 
-    log_listing('pre-cleanup', '.') if $debugxfer;
+    # scan the directory again
+    my %post_process = scan_dir();
+    my @drfiles = compare_file_lists(\%post_retrieve, \%post_process);
 
-    if ($cleanup eq 'cadc') {
-        clean_directory_pre_capture($outdir, \%all_existing_files,
-                                    \&looks_like_cadcfile);
+    # Read all the FITS headers from these files
+    my %drhdrs = read_headers(@drfiles);
 
-        # If working in a temporary directory (e.g. at CADC) or a
-        # specified output directory (e.g. in the jsa_proc system), make sure
-        # all the retrieved files have been deleted.  If we are working
-        # on processed data with PICARD then we don't want to send back
-        # the original files.
-        unlink grep {-e $_} map {File::Spec->catfile($outdir, $_)} @files_retrieved
-            if ($tmpdir or $specified_outdir);
+    # And convert those files that have valid PRODUCT headers.
+    my %convert_options = (
+        "mode" => $mode, dpid => $id,
+        dpdate => DateTime->now->datetime,
+        version => $version);
+
+    unless ($raw_output) {
+        convert_dr_files(\%drhdrs, \%convert_options);
+
+        log_listing('pre-cleanup', '.') if $debugxfer;
+
+        if ($cleanup eq 'cadc') {
+            clean_directory_pre_capture($outdir, \%all_existing_files,
+                                        \&looks_like_cadcfile);
+
+            # If working in a temporary directory (e.g. at CADC) or a
+            # specified output directory (e.g. in the jsa_proc system), make sure
+            # all the retrieved files have been deleted.  If we are working
+            # on processed data with PICARD then we don't want to send back
+            # the original files.
+            unlink grep {-e $_} map {File::Spec->catfile($outdir, $_)} @files_retrieved
+                if ($tmpdir or $specified_outdir);
+        }
+
+        log_listing('post-cleanup', '.') if $debugxfer;
+
+        capture_products($persist, $transdir, 0);
     }
-
-    log_listing('post-cleanup', '.') if $debugxfer;
-
-    capture_products($persist, $transdir, 0);
+    elsif ($persist) {
+        # Perform conversion in dry run mode to see which files we would
+        # otherwise have converted, and copy them to then transfer directory.
+        $convert_options{'dry_run'} = 1;
+        my %conversion = convert_dr_files(\%drhdrs, \%convert_options);
+        foreach my $filename (keys %conversion) {
+            copy($filename, $transdir)
+                or die "copying $filename to $transdir failed: $!";
+        }
+    }
 }
 
 log_listing('transdir', $transdir) if $transdir && $debugxfer;
