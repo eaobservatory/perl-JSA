@@ -169,6 +169,8 @@ allowed keys:
  - dpid: Recipe instance ID for data processing
  - dpdate: ISO8601 date to assign to each converted file
  - version: file version number (for "public" mode files only)
+ - dry_run: return hash of conversions which would be done
+            rather than actually doing anything
 
 =cut
 
@@ -180,6 +182,7 @@ sub convert_dr_files {
     my $dpid = $opts->{dpid};
     my $dpdate = $opts->{dpdate};
     my $version = $opts->{'version'};
+    my $dry_run = $opts->{'dry_run'};
 
     my @pngs;
 
@@ -189,10 +192,21 @@ sub convert_dr_files {
         dpdate => $dpdate,
     );
 
+    my %conversion = ();
+
     foreach my $file (sort keys %$href) {
         if (looks_like_drfile($file)) {
             if (can_send_to_cadc($mode, $href->{$file}) && want_to_send_to_cadc($mode, header => $href->{$file})) {
                 print "Converting file $file\n" if $DEBUG;
+
+                if ($dry_run) {
+                    my $assoc = $href->{$file}->value("ASN_TYPE");
+                    $conversion{$file} = drfilename_to_cadc(
+                        $file,
+                        ASN_TYPE => (($assoc eq 'obs') ? $assoc : $mode),
+                        VERSION => (($mode eq 'public') ? $version : undef));
+                    next;
+                }
 
                 # is exportable so first fix up provenance
                 my $skip = 0;
@@ -244,6 +258,15 @@ sub convert_dr_files {
                want_to_send_to_cadc($mode, header => $href->{$file})) {
             print "Processing FITS file $file\n" if $DEBUG;
 
+            if ($dry_run) {
+                my $assoc = $href->{$file}->value("ASN_TYPE");
+                $conversion{$file} = drfilename_to_cadc(
+                    $file,
+                    ASN_TYPE => (($assoc eq 'obs') ? $assoc : $mode),
+                    VERSION => (($mode eq 'public') ? $version : undef));
+                next;
+            }
+
             update_fits_file_fits_headers($file, \%fits_options);
 
             my $hdr = read_header($file);
@@ -258,7 +281,16 @@ sub convert_dr_files {
         elsif( looks_like_drthumb($file) && want_to_send_to_cadc($mode, filename => $file)) {
             print "Converting file $file\n" if $DEBUG;
 
-            my $outfile = rename_png($file, {"mode" => $mode});
+            my $outfile = rename_png($file, {
+                mode => $mode,
+                dry_run => $dry_run,
+            });
+
+            if ($dry_run) {
+                $conversion{$file} = $outfile;
+                next;
+            }
+
             write_dpinfo_png($outfile, $dpdate, $dpid);
             push @pngs, $outfile;
 
@@ -277,6 +309,8 @@ sub convert_dr_files {
             }
         }
     }
+
+    return %conversion if $dry_run;
 
     # And merge the PNGs we've created.
     my $reduced = merge_pngs(@pngs);
@@ -313,34 +347,11 @@ sub list_convert_plan {
     my $mode = $opts->{'mode'};
     my $version = $opts->{'version'};
 
-    foreach my $file (sort keys %$href) {
-        if (looks_like_drfile($file)) {
-            if (can_send_to_cadc($mode, $href->{$file})) {
-                my $assoc = $href->{$file}->value("ASN_TYPE");
-                my $outfile = drfilename_to_cadc(
-                    $file, ASN_TYPE => $assoc,
-                    VERSION => (($assoc eq 'public') ? $version : undef));
-                print "Converting file $file -> $outfile\n";
-            }
-            else {
-                my $can_send = can_send_to_cadc($mode, $href->{$file});
-                my $isdr = looks_like_drfile($file);
-                print "File $file not suitable for conversion (is "
-                    . ($can_send ? "" : "not ") . "valid product) (is "
-                    . ($isdr ? "" : "not ") . "valid DR filename)\n";
-            }
-        }
-        elsif (looks_like_drthumb($file)) {
-            my $outfile = drfilename_to_cadc($file);
-            print "Converting file $file -> $outfile\n";
-        }
-        else {
-            my $can_send = can_send_to_cadc($mode, $href->{$file});
-            my $isdr = looks_like_drfile($file);
-            print "File $file not suitable for conversion (is "
-                . ($can_send ? "" : "not ") . "valid product) (is "
-                . ($isdr ? "" : "not ") . "valid DR filename)\n";
-        }
+    my %conversion = convert_dr_files(
+        $href, {mode => $mode, version => $version, dry_run => 1});
+
+    foreach (sort keys %conversion) {
+        printf "Converting file %s -> %s\n", $_, $conversion{$_};
     }
 }
 
@@ -441,7 +452,7 @@ sub rename_png {
 
     $outfile = _cadc_preview_file_name($asn_id, $productID, $size, $suffix);
 
-    copy($infile, $outfile);
+    copy($infile, $outfile) unless $opts->{'dry_run'};
 
     return $outfile;
 
