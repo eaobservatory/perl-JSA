@@ -401,13 +401,15 @@ sub send_log_email {
     $smtp->quit;
 }
 
-=item find_observations($ut, $project, $priority)
+=item find_observations($ut, $project, $priority, $title, %opt)
 
 Determines the mode of operation and retieves the observation group.
 
-    ($mode, $grp) = find_observations($ut, $project);
+    ($mode, $grp) = find_observations($ut, $project, $priority, $title, %opt);
 
-The project should already be in upper case.
+The project should already be in upper case.  Additional options:
+
+    no_verify_project - skip OMP::ProjServer->verifyProject step.
 
 =cut
 
@@ -416,6 +418,7 @@ sub find_observations {
     my $project = shift;
     my $priority = shift;
     my $title = shift;
+    my %opt = @_;
 
     my ($mode, $grp);
 
@@ -439,7 +442,9 @@ sub find_observations {
     }
 
     die "Project '$project' does not seem to exist in the database.\n"
-        if (defined $project) && (! OMP::ProjServer->verifyProject($project));
+        if (defined $project)
+        && (! $opt{'no_verify_project'})
+        && (! OMP::ProjServer->verifyProject($project));
 
     my %query = (
                   nocomments => 0,
