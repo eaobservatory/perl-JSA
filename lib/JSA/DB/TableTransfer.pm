@@ -195,7 +195,9 @@ sub add_found {
 
     return $db->insert('table'   => $_state_table,
                        'columns' => ['file_id', 'status', 'location'],
-                       'values'  => $vals);
+                       'values'  => $vals,
+                       'on_duplicate' => 'status=status', # Should do nothing
+    );
 }
 
 =item B<set_found>

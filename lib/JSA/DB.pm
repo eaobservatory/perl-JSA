@@ -381,7 +381,8 @@ Returns number of affected rows if any.
     $affected =
       $jdb->insert('table'   => 'the_table',
                    'columns' => ['a', 'b'],
-                   'values'  => [[1, 2], [4, 6]]);
+                   'values'  => [[1, 2], [4, 6]],
+                   'on_duplicate' => 'col="val"');
 
 On database error, rollbacks the transaction, errors are passed up.
 
@@ -406,6 +407,9 @@ sub insert {
                       $arg{'table'},
                       join(', ', @cols),
                       join(', ', ('?') x $size);
+
+    $sql .= ' ON DUPLICATE KEY UPDATE ' . $arg{'on_duplicate'}
+        if exists $arg{'on_duplicate'};
 
     return $self->_run_change_loop('sql'    => $sql,
                                    'values' => $arg{'values'});
