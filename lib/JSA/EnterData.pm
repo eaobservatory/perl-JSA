@@ -668,7 +668,7 @@ It is called by I<prepare_and_insert> method.
             next unless defined $ans;
 
             if ($ans eq 'inserted') {
-                push @success, map {$_->filename} @base;
+                push @success, map {$_->filename} @sub_obs;
             }
             elsif ($ans eq 'simulation') {
                 unless ($dry_run or $skip_state) {
