@@ -2796,25 +2796,7 @@ sub _is_insert_dup_error {
 
     my $text = ref $err ? $err->text : $err;
 
-    return $text && $text =~ /insert duplicate key row/i;
-}
-
-=item B<_is_dup_ignored>
-
-Returns a truth value to indicate if the error message was due ignoring the
-duplicate key, given a plain string or an L<Error> object.  It compares the
-expected Sybase error text.
-
-    $dup_ignore = $enter->_is_dup_ignored($dbh->errstr);
-
-=cut
-
-sub _is_dup_ignored {
-    my ($self, $err) = @_;
-
-    my $text = ref $err ? $err->text : $err;
-
-    return $text && $text =~ /Duplicate key.+ignored/i;
+    return $text && $text =~ /duplicate entry/i;
 }
 
 =item B<_dataverify_obj_fail_text>
