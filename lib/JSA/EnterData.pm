@@ -102,8 +102,7 @@ of the object).
 
 =item I<dict> C<file name>
 
-File name for data dictionary.  Default name is in
-"/import/data.dictionary" located in directory containing this module.
+File name for data dictionary.
 
 =item I<force-disk> C<1 | 0>
 
@@ -199,10 +198,6 @@ returns nothing.
             JSA::EnterData::SCUBA2->new,
         ],
 
-        # Location of data dictionary
-        # NOTE: This should go in to the OMP config system at some point
-        'dict' => '/jac_sw/archiving/jcmt/import/data.dictionary',
-
         # To make OMP::Info::Obs out of given files.
         'files'             => [],
 
@@ -220,8 +215,6 @@ returns nothing.
     #  Generate some accessor functions.
     for my $k (keys %default, qw/conditional_insert/) {
         next if (any {$k eq $_} (
-                # Must be given in constructor.
-                'dict',
                 # Special handling when date to set is given.
                 'date',
                 # Validate instruments before setting.
