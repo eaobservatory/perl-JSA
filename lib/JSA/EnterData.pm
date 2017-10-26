@@ -2987,8 +2987,147 @@ sub _file_template {
                    join '', ('X') x 10;
 }
 
+# Note: methods below were imported from the calcbounds script.
 
-1;
+sub calcbounds_update_bound_cols {
+    my ($self, $inst, %arg) = @_;
+    my $dry_run = $arg{'dry_run'};
+    my $skip_state = $arg{'skip_state'};
+    my $obs_types = $arg{'obs_types'};
+
+    my $n_err = 0;
+
+    my $process_obs_re = join '|', @$obs_types;
+       $process_obs_re = qr{\b( $process_obs_re )}xi;
+
+    my $obs_list = $self->calcbounds_make_obs(
+            instrument => $inst,
+            dry_run => $dry_run,
+            skip_state => $skip_state)
+        or return;
+
+    my $log = Log::Log4perl->get_logger('');
+
+    my @bound =
+        # ";" is to indicate to Perl that "{" starts a BLOCK not an EXPR.
+        map {; "obsra$_" , "obsdec$_"} ('', qw/tl bl tr br/);
+
+    my $db = new OMP::DBbackend::Archive();
+    my $dbh = $db->handle;
+
+    my $table = 'COMMON';
+    my %pass = (
+        'dbhandle' => $dbh,
+        'table'    => $table,
+        # This is a hash reference, not just $cols, in order to cater to needs of
+        # JSA::EnterData->get_insert_values().
+        'columns'  => {$table => $self->get_columns($table, $dbh)},
+        'dict'     => {$self->create_dictionary()},
+    );
+
+    my $inst_scuba2 = $inst->can('name') ? $inst->name() : '';
+       $inst_scuba2 = JSA::EnterData::SCUBA2->name_is_scuba2($inst_scuba2);
+
+    for my $obs (@{$obs_list}) {
+        my @subsys_obs = $obs->subsystems()
+          or next;
+
+        my $common = $subsys_obs[0];
+        my %header = %{$common->hdrhash()};
+
+        my $obs_type;
+        foreach my $name (map {; $_ , uc $_ } qw/obstype obs_type/) {
+            if ( exists $header{$name} ) {
+                $obs_type = $header{$name};
+                last;
+            }
+        }
+
+        next unless $obs_type;
+
+        my $found_type = ($obs_type =~ $process_obs_re)[0]
+            or next;
+
+        my @file_id = map {$_->simple_filename()} @subsys_obs;
+
+        $log->info(join "\n    ", 'Processing files', @file_id);
+
+        if ($inst_scuba2) {
+            unless (_calcbounds_any_header_sub_val(\%header, 'SEQ_TYPE', $found_type)) {
+                $log->debug('  skipped uninteresting SEQ_TYPE');
+                next;
+            }
+
+            if (calcbounds_find_dark($inst, \%header)) {
+                $log->debug('  skipped dark.');
+                next;
+            }
+        }
+
+        _fix_dates(\%header);
+
+        $log->debug('  calculating bounds');
+
+        unless ($self->calc_radec($inst, $common, \%header)) {
+            $log->error('  ERROR  while finding bounds');
+
+            unless ($dry_run or $skip_state) {
+                $log->debug('Setting file paths with error state');
+                my $xfer = $self->_get_xfer_unconnected_dbh();
+                $xfer->put_state(
+                        state => 'error', files => \@file_id,
+                        comment => 'bound calc');
+            }
+
+            $n_err ++;
+            next;
+        }
+
+        unless (any {exists $header{$_}} @bound) {
+            $log->warn('  did not find any bound values.');
+            return;
+        }
+
+        $log->info('  UPDATING headers with bounds');
+
+        $self->_update_or_insert(%pass,
+                                 'headers'  => \%header,
+                                 dry_run    => $dry_run);
+    }
+
+    return $n_err;
+}
+
+sub calcbounds_make_obs {
+    my ($self, %opt) = @_;
+    my $inst = $opt{'instrument'};
+    my $dry_run = $opt{'dry_run'};
+    my $skip_state = $opt{'skip_state'};
+
+    my $log = Log::Log4perl->get_logger('');
+
+    my $group = $self->_get_obs_group(
+            'name' => $inst->name(),
+            dry_run => $dry_run,
+            skip_state => $skip_state,
+            ($self->files_given() ? ('given-files' => 1) : ()))
+        or do {
+            $log->warn('Could not make obs group.');
+            return;
+        };
+
+    my @obs = $group->obs()
+        or do {
+            $log->warn( 'Could not find any observations.' );
+            return;
+        };
+
+    @obs = $self->_filter_header($inst, \@obs,
+                                  'OBS_TYPE' => [qw/FLATFIELD/]);
+
+    return unless scalar @obs;
+    return \@obs;
+}
 
 =back
 
@@ -3067,6 +3206,168 @@ sub calculate_release_date {
         return OMP::DateTools->yesterday(1);
     }
 }
+
+# Note: functions below were imported from the calcbounds script.
+
+sub calcbounds_find_dark {
+    my ($inst, $header) = @_;
+
+    return unless $inst->can('_is_dark');
+
+    my $dark = $inst->_is_dark($header);
+    foreach my $sh (exists $header->{'SUBHEADERS'}
+                         ? @{$header->{'SUBHEADERS'}}
+                         : ()) {
+        $dark =  $inst->_is_dark($sh)
+          or last;
+    }
+
+    return $dark;
+}
+
+sub _calcbounds_check_hash_val {
+    my ($href, $key, $check) = @_;
+
+    return
+        unless $href
+            && $key
+            && $check
+            && exists $href->{$key};
+
+    my $string = $href->{$key};
+
+    return unless defined $string;
+
+    # Compiled regex given.
+    if (ref $check) {
+        my ($found) = ($string =~ $check);
+        return $found;
+    }
+
+    return $string if $string eq $check;
+
+    return;
+}
+
+sub _calcbounds_any_header_sub_val {
+    my ($header, $key, $check) = @_;
+
+    my $found = _calcbounds_check_hash_val($header, $key, $check);
+    return $found if $found;
+
+    if (exists $header->{'SUBHEADERS'}) {
+        for my $sh (@{$header->{'SUBHEADERS'}}) {
+            $found = _calcbounds_check_hash_val($sh, $key, $check);
+            return $found if $found;
+        }
+    }
+
+    return;
+}
+
+sub calcbounds_find_files {
+    my (%opt) = @_;
+
+    my ($inst, $date) = @opt{qw/instrument date/};
+
+    my $log = Log::Log4perl->get_logger('');
+
+    my @file;
+    unless ($opt{'avoid-db'}) {
+        @file = calcbounds_files_from_db($inst, $date, obs_types => $opt{'obs_types'})
+            or $log->info('Did not find any file paths in database.');
+    }
+    else {
+        $log->error_die('No date given to find files.')
+            unless $date;
+
+        $log->info('Avoiding database for file paths.');
+
+        @file = calcbounds_files_for_date($date, $inst)
+            or $log->error('Could not find any readbles files for ',
+                           'given file paths, file list, or date.');
+    }
+
+    return \@file;
+}
+
+sub calcbounds_files_for_date {
+    my ($date, $inst) = @_;
+
+    my $log = Log::Log4perl->get_logger('');
+
+    if (! $date
+            || $date !~ /^\d{8}$/
+            || (ref $date && ! $date->isa('Time::Piece'))) {
+        $log->error_die(sprintf "Bad date, '%s', given.\n",
+                                defined $date ? $date : 'undef');
+        return;
+    }
+
+    my $date_string = ref $date ? $date->ymd('') : $date;
+
+    $log->debug('Finding files for date ', $date_string);
+
+    # O::FileUtils requires date to be Time::Piece object.
+    $date = Time::Piece->strptime($date, '%Y%m%d')
+        unless ref $date;
+
+    my @file;
+
+    $log->debug('finding files for instrument ', $inst->name());
+
+    push @file, OMP::FileUtils->files_on_disk('date'       => $date,
+                                              'instrument' => $inst->name());
+
+    $log->debug('Files found for date ', $date_string, ' : ', scalar @file);
+
+    # Expand array references whcih come out from FileUtils sometimes.
+    return map {$_ && ref $_ ? @{$_} : $_} @file;
+}
+
+sub calcbounds_files_from_db {
+    my ($inst, $date, %opt) = @_;
+    my $obs_types = $opt{'obs_types'};
+
+    my $log = Log::Log4perl->get_logger('');
+
+    $log->error_die('An instrument object was not given.')
+        unless ($inst && ref $inst && $inst->can('name'));
+
+    my $pattern = lc sprintf '%s%%', substr $inst->name(), 0, 1;
+    $pattern = sprintf '%s%s%%', $pattern, $date if $date;
+
+    $log->info('Getting file paths from database matching ', $pattern);
+
+    # obsra & -dec may be null but not *{tl,tr,bl,br} if bounds do exist.
+    my $sql = sprintf('SELECT f.file_id
+        FROM COMMON c, FILES f
+        WHERE c.obsid = f.obsid
+          AND f.file_id like ?
+          AND c.utdate = ?
+          AND c.obs_type IN ( %s )
+          AND ( c.obsra IS NULL and c.obsdec IS NULL )',
+        join(',', ('?') x scalar @$obs_types));
+
+    my $jdb = new JSA::DB();
+    my $tmp = $jdb->run_select_sql(
+        'sql'    => $sql,
+        'values' => [$pattern, $date, @$obs_types]);
+
+    my @file;
+    @file = $inst->make_raw_paths(map {$_->{'file_id'}} @{$tmp})
+        if $tmp
+        && ref $tmp
+        && scalar @{ $tmp };
+
+    $log->debug('Found file paths in database: ' , scalar @file);
+
+    return @file;
+}
+
+1;
+
+__END__
 
 =back
 
