@@ -1340,6 +1340,8 @@ sub insert_hash {
             push @insert_hashes_filtered, $row unless $result->[0][0];
         }
 
+        return undef unless scalar @insert_hashes_filtered;
+
         @insert_hashes = @insert_hashes_filtered;
     }
 
