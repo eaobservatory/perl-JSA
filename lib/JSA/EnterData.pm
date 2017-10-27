@@ -2883,6 +2883,7 @@ sub calcbounds_update_bound_cols {
     my ($self, $inst, %arg) = @_;
     my $dry_run = $arg{'dry_run'};
     my $skip_state = $arg{'skip_state'};
+    my $skip_state_found = $arg{'skip_state_found'};
     my $obs_types = $arg{'obs_types'};
 
     my $n_err = 0;
@@ -2893,7 +2894,7 @@ sub calcbounds_update_bound_cols {
     my $obs_list = $self->calcbounds_make_obs(
             instrument => $inst,
             dry_run => $dry_run,
-            skip_state => $skip_state)
+            skip_state => ($skip_state or $skip_state_found))
         or return;
 
     my $log = Log::Log4perl->get_logger('');
