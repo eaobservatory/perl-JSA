@@ -12,14 +12,6 @@ JSA::EnterData - Parse headers and store in database
     # Upload metadata for Jun 25, 2008.
     $enter->date(20080625);
 
-    # Fill metadata.
-    $enter->update_mode(0);
-
-    $enter->prepare_and_insert;
-
-    # Fill file information.
-    $enter->update_mode(1);
-
     $enter->prepare_and_insert;
 
 =head1 DESCRIPTION
@@ -120,26 +112,7 @@ Currently it does not do anything.
 
 When the value is true, I<force-disk> is marked false.
 
-=item I<update-mode> C<1 | 0>
-
-A truth value to determine if to do database update (when true; see
-I<update_hash>) or an insert (when false; see I<insert_hash>).
-
-In insert mode, nothing is inserted in "FILES" table.
-
 =back
-
-=item B<update_mode>
-
-Returns the set truth value if no arguments given.
-
-    $update = $enter->update_mode;
-
-Else, sets the value to turn on or off update (off or on insert);
-returns nothing.  In insert mode, nothing is inserted in "FILES"
-table.
-
-    $enter->update_mode(0);
 
 =item B<process_simulation>
 
@@ -189,9 +162,6 @@ returns nothing.
         'force-disk'        => 1,
         'force-db'          => 0,
 
-        # Only table update (no insert).
-        'update-mode'       => 0,
-
         'instruments'       => [
             JSA::EnterData::DAS->new,
             JSA::EnterData::ACSIS->new,
@@ -213,7 +183,7 @@ returns nothing.
     );
 
     #  Generate some accessor functions.
-    for my $k (keys %default, qw/conditional_insert/) {
+    for my $k (keys %default) {
         next if (any {$k eq $_} (
                 # Special handling when date to set is given.
                 'date',
@@ -789,11 +759,12 @@ It is called by I<prepare_and_insert> method.
 
         $self->fill_headers_COMMON($common_hdrs, $common_obs);
 
-        my $error = $self->_modify_db_on_obsend(%pass_arg,
-                                                'dbhandle' => $dbh,
-                                                'table'    => 'COMMON',
-                                                'headers'  => $common_hdrs,
-                                                dry_run    => $dry_run);
+        my $error = $self->_update_or_insert(
+            %pass_arg,
+            'dbhandle' => $dbh,
+            'table'    => 'COMMON',
+            'headers'  => $common_hdrs,
+            dry_run    => $dry_run);
 
         if ($dbh->err()) {
             my $text = $dbh->errstr();
@@ -1206,11 +1177,12 @@ sub add_subsys_obs {
                     if scalar @temp;
             }
 
-            $error = $self->_modify_db_on_obsend(%pass_args,
-                                                 'dbhandle' => $dbh,
-                                                 'table'   => $inst->table,
-                                                 'headers' => $subh,
-                                                 dry_run   => $dry_run);
+            $error = $self->_update_or_insert(
+                %pass_args,
+                'dbhandle' => $dbh,
+                'table'   => $inst->table,
+                'headers' => $subh,
+                dry_run   => $dry_run);
 
             if ($dbh->err()) {
                 my $text = $dbh->errstr();
@@ -1308,9 +1280,8 @@ In case of error, returns the value as returned by C<DBI->execute>.
 sub insert_hash {
     my ($self, %args) = @_;
 
-    my ($table, $dbh, $insert, $dry_run) = @args{qw/table dbhandle insert dry_run/};
-
-    my $conditional = $self->conditional_insert;
+    my ($table, $dbh, $insert, $dry_run, $conditional) =
+        @args{qw/table dbhandle insert dry_run conditional/};
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1412,12 +1383,31 @@ sub insert_hash {
     return ($sum, scalar @file ? [@file] : ());
 }
 
+=item B<prepare_update_hash>
+
+Compare the given field values with those already in the given
+database table.
+
+Returns two lists of hashes, one corresponding to update operations
+and one corresponding to insert operations which should be performed:
+
+    Update operations:
+        differ
+        unique_key
+        unique_val
+
+    Insert operations:
+        insert
+
+=cut
+
 sub prepare_update_hash {
     my ($self, $table, $dbh, $field_values) = @_;
 
-    return if $table eq 'FILES';
-
     my $log = Log::Log4perl->get_logger('');
+
+    $log->logdie('prepare_update_hash cannot be used for table FILES')
+        if $table eq 'FILES';
 
     # work out which key uniquely identifies the row
     my $unique_key = _get_primary_key($table);
@@ -1429,10 +1419,6 @@ sub prepare_update_hash {
     my @unique_key = ref $unique_key ? @{$unique_key} : $unique_key ;
 
     my $rows = $self->_handle_multiple_changes($table, $field_values);
-
-    # run a query with this unique value (but on FILES table more than
-    # one entry can be returned - we trap that because FILES for the minute
-    # should not need updating
 
     my $sql = 'select * ';
 
@@ -1450,6 +1436,7 @@ sub prepare_update_hash {
           . join ' AND ', map {" $_ = ? "} @unique_key;
 
     my @update_hash;
+    my @insert_hash;
     foreach my $row (@{$rows}) {
         my @unique_val = map $row->{$_}, @unique_key;
 
@@ -1465,9 +1452,14 @@ sub prepare_update_hash {
         # how many rows
         my $count = scalar @{$ref};
 
-        throw JSA::Error::DBError
-            "Can only update if the row exists previously!\n"
-            if 0 == $count;
+        if (0 == $count) {
+            # Row does not already exist: add to the insert list.
+            $log->debug("new data to insert: " . (join ' ', @unique_val));
+
+            push @insert_hash, $row;
+
+            next;
+        }
 
         $log->logdie("Should not be possible to have more than one row. Got $count\n")
             if $count > 1;
@@ -1607,7 +1599,7 @@ sub prepare_update_hash {
 
     }
 
-    return [@update_hash];
+    return (\@update_hash, \@insert_hash);
 }
 
 sub _suffix_start_end_headers {
@@ -2369,10 +2361,6 @@ sub _change_FILES {
 
     my $dbh = $db->handle();
 
-    my $old_cond = $self->conditional_insert;
-    $self->conditional_insert(1)
-        if $self->update_mode;
-
     # Create headers that don't exist
     $self->fill_headers_FILES($inst, $headers, $obs);
 
@@ -2391,7 +2379,8 @@ sub _change_FILES {
         ($error, $files) = $self->insert_hash('table'   => $table,
                                               'dbhandle'=> $dbh,
                                               'insert'  => $hash,
-                                              dry_run   => $dry_run);
+                                              dry_run   => $dry_run,
+                                              conditional => 1);
 
         $error = $dbh->errstr
             if $dbh->err();
@@ -2399,8 +2388,6 @@ sub _change_FILES {
     catch JSA::Error with {
         $error = shift @_;
     };
-
-    $self->conditional_insert($old_cond);
 
     if ( $dbh->err() ) {
         $db->rollback_trans() if not $dry_run;
@@ -2424,9 +2411,9 @@ sub _change_FILES {
 
 =item B<_update_or_insert>
 
-It is a wrapper around I<update_hash> and I<insert_hash> methods.  It
-calls I<update_hash> if value returned by I<update> method is true;
-else, I<insert_hash> method is called.
+It is a wrapper around I<update_hash> and I<insert_hash> methods.
+It calls C<prepare_update_hash> to identify the necessary insert and
+update operations, and then calls the above methods as appropriate.
 
 Returns the error string the database handle, given a hash with
 C<table>, C<columns>, C<dict>, C<headers> as keys.  For details about
@@ -2440,26 +2427,30 @@ methods.
 sub _update_or_insert {
     my ($self, %args) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
+
     my $vals = $self->get_insert_values(%args);
 
     my $table = $args{'table'};
     my $dry_run = $args{'dry_run'};
 
-    my $ok;
-    if ($self->update_mode) {
-        my $change = $self->prepare_update_hash(
-            @args{qw/table dbhandle/}, $vals);
+    my ($change_update, $change_insert) = $self->prepare_update_hash(
+        @args{qw/table dbhandle/}, $vals);
 
-        $ok = $self->update_hash(@args{qw/table dbhandle/}, $change,
-                                 dry_run => $dry_run);
+    if (scalar @$change_insert) {
+        $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
+            if 'COMMON' eq $table ;
 
-        $ok = defined $ok;
-    }
-    else {
-        $ok = $self->_combined_prepare_insert_hash(
-            $vals,
+        $self->insert_hash(
+            insert => $change_insert,
             dry_run => $dry_run,
             map {$_ => $args{$_}} qw/table dbhandle/);
+    }
+
+    if (scalar @$change_update) {
+        $self->update_hash(@args{qw/table dbhandle/}, $change_update,
+                           dry_run => $dry_run);
+
     }
 
     return $args{'dbhandle'}->errstr;
@@ -2480,102 +2471,6 @@ sub _apply_kludge_for_COMMON {
     }
 
     return [map {$val{$_}} keys %val];
-}
-
-sub _modify_db_on_obsend {
-    my ($self, %args) = @_;
-
-    # (Try to) Obey update_mode() as usual.
-    unless ($self->_find_header('headers' => $args{'headers'},
-                                'name' => 'OBSEND',
-                                'test' => 'true')) {
-        my ($err_text, $try_insert);
-
-        try {
-            $err_text = $self->_update_or_insert(%args);
-        }
-        catch JSA::Error::DBError with {
-            my ($err) = @_;
-
-            # Swallow case of zero rows affected.
-            throw JSA::Error::DBError $err
-                unless $err->text =~ /Can.+update if the row exists previously/i;
-
-            $try_insert ++;
-        };
-
-        return $err_text unless $try_insert;
-
-        return $self->_combined_prepare_insert_hash(
-            $self->get_insert_values(%args),
-            map {$_ => $args{$_}} qw/table dbhandle dry_run/);
-    }
-
-    my $old_insert = $self->conditional_insert;
-
-    my $old_mode = $self->update_mode;
-    $self->update_mode(1);
-
-    my $table = $args{'table'};
-    my $vals = $self->get_insert_values(%args);
-    my $val_count;
-    {
-        my $key = (keys %{$vals})[0];
-        $val_count = ref $vals->{$key} ? scalar @{$vals->{$key}} : 1;
-    }
-    my $affected;
-
-    # Try UPDATE.
-    unless ($table eq 'FILES') {
-        my $change;
-
-        try {
-          $change = $self->prepare_update_hash(@args{qw/table dbhandle/}, $vals);
-        }
-        catch JSA::Error::DBError with {
-            my ($err) = @_;
-
-            # Swallow case of zero rows affected.
-            throw JSA::Error::DBError $err
-                unless $err->text =~ /Can.+update if the row exists previously/i;
-        };
-
-        $affected = $self->update_hash(@args{qw/table dbhandle/}, $change,
-                                       dry_run => $args{'dry_run'});
-    }
-
-    if (! $affected || $val_count > $affected) {
-        $self->update_mode(0);
-
-        # Use conditional insert so that on INSERT failure $dbh->{'AutoCommit'} is
-        # NOT set to 1, which breaks the existing transaction setup elsewhere .
-        $self->conditional_insert(1);
-
-        $self->_combined_prepare_insert_hash(
-            $vals,
-            map {$_ => $args{$_}} qw/table dbhandle dry_run/);
-    }
-
-    $self->update_mode($old_mode);
-    $self->conditional_insert($old_insert);
-
-    return $args{'dbhandle'}->errstr;
-}
-
-sub _combined_prepare_insert_hash {
-    my ($self, $vals, %args) = @_;
-
-    my $table = $args{'table'};
-    my $dry_run = $args{'dry_run'};
-
-    $vals = $self->prepare_insert_hash($table, $vals);
-
-    $vals = $self->_apply_kludge_for_COMMON($vals)
-        if 'COMMON' eq $table ;
-
-    return $self->insert_hash(%args,
-                              'insert' => $vals,
-                              dry_run => $dry_run);
 }
 
 =item B<_find_header>
