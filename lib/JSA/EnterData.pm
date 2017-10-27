@@ -40,6 +40,7 @@ use Scalar::Util qw/blessed looks_like_number/;
 
 use Astro::Coords::Angle::Hour;
 
+use JSA::DB;
 use JSA::Headers qw/read_jcmtstate read_wcs/;
 use JSA::Datetime qw/make_datetime/;
 use JSA::DB::TableCOMMON;
@@ -2791,6 +2792,9 @@ sub _verify_file_name {
 }
 
 # JSA::DB::TableTransfer object, to be created as needed.
+# $dbh can be a subroutine reference, in which case it is called
+# to get the database handle.  (This is so that, if the name is found
+# in the cache, we need not make a new handle.)
 {
     my %xfer;
 
@@ -2803,6 +2807,10 @@ sub _verify_file_name {
             if exists  $xfer{$name}
             && defined $xfer{$name};
 
+        if ('CODE' eq ref $dbh) {
+            $dbh = $dbh->();
+        }
+
         return $xfer{$name} =
             JSA::DB::TableTransfer->new('dbhandle'     => $dbh,
                                         'transactions' => 0);
@@ -2813,7 +2821,9 @@ sub _verify_file_name {
 
 It is similar to above I<_get_xfer> method about what it accepts and
 returns.  Difference is that this method uses a new database handle
-unconnected to the one used elsewhere.
+unconnected to the one used elsewhere.  (Note it's not entirely
+unconnected -- if the default (or a previous) name is used, then
+a cached object is returned.
 
 =cut
 
@@ -2822,11 +2832,11 @@ sub _get_xfer_unconnected_dbh {
 
     $name ||= 'xfer-new-dbh';
 
-    require JSA::DB;
-    my $db = JSA::DB->new('name' => $name);
-    $db->use_transaction(0);
-
-    return $self->_get_xfer($db->dbhandle(), $name);
+    return $self->_get_xfer(sub {
+            my $db = JSA::DB->new('name' => $name);
+            $db->use_transaction(0);
+            return $db->dbhandle();
+        }, $name);
 }
 
 sub _compare_dates {
