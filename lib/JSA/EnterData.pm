@@ -1493,10 +1493,7 @@ sub prepare_update_hash {
         foreach my $key (sort keys %{$indb}) {
             $log->debug("testing field: $key");
 
-            next
-                # since that will update automatically
-                if $key eq 'last_modified'
-                || ($key !~ $miss_ok && ! exists $field_values->{$key});
+            next if ($key !~ $miss_ok && ! exists $field_values->{$key});
 
             my $new = $field_values->{$key};
             my $old = $indb->{$key};
@@ -1798,14 +1795,6 @@ sub fill_headers_COMMON {
     $log->trace(sprintf
         "Created header [release_date] with value [%s]",
         $header->{'release_date'});
-
-    # Create last_modified
-    my $today = gmtime;
-    $header->{'last_modified'} = $today->strftime('%F %T');
-
-    $log->trace(sprintf
-        "Created header [last_modified] with value [%s]",
-        $header->{'last_modified'});
 
     if (exists $header->{'INSTRUME'} && ! defined $header->{'BACKEND'}) {
         $header->{'BACKEND'} = $header->{'INSTRUME'};

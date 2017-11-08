@@ -21,7 +21,7 @@ sub column_names {
         hstend hststart humend humstart
         inbeam inbeam_orig instap instap_x instap_y instrume int_time
         jigl_cnt jigl_crd jigl_nam jigl_pa jig_scal jos_min jos_mult
-        last_modified lat_obs locl_crd long_obs lstend lststart
+        lat_obs locl_crd long_obs lstend lststart
         map_hght map_pa map_wdth map_x map_y msbid msbtid
         moving_target
         nfocstep num_cyc
