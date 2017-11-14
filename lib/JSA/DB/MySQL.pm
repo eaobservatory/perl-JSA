@@ -1,14 +1,14 @@
-package JSA::DB::Sybase;
+package JSA::DB::MySQL;
 
 =pod
 
 =head1 NAME
 
-JSA::DB::Sybase - Connects to a Sybase database server
+JSA::DB::MySQL - Connects to a MySQL database server
 
 =head1 SYNOPSIS
 
-    use JSA::DB::Sybase qw/connect_to_db/;
+    use JSA::DB::MySQL qw/connect_to_db/;
 
     $dbh = connect_to_db($ini_config_file);
 
@@ -32,6 +32,7 @@ use warnings;
 use Carp qw/croak/;
 use Exporter qw/import/;
 use Log::Log4perl;
+use DBI;
 
 use OMP::Config;
 
@@ -73,9 +74,11 @@ given database.
 
         $omp_cf->configDatabase($config);
 
-        my ($server, $db, $user, $pass) =
+        my ($driver, $server, $db, $user, $pass) =
             map {$omp_cf->getData("database.$_")}
-                qw/server  database  user  password/;
+                qw/driver server  database  user  password/;
+
+        die "DBI driver $driver not recognized" unless $driver eq 'mysql';
 
         my $key = join ':', ($name ? $name : '', $server, $db, $user);
 
@@ -92,20 +95,15 @@ given database.
             return $_handles{ $key };
         }
 
-        require DBI;
-
-        my $dbh = DBI->connect("dbi:Sybase:server=$server" , $user, $pass, {
-            'RaiseError' => 1,
-            'PrintError' => 0,
-            'AutoCommit' => 1,
+        my $dbh = DBI->connect(
+            "dbi:mysql:database=$db;host=$server;mysql_connect_timeout=10;mysql_auto_reconnect=0",
+            $user, $pass, {
+                'RaiseError' => 1,
+                'PrintError' => 0,
+                'AutoCommit' => 1,
         }) or $log->logcroak( $DBI::errstr );
 
-        for ($dbh) {
-            $_->{'syb_show_sql'} = 1;
-            $_->{'syb_show_eed'} = 1;
-
-            $_->do("use $db") or $log->logdie($_->errstr);
-        }
+        $dbh->do("use $db") or $log->logdie($_->errstr);
 
         $_handles{$key} = $dbh;
 

@@ -17,7 +17,7 @@ tiles for individual observations.
 
 =over 4
 
-=item B<-debug>
+=item B<--dry-run>
 
 Enable debug messages and do not actually submit a processing job. Also
 disables emailing.
@@ -81,7 +81,7 @@ Print version information.
 =cut
 
 
-use JAC::Setup qw/omp sybase/;
+use JAC::Setup qw/omp/;
 
 use strict;
 use warnings;
@@ -104,7 +104,7 @@ use IO::File;
 prepare_archive_db();
 
 # Handle command-line options.
-my ($help, $man, $project, $ut, $version, $priority, $noemail, $debug,
+my ($help, $man, $project, $ut, $version, $priority, $noemail, $dry_run,
     $queue, $filter, $only_info, $task,
     $not_moving_obsid_file);
 my $status = GetOptions(
@@ -114,7 +114,7 @@ my $status = GetOptions(
     "ut=s"      => \$ut,
     "priority=i"=> \$priority,
     "version"   => \$version,
-    "debug"     => \$debug,
+    "dry-run"   => \$dry_run,
     "noemail"   => \$noemail,
     'filter=s'  => \$filter,
     "queue=s"   => \$queue,
@@ -144,7 +144,7 @@ if ($not_moving_obsid_file) {
     $fh->close()
 }
 
-echo_messages($noemail || $debug);
+echo_messages($noemail || $dry_run);
 
 # All observations are submitted regardless of status except for JUNK.
 # A standard recipe is used.
@@ -277,13 +277,13 @@ else {
     }
 
     # Add the jobs to the local JSA processing system.
-    add_jsa_proc_jobs(\%groups, $mode, $priority, $only_info, $debug);
+    add_jsa_proc_jobs(\%groups, $mode, $priority, $only_info, $dry_run);
 }
 
-write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $debug;
+write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $dry_run;
 
 send_log_email('JSA HPX SCUBA-2 Obs Processing', $ut, $project)
-    unless $noemail || $debug;
+    unless $noemail || $dry_run;
 
 exit;
 

@@ -11,7 +11,7 @@ use strict;
 use parent qw/Exporter/;
 
 use Alien::Taco;
-use Data::Dumper; # For "debug" mode.
+use Data::Dumper; # For "dry run" mode output.
 
 use JSA::Submission qw/log_message/;
 
@@ -21,7 +21,7 @@ our @EXPORT_OK = qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 =over 4
 
-=item add_jsa_proc_jobs(\%groups, $mode, $priority, $add_info_only, $debug, %options)
+=item add_jsa_proc_jobs(\%groups, $mode, $priority, $add_info_only, $dry_run, %options)
 
 Adds processing jobs to the JSA local processing system.
 C<\%groups> is a reference to a hash holding groups and information about them.
@@ -99,15 +99,15 @@ but not with C<$add_info_only>.
         my $mode = shift;
         my $priority = shift;
         my $add_info_only = shift;
-        my $debug = shift;
+        my $dry_run = shift;
         my %options = @_;
 
         log_message("\nBeginning to add jobs to local jsa_proc system.\n");
 
         # Create Taco connection to Python unless we already have one.
-        # Submission mode debugging does not require a connection, but
-        # info adding debugging does.
-        unless (($debug and not $add_info_only) or defined $jsa_proc_db) {
+        # Submission mode dry run does not require a connection, but
+        # info adding dry run does.
+        unless (($dry_run and not $add_info_only) or defined $jsa_proc_db) {
             log_message("Opening connection to jsa_proc.\n");
             $taco = new Alien::Taco(lang => 'python');
             $taco->import_module('jsa_proc.config', args => ['get_database']);
@@ -123,8 +123,8 @@ but not with C<$add_info_only>.
                             'logging.' . uc($options{'jsa_proc_logging'}))});
             }
         }
-        elsif ($debug) {
-            log_message("Skipping connection to jsa_proc. [DEBUG MODE]\n");
+        elsif ($dry_run) {
+            log_message("Skipping connection to jsa_proc. [DRY RUN MODE]\n");
         }
 
         my $location = 'JAC';
@@ -158,8 +158,8 @@ but not with C<$add_info_only>.
                     task            => $group->{'task'},
                 );
 
-                unless ($debug) {
-                    # In non-debug mode, try calling the add_job method.
+                unless ($dry_run) {
+                    # In non-dry run mode, try calling the add_job method.
 
                     log_message("Adding job to jsa_proc database.\n");
                     eval {
@@ -181,9 +181,9 @@ but not with C<$add_info_only>.
                     }
                 }
                 else {
-                    # In debug mode, print the arguments we would have given.
+                    # In dry run mode, print the arguments we would have given.
 
-                    log_message("Would have added the job: [DEBUG MODE]\n");
+                    log_message("Would have added the job: [DRY RUN MODE]\n");
                     log_message(Data::Dumper->Dump([\%args], [qw/args/]));
                 }
             }
@@ -225,8 +225,8 @@ but not with C<$add_info_only>.
                     obsinfolist => $group->{'obsinfolist'},
                 );
 
-                unless ($debug) {
-                    # Non-debug mode: attempt to update the job info.
+                unless ($dry_run) {
+                    # Non-dry run mode: attempt to update the job info.
 
                     log_message("Updating obs info in jsa_proc database.\n");
                     eval {
@@ -238,9 +238,9 @@ but not with C<$add_info_only>.
                     }
                 }
                 else {
-                    # Debug mode: print the arguments we would have submitted.
+                    # Dry run mode: print the arguments we would have submitted.
 
-                    log_message("Would have updated the job: [DEBUG MODE]\n");
+                    log_message("Would have updated the job: [DRY RUN MODE]\n");
                     log_message(Data::Dumper->Dump([\%args], [qw/args/]));
                 }
             }

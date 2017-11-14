@@ -12,9 +12,9 @@ JSA::Datetime - Parse a date-time value, returns L<DateTime> object.
 
     $dt = make_datetime('2010-03-24T03:00:00');
 
-    $syb_dt = make_datetime('Mar  3 2010');
+    $mysql_dt = make_datetime('2010-03-03 02:00:00');
 
-    print 'ISO date > Sybase date' if $dt > $syb_dt;
+    print 'ISO date > MySQL date' if $dt > $mysql_dt;
 
 =head1 DESCRIPTION
 
@@ -49,8 +49,6 @@ our @EXPORT_OK = qw/
 
 use DateTime;
 
-use JSA::Datetime::Sybase qw/parse_syb_datetime/;
-
 =item B<make_datetime>
 
 Parses, verifies a given date; if missing, current UTC date is used.
@@ -58,24 +56,21 @@ Returns a L<DateTime> object.
 
     $dt = make_datetime(20100324);
 
-ISO8601 and default Sybase display date & datetime strings are
-accepted.
+ISO8601 and default MySQL datetime strings are accepted.
 
 =cut
 
 sub make_datetime {
     my ($time, $tz) = @_;
 
-    my %tz = ('time_zone' => $tz || 0);
+    my $now = DateTime->now('time_zone' => $tz || 0);
 
-    return parse_syb_datetime($time, $tz{'time_zone'})
-        if $time
-        && $time =~ JSA::Datetime::Sybase::_syb_datetime_regex();
+    return $now unless defined $time;
 
-    my $now = DateTime->now(%tz);
-
-    return $now
-        unless defined $time;
+    # Convert MySQL format (w/o T) to ISO format (w/ T).
+    if ($time =~ /^(\d+-\d+-\d+) (\d+:\d+:\d+)$/) {
+        $time = $1 . 'T' . $2;
+    }
 
     # Pass optional base date to take care of given time zone.
     return parse_iso8601_datetime( $time, $now );
@@ -190,10 +185,6 @@ __END__
 =head1 SEE ALSO
 
 =over 2
-
-=item *
-
-JSA::Datetime::Sybase for Sybase date, datetime, or time parsing
 
 =item *
 

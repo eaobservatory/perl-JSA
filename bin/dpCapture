@@ -42,7 +42,7 @@ to receive the output files if the "-persist" option is true.
 If the directory does not exist but the parent does, an attempt will
 be made to create it first.
 
-=item B<-debug>
+=item B<--verbose>
 
 Write informational messages to standard error. Not supported by CADC.
 
@@ -68,12 +68,12 @@ use JSA::Files qw/looks_like_cadcfile scan_dir/;
 my $CADCDIR = "/export/jcmtdata/ptransfer/new";
 
 # Options
-my ($help, $man, $version, $persist, $transdir, $debug);
+my ($help, $man, $version, $persist, $transdir, $verbose);
 my $status = GetOptions(
     "help" => \$help,
     "man" => \$man,
     "version" => \$version,
-    "debug" => \$debug,
+    "verbose" => \$verbose,
     "persist" => \$persist,
     "transdir=s" => \$transdir,
 );

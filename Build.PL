@@ -59,9 +59,6 @@ my $build = Module::Build->new(
         'Log::Log4perl' => 0,
         'File::HomeDir' => 0,
     },
-    recommends => {
-        'DBD::Sybase' => 0,
-    },
     build_requires => {
         'Test::More' => 0,
         'Test::Command' => 0,

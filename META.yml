@@ -30,8 +30,8 @@ provides:
   JSA::DB:
     file: lib/JSA/DB.pm
     version: 0
-  JSA::DB::Sybase:
-    file: lib/JSA/DB/Sybase.pm
+  JSA::DB::MySQL:
+    file: lib/JSA/DB/MySQL.pm
     version: 0
   JSA::DB::TableCOMMON:
     file: lib/JSA/DB/TableCOMMON.pm
@@ -41,9 +41,6 @@ provides:
     version: 0
   JSA::Datetime:
     file: lib/JSA/Datetime.pm
-    version: 0
-  JSA::Datetime::Sybase:
-    file: lib/JSA/Datetime/Sybase.pm
     version: 0
   JSA::EnterData:
     file: lib/JSA/EnterData.pm
@@ -162,8 +159,6 @@ provides:
   JSA::WriteList:
     file: lib/JSA/WriteList.pm
     version: 0.01
-recommends:
-  DBD::Sybase: 0
 requires:
   Astro::Coords: 0
   Astro::FITS::HdrTrans: 1

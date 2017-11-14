@@ -112,10 +112,6 @@ given).
 Similar to ORAC-DR C<-log> option. By default log messages are written to an
 HTML log file and standard output.
 
-=item B<-debug>
-
-Enable debug messages.
-
 =item B<-debugxfer>
 
 Enable debugging directory listings for capture.
@@ -237,14 +233,13 @@ print "*** ENV:\n";
 print Dumper \%ENV;
 
 # Options
-my ($cleanup, $debug, $drcommand, $drparameters, $help, $id, $indir, $inputs,
+my ($cleanup, $drcommand, $drparameters, $help, $id, $indir, $inputs,
     $instrument, $log, $man, $mode, $specified_outdir, $parameters, $persist,
     $tmpdir, $transdir, $ut, $show_version, $version, $debugxfer,
     $raw_output);
 
 my $status = GetOptions(
     "cleanup=s"     => \$cleanup,
-    "debug"         => \$debug,
     'drcommand=s'   => \$drcommand,
     "drparameters=s"=> \$drparameters,
     "help"          => \$help,

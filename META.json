@@ -29,9 +29,6 @@
          }
       },
       "runtime" : {
-         "recommends" : {
-            "DBD::Sybase" : "0"
-         },
          "requires" : {
             "Astro::Coords" : "0",
             "Astro::FITS::HdrTrans" : "1",
@@ -71,8 +68,8 @@
          "file" : "lib/JSA/DB.pm",
          "version" : 0
       },
-      "JSA::DB::Sybase" : {
-         "file" : "lib/JSA/DB/Sybase.pm",
+      "JSA::DB::MySQL" : {
+         "file" : "lib/JSA/DB/MySQL.pm",
          "version" : 0
       },
       "JSA::DB::TableCOMMON" : {
@@ -85,10 +82,6 @@
       },
       "JSA::Datetime" : {
          "file" : "lib/JSA/Datetime.pm",
-         "version" : 0
-      },
-      "JSA::Datetime::Sybase" : {
-         "file" : "lib/JSA/Datetime/Sybase.pm",
          "version" : 0
       },
       "JSA::EnterData" : {

@@ -32,7 +32,7 @@ same as the old file.
 
 =over 4
 
-=item B<-debug>
+=item B<--verbose>
 
 Write informational messages to standard error. Not supported by CADC.
 
@@ -63,14 +63,14 @@ use FindBin;
 use lib $FindBin::RealBin."/../lib";
 
 # Options
-my ($help, $man, $version, $inputs, $debug, $outdir );
+my ($help, $man, $version, $inputs, $verbose, $outdir );
 my $status = GetOptions(
     "help" => \$help,
     "man" => \$man,
     "version" => \$version,
     "inputs=s" => \$inputs,
     "outdir=s" => \$outdir,
-    "debug" => \$debug,
+    "verbose" => \$verbose,
 );
 
 pod2usage(1) if $help;
@@ -84,7 +84,7 @@ if ($version) {
 # output directory defaulting
 if ($outdir) {
     print STDERR "Overriding output directory with $outdir\n"
-      if $debug;
+      if $verbose;
 }
 else {
     $outdir = File::Spec->curdir;
@@ -143,7 +143,7 @@ for my $line (@lines) {
                         or die "Could not make soft link to '$file' in retrieve directory ($absdir)\n";
 
                     print STDERR "Re-making soft link for '$file'\n"
-                        if $debug;
+                        if $verbose;
                 }
             }
             else {
@@ -156,7 +156,7 @@ for my $line (@lines) {
                     or die "Error touching file '$file' in current directory ($absdir)";
 
                 print STDERR "Touching pre-existing file '$file'\n"
-                    if $debug;
+                    if $verbose;
             }
         }
         else {

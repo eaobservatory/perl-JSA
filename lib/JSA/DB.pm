@@ -31,7 +31,7 @@ use Log::Log4perl;
 use Scalar::Util qw/looks_like_number/;
 
 use JSA::Error qw/:try/;
-use JSA::DB::Sybase qw/connect_to_db/;
+use JSA::DB::MySQL qw/connect_to_db/;
 use JSA::LogSetup qw/hashref_to_dumper/;
 
 use OMP::Config;
@@ -381,7 +381,8 @@ Returns number of affected rows if any.
     $affected =
       $jdb->insert('table'   => 'the_table',
                    'columns' => ['a', 'b'],
-                   'values'  => [[1, 2], [4, 6]]);
+                   'values'  => [[1, 2], [4, 6]],
+                   'on_duplicate' => 'col="val"');
 
 On database error, rollbacks the transaction, errors are passed up.
 
@@ -407,10 +408,8 @@ sub insert {
                       join(', ', @cols),
                       join(', ', ('?') x $size);
 
-    # Append the string if given, say something like
-    # 'WHERE NOT EXIST IN ( SELECT ... )'.
-    $sql .= ' ' . $arg{'_append'}
-        if $arg{'_append'};
+    $sql .= ' ON DUPLICATE KEY UPDATE ' . $arg{'on_duplicate'}
+        if exists $arg{'on_duplicate'};
 
     return $self->_run_change_loop('sql'    => $sql,
                                    'values' => $arg{'values'});

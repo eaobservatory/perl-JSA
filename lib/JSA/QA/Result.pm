@@ -5,8 +5,6 @@ use strict;
 use warnings;
 use Carp;
 
-use vars qw/$VERSION $DEBUG/;
-
 use Exporter 'import';
 
 sub new {

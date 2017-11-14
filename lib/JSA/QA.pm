@@ -28,14 +28,11 @@ use Statistics::Descriptive;
 
 use JSA::QA::Result;
 
-use vars qw/$VERSION $DEBUG/;
-
 use Exporter 'import';
-our @EXPORT = qw/$VERSION $DEBUG analyse_timeseries_rms analyse_tsys
+our @EXPORT = qw/analyse_timeseries_rms analyse_tsys
                  analyse_tsysmax analyse_tsysvar retrieve_constant/;
 
-$VERSION = '1.00';
-$DEBUG   = 1;
+our $VERSION = '1.00';
 
 use constant BAD_VALUE => 'bad';
 
