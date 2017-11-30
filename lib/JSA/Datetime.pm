@@ -68,7 +68,7 @@ sub make_datetime {
     return $now unless defined $time;
 
     # Convert MySQL format (w/o T) to ISO format (w/ T).
-    if ($time =~ /^(\d+-\d+-\d+) (\d+:\d+:\d+)$/) {
+    if ($time =~ /^(\d+-\d+-\d+) (\d+:\d+:\d+(?:\.\d+)?)$/) {
         $time = $1 . 'T' . $2;
     }
 
