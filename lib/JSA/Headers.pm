@@ -558,11 +558,14 @@ published papers containing data obtained with the JCMT:
 
 "The James Clerk Maxwell Telescope is operated by the East Asian
 Observatory on behalf of The National Astronomical Observatory of
-Japan, Academia Sinica Institute of Astronomy and Astrophysics,
-the Korea Astronomy and Space Science Institute, the National
-Astronomical Observatories of China and the Chinese Academy of
-Sciences (Grant No. XDB09000000), with additional funding support
-from the Science and Technology Facilities Council of the United
+Japan; Academia Sinica Institute of Astronomy and Astrophysics;
+the Korea Astronomy and Space Science Institute; the Operation,
+Maintenance and Upgrading Fund for Astronomical Telescopes and
+Facility Instruments, budgeted from the Ministry of Finance
+(MOF) of China and administrated by the Chinese Academy of
+Sciences (CAS), as well as the National Key R&D Program of China
+(No. 2017YFA0402700). Additional funding support is provided
+by the Science and Technology Facilities Council of the United
 Kingdom and participating universities in the United Kingdom and
 Canada."
 
