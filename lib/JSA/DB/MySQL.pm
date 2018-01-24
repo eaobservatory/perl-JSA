@@ -96,7 +96,7 @@ given database.
         }
 
         my $dbh = DBI->connect(
-            "dbi:mysql:database=$db;host=$server;mysql_connect_timeout=10;mysql_auto_reconnect=0",
+            "dbi:mysql:database=$db;host=$server;mysql_connect_timeout=10;mysql_auto_reconnect=1",
             $user, $pass, {
                 'RaiseError' => 1,
                 'PrintError' => 0,
