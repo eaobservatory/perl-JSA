@@ -1921,6 +1921,97 @@ sub munge_header_INBEAM {
     return $headers;
 }
 
+=item B<_combine_inbeam_values>
+
+Combine multiple INBEAM header values.  Should be passed a list of
+header values, each of which is a space-separated list of pieces of
+equipment in the beam.  Rules for combining the values are as follows:
+
+=over 4
+
+=item
+
+"shutter" should be removed unless present in all entries.
+
+This is because many observations include sequences with the
+shutter closed before (and/or after) main science sequence,
+and we do not want to label the whole observation as having
+the shutter in the beam because of that.
+
+=item
+
+Other entries are kept only if they appear without shutter,
+unless shutter appears everywhere.
+
+The reason for this is just in case a piece of equipment
+is left in the beam from a previous observation for initial
+closed-shutter sequences.  So if we observed the sky (i.e.
+the shutter was not in the beam) we are only interested in
+what was in the beam at that time.
+
+=back
+
+These rules need to work both when combining the headers
+from several data files, and when merging a new value with
+an existing value in the database in an incremental update
+situation.
+
+Returns a space-separated list of names in lower case,
+sorted in alphabetical order to aid testing.
+
+=cut
+
+sub _combine_inbeam_values {
+    my $self = shift;
+
+    my $n = 0;
+    my $n_shutter = 0;
+
+    my %entry_all = ();
+    my %entry_wo_shutter = ();
+
+    foreach (@_) {
+        $n ++;
+
+        my $shutter = 0;
+        my @non_shutter = ();
+
+        foreach (split ' ', lc($_)) {
+            if ($_ eq 'shutter') {
+                $shutter = 1;
+            }
+            else {
+                $entry_all{$_} = 1;
+                push @non_shutter, $_;
+            }
+        }
+
+        if ($shutter) {
+            $n_shutter ++;
+        }
+        else {
+            $entry_wo_shutter{$_} = 1 foreach @non_shutter;
+        }
+    }
+
+    # Nothing: return empty string.
+    return '' unless $n;
+
+    my @vals;
+
+    if ($n == $n_shutter) {
+        # Everything has shutter: include shutter and all the values.
+
+        @vals = ('shutter', keys %entry_all);
+    }
+    else {
+        # Not everything has shutter: return only those entries which
+        # appear without it.
+        @vals = keys %entry_wo_shutter;
+    }
+
+    return join(' ', sort {$a cmp $b} @vals);
+}
 
 =item B<get_columns>
 
