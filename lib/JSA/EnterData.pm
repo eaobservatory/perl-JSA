@@ -1516,6 +1516,15 @@ sub prepare_update_hash {
             next if $only_obstime
                  && $key !~ $obs_date_re;
 
+            # INBEAM header: special handling.
+            if ($key =~ $inbeam_re) {
+                my $combined = $self->_combine_inbeam_values(($old // ''), $new);
+                $combined = undef if $combined eq '';
+                $differ{$key} = $combined;
+                $log->debug($key . ' = ' . ($combined // '<undef>'));
+                next;
+            }
+
             # Not defined currently - inserting new value.
             if (defined $new && ! defined $old) {
                 $differ{$key} = $new;
@@ -1891,20 +1900,7 @@ space separated list. Returns a possibly changed header hash reference.
 sub munge_header_INBEAM {
     my ($self , $headers) = @_;
 
-    my $name        = 'INBEAM';
-    my $empty_re    = qr/^\s*$/;
-    my $shutter_re  = qr/\b SHUTTER \b/ix;
-
-    $self->_delete_header(
-        'headers' => $headers,
-        'name'   => $name,
-        'test'   => sub {
-            my ($val) = @_;
-            return defined $val
-                && ! ref $val
-                && ($val =~ $shutter_re || $val =~ $empty_re);
-        },
-    );
+    my $name = 'INBEAM';
 
     my @val = $self->_find_header(
         'headers' => $headers,
@@ -1915,8 +1911,9 @@ sub munge_header_INBEAM {
         qr/\b(?: science | pointing | focus )\b/xi
     );
 
-    $headers->{$name} = lc(join ' ' , @val)
-        if scalar @val;
+    $headers->{$name} = (scalar @val)
+        ? $self->_combine_inbeam_values(@val)
+        : '';
 
     return $headers;
 }
@@ -2658,7 +2655,7 @@ sub _find_header {
     if (wantarray and defined $args{'store'}) {
         my %seen;
         return grep ! $seen{$_} ++,
-               map {split ' ', $_} keys %{$args{'store'}};
+               keys %{$args{'store'}};
     }
 
     # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
