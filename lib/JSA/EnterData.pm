@@ -1906,9 +1906,6 @@ sub munge_header_INBEAM {
         'headers' => $headers,
         'name'   => $name,
         'value'  => 1,
-        'cond-name'        => 'SEQ_TYPE',
-        'cond-value-regex' =>
-        qr/\b(?: science | pointing | focus )\b/xi
     );
 
     $headers->{$name} = (scalar @val)
@@ -2606,8 +2603,8 @@ of a regular expression, in which case I<C<value> is ignored>.
 
 sub _find_header {
     my ($self, %args) = @_;
-    my ($head, $name, $val_re, $cond_name, $cond_val_re) =
-      @args{qw/headers name value-regex cond-name cond-value-regex/};
+    my ($head, $name, $val_re) =
+      @args{qw/headers name value-regex/};
 
     defined $val_re && ! ref $val_re
         and $val_re = qr/\b${val_re}\b/x;
@@ -2631,15 +2628,6 @@ sub _find_header {
 
     foreach my $h ($array ? @{$head} : $head) {
         my $val = $test->($h, $name) ? $h->{$name} : undef;
-
-        # Return, or save for later return, only if another header value matches.
-        my $cond_val = defined $cond_name && $test->($h, $cond_name)
-                     ? $h->{ $cond_name }
-                     : undef;
-
-        if (defined $cond_val) {
-            next unless $cond_val =~ $cond_val_re;
-        }
 
         if (defined $val) {
             return $val =~ $val_re if defined $val_re;
