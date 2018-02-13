@@ -1,6 +1,6 @@
 use strict;
 
-my $n_test; BEGIN {$n_test = 11;}
+my $n_test; BEGIN {$n_test = 14;}
 use Test::More tests => $n_test;
 
 SKIP: {
@@ -23,8 +23,29 @@ SKIP: {
         'shutter',
         '',
         ''),
-    '',
+    undef,
     'shutter first only');
+
+    is($enter->_combine_inbeam_values(
+        'shutter',
+        undef),
+    undef,
+    'shutter and undef');
+
+    is($enter->_combine_inbeam_values(
+        undef,
+        undef),
+    undef,
+    'all undef');
+
+    is($enter->_combine_inbeam_values(
+        undef,
+        'pol',
+        undef,
+        undef,
+        undef),
+    'pol',
+    'pol and undef');
 
     is($enter->_combine_inbeam_values(
         'shutter',
@@ -51,7 +72,7 @@ SKIP: {
         'shutter pol',
         '',
         ''),
-    '',
+    undef,
     'shutter and pol in first only');
 
     is($enter->_combine_inbeam_values(

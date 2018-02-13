@@ -1518,8 +1518,7 @@ sub prepare_update_hash {
 
             # INBEAM header: special handling.
             if ($key =~ $inbeam_re) {
-                my $combined = $self->_combine_inbeam_values(($old // ''), $new);
-                $combined = undef if $combined eq '';
+                my $combined = $self->_combine_inbeam_values($old, $new);
                 $differ{$key} = $combined;
                 $log->debug($key . ' = ' . ($combined // '<undef>'));
                 next;
@@ -1910,7 +1909,7 @@ sub munge_header_INBEAM {
 
     $headers->{$name} = (scalar @val)
         ? $self->_combine_inbeam_values(@val)
-        : '';
+        : undef;
 
     return $headers;
 }
@@ -1951,7 +1950,8 @@ an existing value in the database in an incremental update
 situation.
 
 Returns a space-separated list of names in lower case,
-sorted in alphabetical order to aid testing.
+sorted in alphabetical order to aid testing.  Undef is
+returned if there are no entries to report.
 
 =cut
 
@@ -1966,6 +1966,8 @@ sub _combine_inbeam_values {
 
     foreach (@_) {
         $n ++;
+
+        next unless defined $_;
 
         my $shutter = 0;
         my @non_shutter = ();
@@ -1988,12 +1990,9 @@ sub _combine_inbeam_values {
         }
     }
 
-    # Nothing: return empty string.
-    return '' unless $n;
-
     my @vals;
 
-    if ($n == $n_shutter) {
+    if ($n and $n == $n_shutter) {
         # Everything has shutter: include shutter and all the values.
 
         @vals = ('shutter', keys %entry_all);
@@ -2003,6 +2002,9 @@ sub _combine_inbeam_values {
         # appear without it.
         @vals = keys %entry_wo_shutter;
     }
+
+    # Nothing: return undef.
+    return undef unless scalar @vals;
 
     return join(' ', sort {$a cmp $b} @vals);
 }
