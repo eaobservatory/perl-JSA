@@ -991,9 +991,24 @@ sub _get_obs_group {
 
     my @headers;
     for my $ob (@obs) {
+        my $header = $ob->hdrhash;
+
+        # These headers will be passed to OMP::FileUtils->merge_dupes which
+        # in turn passes them to Astro::FITS::Header->new(Hash => ...).
+        # That constructor drops any null or empty string headers.  Since
+        # we need to see the INBEAM header for all files, replace blank
+        # values with a dummy placeholder first.  (See also
+        # munge_header_INBEAM where these placeholders are removed.)
+        if (exists $header->{'INBEAM'}) {
+            unless ((defined $header->{'INBEAM'})
+                    and ($header->{'INBEAM'} ne '')) {
+                $header->{'INBEAM'} = 'NOTHING';
+            }
+        }
+
         push @headers, {
             'filename' => $ob->{'FILENAME'}->[0],
-            'header' => $ob->hdrhash,
+            'header' => $header,
         };
     }
 
@@ -1901,7 +1916,9 @@ sub munge_header_INBEAM {
 
     my $name = 'INBEAM';
 
-    my @val = $self->_find_header(
+    # Find INBEAM values, but remove dummy placeholder values.
+    # (See also _get_obs_group where these are inserted.)
+    my @val = map {($_ eq 'NOTHING') ? undef : $_} $self->_find_header(
         'headers' => $headers,
         'name'   => $name,
         'value'  => 1,
