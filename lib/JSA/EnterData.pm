@@ -1416,10 +1416,20 @@ and one corresponding to insert operations which should be performed:
     Insert operations:
         insert
 
+Additional arguments may be given in hash form:
+
+=over 4
+
+=item update_only_obsradec
+
+Only update obsra, obsdec and their associated tl, tr, bl, br values.
+
+=back
+
 =cut
 
 sub prepare_update_hash {
-    my ($self, $table, $dbh, $field_values) = @_;
+    my ($self, $table, $dbh, $field_values, %args) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1504,7 +1514,16 @@ sub prepare_update_hash {
         my $only_inbeam = $table eq 'COMMON'
                           && $self->update_only_inbeam();
 
+        my $only_obsradec = $args{'update_only_obsradec'};
+
         foreach my $key (sort keys %{$indb}) {
+            if (($only_inbeam && $key !~ $inbeam_re)
+                    or ($only_obstime && $key !~ $obs_date_re)
+                    or ($only_obsradec && $key !~ /^obs(?:ra|dec)/i)) {
+                $log->debug("skipping field: $key (due to field restriction)");
+                next;
+            }
+
             $log->debug("testing field: $key");
 
             next if ($key !~ $miss_ok && ! exists $field_values->{$key});
@@ -1524,12 +1543,6 @@ sub prepare_update_hash {
             );
 
             my $in_range = any {$test{$_}} (qw/start end/);
-
-            next if $only_inbeam
-                 && $key !~ $inbeam_re;
-
-            next if $only_obstime
-                 && $key !~ $obs_date_re;
 
             # INBEAM header: special handling.
             if ($key =~ $inbeam_re) {
@@ -2529,8 +2542,10 @@ sub _update_or_insert {
     my $table = $args{'table'};
     my $dry_run = $args{'dry_run'};
 
+    my $update_args = $args{'update_args'} // {};
+
     my ($change_update, $change_insert) = $self->prepare_update_hash(
-        @args{qw/table dbhandle/}, $vals);
+        @args{qw/table dbhandle/}, $vals, %$update_args);
 
     if (scalar @$change_insert) {
         $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
@@ -3043,7 +3058,8 @@ sub calcbounds_update_bound_cols {
 
         $self->_update_or_insert(%pass,
                                  'headers'  => \%header,
-                                 dry_run    => $dry_run);
+                                 dry_run    => $dry_run,
+                                 update_args => {update_only_obsradec => 1});
     }
 
     return $n_err;
