@@ -2676,39 +2676,6 @@ sub _find_header {
     return;
 }
 
-sub _delete_header {
-    my ($self, %args) = @_;
-
-    my ($head, $name, $test) = @args{qw/headers name test/};
-
-    return unless $head
-               && ref $head
-               # Expecting a code reference here.
-               && $test && ref $test;
-
-    my $array = ref $head eq 'ARRAY';
-
-    foreach my $h ($array ? @{$head} : $head) {
-        next unless exists $h->{$name};
-
-        if ($test->($h->{$name})) {
-            delete $h->{$name};
-            $args{'_deleted'} ++;
-        }
-    }
-
-    # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
-    # pseudo header with array reference of hash references as value.
-    return $args{'_deleted'} if $array;
-
-    my $subh = 'SUBHEADERS';
-
-    return $self->_delete_header(%args, 'headers' => $head->{$subh})
-        if exists $head->{$subh};
-
-    return $args{'_deleted'};
-}
-
 sub _make_lowercase_header {
     my ($self, %args) = @_;
 
