@@ -126,32 +126,6 @@ returns nothing.
 
     $enter->process_simulation(1);
 
-=item B<update_only_obstime>
-
-Returns a truth value to indicate if to update only the times for an
-observation run if no arguments given.
-
-    print "Only date obs & end will be updated"
-        if $enter->update_only_obstime();
-
-Else, sets the truth value if to update only observation date values;
-returns nothing.
-
-    $enter->update_only_obstime(my $only_obstime = 1);
-
-=item B<update_only_inbeam>
-
-Returns a truth value to indicate if to update only the C<INBEAM> header
-values if no arguments given.
-
-    print "Only INBEAM values will be updated"
-      if $enter->update_only_inbeam();
-
-Else, sets the truth value if to update only C<INBEAM> values;
-returns nothing.
-
-    $enter->update_only_inbeam( my $only_inbeam = 1 );
-
 =cut
 
 {
@@ -173,11 +147,6 @@ returns nothing.
 
         # Force processing of simulation if true.
         'process_simulation'=> 0,
-
-        # Update only an observation run time.
-        'update-only-obstime'=> 0,
-
-        'update-only-inbeam'=> 0,
 
         'acsis-calc-radec'  => 1
     );
@@ -453,8 +422,25 @@ set.
 
 Options:
 
-    dry_run - do not write to the database
-    skip_state - do not set file state in transfer table
+=over 4
+
+=item dry_run
+
+Do not write to the database.
+
+=item skip_state
+
+Do not set file state in transfer table.
+
+=item update_only_inbeam
+
+Update only the C<INBEAM> header value.
+
+=item update_only_obstime
+
+Update only the times for an observation.
+
+=back
 
 =cut
 
@@ -472,6 +458,8 @@ Options:
         my ($date, $use_list) = @arg{('date', $key_use_list)};
         my $dry_run = $arg{'dry_run'};
         my $skip_state = $arg{'skip_state'};
+
+        my %update_args = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
 
         # Format date first before getting it back.
         $self->date($date) if defined $date;
@@ -561,7 +549,8 @@ Options:
                                                    'dict'    => \%dict,
                                                    'obs' => $observations,
                                                    dry_run => $dry_run,
-                                                   skip_state => $skip_state);
+                                                   skip_state => $skip_state,
+                                                   %update_args);
 
             push @files_added, @{$added}
                 if $added && scalar @{$added};
@@ -603,7 +592,8 @@ It is called by I<prepare_and_insert> method.
 
         # Pass everything but observations hash reference to other subs.
         my %pass_args = map {$_ => $args{$_}}
-            qw/instrument db columns dict dry_run skip_state/;
+            qw/instrument db columns dict dry_run skip_state
+               update_only_obstime update_only_inbeam/;
 
         my @success;
 
@@ -676,6 +666,7 @@ It is called by I<prepare_and_insert> method.
         my @file = @{$files};
 
         my %pass_arg = map {$_ => $arg{$_}} qw/instrument columns dict/;
+        my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
 
         foreach (@file) {
           if (exists $touched{$_}) {
@@ -761,6 +752,7 @@ It is called by I<prepare_and_insert> method.
 
         my $error = $self->_update_or_insert(
             %pass_arg,
+            update_args => \%common_arg,
             'dbhandle' => $dbh,
             'table'    => 'COMMON',
             'headers'  => $common_hdrs,
@@ -782,8 +774,7 @@ It is called by I<prepare_and_insert> method.
         }
 
         # FILES, ACSIS, SCUBA2 tables.
-        unless ($self->update_only_obstime()
-                || $self->update_only_inbeam()) {
+        unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
             $self->add_subsys_obs(%pass_arg,
                                   'db'  => $db,
                                   'obs' => $run_obs,
@@ -1420,6 +1411,14 @@ Additional arguments may be given in hash form:
 
 =over 4
 
+=item update_only_inbeam
+
+Update only the C<INBEAM> header value.
+
+=item update_only_obstime
+
+Update only the times for an observation.
+
 =item update_only_obsradec
 
 Only update obsra, obsdec and their associated tl, tr, bl, br values.
@@ -1508,11 +1507,9 @@ sub prepare_update_hash {
 
         my $tau_val = qr/\b(?:WVMTAU|TAU225)(?:ST|EN)\b/i;
 
-        my $only_obstime = $table eq 'COMMON'
-                           && $self->update_only_obstime();
+        my $only_obstime = $table eq 'COMMON' && $args{'update_only_obstime'};
 
-        my $only_inbeam = $table eq 'COMMON'
-                          && $self->update_only_inbeam();
+        my $only_inbeam = $table eq 'COMMON' && $args{'update_only_inbeam'};
 
         my $only_obsradec = $args{'update_only_obsradec'};
 
