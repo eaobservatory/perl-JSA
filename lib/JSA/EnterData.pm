@@ -114,18 +114,6 @@ When the value is true, I<force-disk> is marked false.
 
 =back
 
-=item B<process_simulation>
-
-Returns the set truth value to indicate whether simulation processing
-is forced, if no arguments given.
-
-    $skip_sim = ! $enter->process_simulation;
-
-Else, sets the truth value to turn on or off simulation processing;
-returns nothing.
-
-    $enter->process_simulation(1);
-
 =cut
 
 {
@@ -144,9 +132,6 @@ returns nothing.
 
         # To make OMP::Info::Obs out of given files.
         'files'             => [],
-
-        # Force processing of simulation if true.
-        'process_simulation'=> 0,
 
         'acsis-calc-radec'  => 1
     );
@@ -428,6 +413,10 @@ Options:
 
 Do not write to the database.
 
+=item process_simulation
+
+Include simulation observations.
+
 =item skip_state
 
 Do not set file state in transfer table.
@@ -459,7 +448,9 @@ Update only the times for an observation.
         my $dry_run = $arg{'dry_run'};
         my $skip_state = $arg{'skip_state'};
 
-        my %update_args = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
+        my %update_args = map {$_ => $arg{$_}} qw/
+            process_simulation
+            update_only_inbeam update_only_obstime/;
 
         # Format date first before getting it back.
         $self->date($date) if defined $date;
@@ -593,6 +584,7 @@ It is called by I<prepare_and_insert> method.
         # Pass everything but observations hash reference to other subs.
         my %pass_args = map {$_ => $args{$_}}
             qw/instrument db columns dict dry_run skip_state
+               process_simulation
                update_only_obstime update_only_inbeam/;
 
         my @success;
@@ -707,7 +699,7 @@ It is called by I<prepare_and_insert> method.
 
         $log->debug(sprintf "[%s]...", join ', ', @file);
 
-        if (! $self->process_simulation && $self->is_simulation($common_hdrs)) {
+        if (! $arg{'process_simulation'} && $self->is_simulation($common_hdrs)) {
             $log->debug("simulation data; skipping" );
             return ( 'simulation', '' );
         }
