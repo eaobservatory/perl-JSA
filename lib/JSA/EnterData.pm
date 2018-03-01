@@ -132,8 +132,6 @@ When the value is true, I<force-disk> is marked false.
 
         # To make OMP::Info::Obs out of given files.
         'files'             => [],
-
-        'acsis-calc-radec'  => 1
     );
 
     #  Generate some accessor functions.
@@ -409,6 +407,10 @@ Options:
 
 =over 4
 
+=item calc_radec
+
+Calculate observation bounds.
+
 =item dry_run
 
 Do not write to the database.
@@ -449,6 +451,7 @@ Update only the times for an observation.
         my $skip_state = $arg{'skip_state'};
 
         my %update_args = map {$_ => $arg{$_}} qw/
+            calc_radec
             process_simulation
             update_only_inbeam update_only_obstime/;
 
@@ -583,7 +586,7 @@ It is called by I<prepare_and_insert> method.
 
         # Pass everything but observations hash reference to other subs.
         my %pass_args = map {$_ => $args{$_}}
-            qw/instrument db columns dict dry_run skip_state
+            qw/instrument db calc_radec columns dict dry_run skip_state
                process_simulation
                update_only_obstime update_only_inbeam/;
 
@@ -728,7 +731,7 @@ It is called by I<prepare_and_insert> method.
             }
         }
 
-        if (JSA::EnterData::ACSIS->name_is_similar($inst->name())
+        if ($arg{'calc_radec'}
                 && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
 
             unless ($self->calc_radec($inst, $common_obs, $common_hdrs)) {
@@ -2257,8 +2260,6 @@ regular expressions ...
 
 sub skip_calc_radec {
     my ($self, %arg) = @_;
-
-    $self->acsis_calc_radec() or return 1;
 
     my $skip = qr/\b skydips? \b/xi;
 
