@@ -10,9 +10,7 @@ JSA::EnterData - Parse headers and store in database
     my $enter = new JSA::EnterData('dict' => '/path/to/dict');
 
     # Upload metadata for Jun 25, 2008.
-    $enter->date(20080625);
-
-    $enter->prepare_and_insert;
+    $enter->prepare_and_insert(date => '20080625');
 
 =head1 DESCRIPTION
 
@@ -391,17 +389,16 @@ Date can be given to the method, or can be set via I<new()> or
 I<date()> method. Current date is used if no date has been explicitly
 set.
 
-    # Insert either for the set or current date; ignores given files if
-    # any; disk is searched.
+    # Insert either for the set or current date; disk is searched.
     $enter->prepare_and_insert();
 
     # Insert for Jun 25, 2008; ignores given files if any; disk is
     # searched.
-    $enter->prepare_and_insert('date' => '20080625');
+    $enter->prepare_and_insert(date => '20080625');
 
     # Insert for only given files; ignores date; disk is not searched as
     # there is no reason to.
-    $enter->prepare_and_insert('given-files' => 1);
+    $enter->prepare_and_insert(files => \@files);
 
 Options:
 
@@ -445,6 +442,12 @@ Update only the times for an observation.
         my $log = Log::Log4perl->get_logger('');
 
         my $key_use_list = 'given-files';
+
+        # Transitional: force usage of given files, if any.
+        if (exists $arg{'files'}) {
+            $self->files($arg{'files'});
+            $arg{$key_use_list} = 1;
+        }
 
         my ($date, $use_list) = @arg{('date', $key_use_list)};
         my $dry_run = $arg{'dry_run'};
@@ -3060,6 +3063,10 @@ sub calcbounds_update_bound_cols {
     my $skip_state = $arg{'skip_state'};
     my $skip_state_found = $arg{'skip_state_found'};
     my $obs_types = $arg{'obs_types'};
+
+    # Transitional: set files and date in the object if given.
+    $self->files($arg{'files'}) if exists $arg{'files'};
+    $self->date($arg{'date'}) if exists $arg{'date'};
 
     my ($inst) = $self->instruments();
 
