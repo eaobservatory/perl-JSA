@@ -75,111 +75,46 @@ BEGIN {
 
 =item B<new>
 
-Constructor.  A data dictionary file name is required, which is set by
-default.  It can be overridden as ...
+Constructor.  A data dictionary file name is required.
 
-  $enter = JSA::EnterData->new( 'dict' => '/file/path/' );
+  $enter = JSA::EnterData->new('dict' => '/file/path/');
 
-Configuration values which can be passed as key-value pairs are ...
+Configuration values which can be passed as key-value pairs are:
 
 =over 4
-
-=item I<date> C<yyyymmdd>
-
-Date to set given in C<yyyymmdd> format.
-Default is the current date in local timezone (at the time of creation
-of the object).
 
 =item I<dict> C<file name>
 
 File name for data dictionary.
 
-=item I<force-disk> C<1 | 0>
-
-A truth value whether to force looking for data on disk, not in
-database.  Default is true.
-
-When the value is true, I<force-db> is marked false.
-
-=item I<force-db> C<1 | 0>
-
-A truth value whether to force looking for data in database, not on
-disk. Default is false.
-
-Currently it does not do anything.
-
-When the value is true, I<force-disk> is marked false.
-
 =back
 
 =cut
 
-{
-    my %default = (
-        'date'              => undef,
+sub new {
+    my ($class, %args) = @_;
 
-        # $OMP::ArchiveDB::SkipDBLookup is changed.
-        'force-disk'        => 1,
-        'force-db'          => 0,
+    my $dict = $args{'dict'};
+    throw JSA::Error::FatalError('No valid data dictionary given')
+        unless defined $dict ;
+    throw JSA::Error::FatalError("Data dictionary, $dict, is not a readable file.")
+        unless -f $dict && -r _;
 
-        'instruments'       => [
-            JSA::EnterData::DAS->new,
-            JSA::EnterData::ACSIS->new,
-            JSA::EnterData::SCUBA2->new,
-        ],
+    my $obj = bless {
+        date  => undef,
+        files => [],
+        instruments => [],
+        dictionary => $class->create_dictionary($dict),
+    }, $class;
 
-        # To make OMP::Info::Obs out of given files.
-        'files'             => [],
-    );
+    my $instruments = $args{'instruments'};
+    throw JSA::Error::FatalError('Instruments not specified')
+        unless defined $instruments;
+    throw JSA::Error::FatalError('Instruments not a reference')
+        unless ref $instruments;
+    $obj->instruments(@{$instruments});
 
-    #  Generate some accessor functions.
-    for my $k (keys %default) {
-        next if (any {$k eq $_} (
-                # Special handling when date to set is given.
-                'date',
-                # Validate instruments before setting.
-                'instruments',
-                # Need to check for an array ref.
-                'files',
-            ))
-            ||
-            # Need to turn off the other if one is true.
-            $k =~ m/^ force-d(?: isk | b ) $/x;
-
-        {
-            (my $sub = $k) =~ tr/-/_/;
-            no strict 'refs';
-            *$sub = sub {
-                my $self = shift;
-
-                return $self->{$k} unless scalar @_;
-
-                $self->{$k} = shift;
-                return;
-            };
-        }
-    }
-
-    sub new {
-        my ($class, %args) = @_;
-
-        my $obj = bless {%default, %args}, $class;
-
-        # Sanity checks.
-        $obj->_verify_dict;
-
-        for (qw/date force-db force-disk/) {
-            (my $sub = $_) =~ tr/-/_/;
-
-            die "None such sub: $sub"
-                unless $obj->can($sub);
-
-            $obj->$sub($obj->$sub);
-        }
-
-        return $obj;
-    }
-
+    return $obj;
 }
 
 =item B<instruments>
@@ -214,8 +149,6 @@ sub instruments {
     }
 
     $self->{'instruments'} = [@_];
-
-    return;
 }
 
 =item B<date>
@@ -313,17 +246,17 @@ sub force_disk {
   return;
 }
 
-=item B<get_dict>
+=item B<get_dictionary>
 
-Returns the file name for the data dictionary.
+Returns the data dictionary.
 
-    $dict_file = $enter->get_dict;
+    $dictionary = $enter->get_dictionary();
 
 =cut
 
-sub get_dict {
+sub get_dictionary {
     my ($self) = @_;
-    return $self->{'dict'};
+    return $self->{'dictionary'};
 }
 
 =item B<files>
@@ -485,7 +418,7 @@ Update only the times for an observation.
         my $columns;
         $columns->{$tables[0]} = $self->get_columns($tables[0], $dbh);
 
-        my %dict = $self->create_dictionary;
+        my $dict = $self->get_dictionary();
 
         my ($observations, $group, $name, @files_added);
 
@@ -543,7 +476,7 @@ Update only the times for an observation.
             my $added = $self->insert_observations('db' => $db,
                                                    'instrument' => $inst,
                                                    'columns' => $columns,
-                                                   'dict'    => \%dict,
+                                                   'dict'    => $dict,
                                                    'obs' => $observations,
                                                    dry_run => $dry_run,
                                                    skip_state => $skip_state,
@@ -2141,16 +2074,15 @@ sub extract_column_headers {
 
 =item B<create_dictionary>
 
-Return a hash containing the dictionary contents.
+Return a hash reference containing the dictionary contents.
 
-    %dictionary = $enter->create_dictionary();
+    $dictionary = JSA::EnterData->create_dictionary($filename);
 
 =cut
 
 sub create_dictionary {
-    my ($self) = @_;
+    my ($class, $dictionary) = @_;
 
-    my $dictionary = $self->{'dict'};
     my %dict;
 
     my $log = Log::Log4perl->get_logger('');
@@ -2172,7 +2104,7 @@ sub create_dictionary {
         }
     }
 
-    return %dict;
+    return \%dict;
 }
 
 =item B<skip_obs_calc>
@@ -2795,30 +2727,6 @@ sub _dataverify_obj_fail_text {
         grep {defined $_ && length $_} $files, $summ;
 }
 
-=item B<_verify_dict>
-
-Verifies that the data dictionary (set via I<new> method) is a
-readable file.  On errors, throws L<JSA::Error::FatalError>
-exceptions, else returns true.
-
-    $ok = $enter->_verify_dict;
-
-=cut
-
-sub _verify_dict {
-    my ($self) = @_;
-
-    my $dict = $self->get_dict;
-
-    throw JSA::Error::FatalError('No valid data dictionary given')
-        unless defined $dict ;
-
-    throw JSA::Error::FatalError("Data dictionary, $dict, is not a readable file.")
-        unless -f $dict && -r _;
-
-    return 1;
-}
-
 =item B<_verify_file_name>
 
 Verifies that a file name is in format matching
@@ -3096,7 +3004,7 @@ sub calcbounds_update_bound_cols {
         # This is a hash reference, not just $cols, in order to cater to needs of
         # JSA::EnterData->get_insert_values().
         'columns'  => {$table => $self->get_columns($table, $dbh)},
-        'dict'     => {$self->create_dictionary()},
+        'dict'     => $self->get_dictionary(),
     );
 
     my $inst_scuba2 = $inst->can('name') ? $inst->name() : '';
