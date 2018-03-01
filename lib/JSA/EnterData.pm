@@ -105,6 +105,10 @@ sub new {
         files => [],
         instruments => [],
         dictionary => $class->create_dictionary($dict),
+
+        # To keep track of already processed files.
+        _cache_old_date => undef,
+        _cache_touched => {},
     }, $class;
 
     my $instruments = $args{'instruments'};
@@ -365,129 +369,125 @@ Update only the times for an observation.
 
 =cut
 
-{
-    # To keep track of already processed files.
-    my ($old_date , %touched);
+sub prepare_and_insert {
+    my ($self, %arg) = @_;
 
-    sub prepare_and_insert {
-        my ($self, %arg) = @_;
+    my $log = Log::Log4perl->get_logger('');
 
-        my $log = Log::Log4perl->get_logger('');
+    my $key_use_list = 'given-files';
 
-        my $key_use_list = 'given-files';
-
-        # Transitional: force usage of given files, if any.
-        if (exists $arg{'files'}) {
-            $self->files($arg{'files'});
-            $arg{$key_use_list} = 1;
-        }
-
-        my ($date, $use_list) = @arg{('date', $key_use_list)};
-        my $dry_run = $arg{'dry_run'};
-        my $skip_state = $arg{'skip_state'};
-
-        my %update_args = map {$_ => $arg{$_}} qw/
-            calc_radec
-            process_simulation
-            update_only_inbeam update_only_obstime/;
-
-        # Format date first before getting it back.
-        $self->date($date) if defined $date;
-        $date = $self->date;
-
-        $arg{$key_use_list} = 0 unless defined $use_list;
-
-        if (defined $old_date && $date->ymd ne $old_date->ymd) {
-            $log->trace("clearing file cache");
-
-            undef %touched;
-        }
-
-        $old_date = $date;
-
-        # Tables of interest.  All instruments reference the COMMON table, so it is
-        # first on the array.  Actual instrument table will be the second element.
-        my @tables = qw/COMMON/;
-
-        my $db = OMP::DBbackend::Archive->new;
-        my $dbh = $db->handle;
-
-        # The %columns hash will contain a key for each table, each key's value
-        # being an anonymous hash containing the column information.  Store this
-        # information for the COMMON table initially.
-        my $columns;
-        $columns->{$tables[0]} = $self->get_columns($tables[0], $dbh);
-
-        my $dict = $self->get_dictionary();
-
-        my ($observations, $group, $name, @files_added);
-
-        foreach my $inst ($self->instruments) {
-            $name = $inst->name;
-
-            # Retrieve observations from disk.  An Info::Obs object will be returned
-            # for each subscan in the observation.  No need to retrieve associated
-            # obslog comments. That's <no. of subsystems used> *
-            # <no. of subscans objects returned per observation>.
-            $group = $self->_get_obs_group('name' => $name,
-                                           'date' => $date,
-                                           dry_run => $dry_run,
-                                           skip_state => $skip_state,
-                                           map {($_ => $arg{ $_ })}
-                                               ($key_use_list));
-
-            next unless $group
-                     && ref $group;
-
-            my @obs = $self->_filter_header(
-                $inst,
-                [$group->obs],
-                'OBS_TYPE' => [qw/FLATFIELD/],
-            );
-
-            $log->debug(
-                ! $self->files_given
-                ? sprintf("Inserting data for %s. Date [%s]",
-                          $name, $date->ymd)
-                : "Inserting given files");
-
-            unless ($obs[0]) {
-                $log->debug("No observations found for instrument $name");
-                next;
-            }
-
-            $tables[1] = $inst->table;
-
-            $columns->{$name} = $self->get_columns($inst->table, $dbh);
-            $columns->{FILES} = $self->get_columns('FILES', $dbh);
-
-            # Need to create a hash with keys corresponding to the observation number
-            # (an array won't be very efficient since observations can be missing and
-            # run numbers can be large). The values in this hash have to be a reference
-            # to an array of Info::Obs objects representing each subsystem. We need to
-            # construct new Obs objects based on the subsystem number.
-            # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
-
-            foreach my $obs (@obs) {
-                my @subhdrs = $obs->subsystems;
-                $observations->{$obs->runnr} = \@subhdrs;
-            }
-
-            my $added = $self->insert_observations('db' => $db,
-                                                   'instrument' => $inst,
-                                                   'columns' => $columns,
-                                                   'dict'    => $dict,
-                                                   'obs' => $observations,
-                                                   dry_run => $dry_run,
-                                                   skip_state => $skip_state,
-                                                   %update_args);
-
-            push @files_added, @{$added}
-                if $added && scalar @{$added};
-        }
-
-        return \@files_added;
+    # Transitional: force usage of given files, if any.
+    if (exists $arg{'files'}) {
+        $self->files($arg{'files'});
+        $arg{$key_use_list} = 1;
     }
+
+    my ($date, $use_list) = @arg{('date', $key_use_list)};
+    my $dry_run = $arg{'dry_run'};
+    my $skip_state = $arg{'skip_state'};
+
+    my %update_args = map {$_ => $arg{$_}} qw/
+        calc_radec
+        process_simulation
+        update_only_inbeam update_only_obstime/;
+
+    # Format date first before getting it back.
+    $self->date($date) if defined $date;
+    $date = $self->date;
+
+    $arg{$key_use_list} = 0 unless defined $use_list;
+
+    if (defined $self->{'_cache_old_date'} && $date->ymd ne $self->{'_cache_old_date'}->ymd) {
+        $log->debug("clearing file cache");
+
+        $self->{'_cache_touched'} = {};
+    }
+
+    $self->{'_cache_old_date'} = $date;
+
+    # Tables of interest.  All instruments reference the COMMON table, so it is
+    # first on the array.  Actual instrument table will be the second element.
+    my @tables = qw/COMMON/;
+
+    my $db = OMP::DBbackend::Archive->new;
+    my $dbh = $db->handle;
+
+    # The %columns hash will contain a key for each table, each key's value
+    # being an anonymous hash containing the column information.  Store this
+    # information for the COMMON table initially.
+    my $columns;
+    $columns->{$tables[0]} = $self->get_columns($tables[0], $dbh);
+
+    my $dict = $self->get_dictionary();
+
+    my ($observations, $group, $name, @files_added);
+
+    foreach my $inst ($self->instruments) {
+        $name = $inst->name;
+
+        # Retrieve observations from disk.  An Info::Obs object will be returned
+        # for each subscan in the observation.  No need to retrieve associated
+        # obslog comments. That's <no. of subsystems used> *
+        # <no. of subscans objects returned per observation>.
+        $group = $self->_get_obs_group('name' => $name,
+                                       'date' => $date,
+                                       dry_run => $dry_run,
+                                       skip_state => $skip_state,
+                                       map {($_ => $arg{ $_ })}
+                                           ($key_use_list));
+
+        next unless $group
+                 && ref $group;
+
+        my @obs = $self->_filter_header(
+            $inst,
+            [$group->obs],
+            'OBS_TYPE' => [qw/FLATFIELD/],
+        );
+
+        $log->debug(
+            ! $self->files_given
+            ? sprintf("Inserting data for %s. Date [%s]",
+                      $name, $date->ymd)
+            : "Inserting given files");
+
+        unless ($obs[0]) {
+            $log->debug("No observations found for instrument $name");
+            next;
+        }
+
+        $tables[1] = $inst->table;
+
+        $columns->{$name} = $self->get_columns($inst->table, $dbh);
+        $columns->{FILES} = $self->get_columns('FILES', $dbh);
+
+        # Need to create a hash with keys corresponding to the observation number
+        # (an array won't be very efficient since observations can be missing and
+        # run numbers can be large). The values in this hash have to be a reference
+        # to an array of Info::Obs objects representing each subsystem. We need to
+        # construct new Obs objects based on the subsystem number.
+        # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
+
+        foreach my $obs (@obs) {
+            my @subhdrs = $obs->subsystems;
+            $observations->{$obs->runnr} = \@subhdrs;
+        }
+
+        my $added = $self->insert_observations('db' => $db,
+                                               'instrument' => $inst,
+                                               'columns' => $columns,
+                                               'dict'    => $dict,
+                                               'obs' => $observations,
+                                               dry_run => $dry_run,
+                                               skip_state => $skip_state,
+                                               %update_args);
+
+        push @files_added, @{$added}
+            if $added && scalar @{$added};
+    }
+
+    return \@files_added;
+}
 
 =item B<insert_observations>
 
@@ -514,218 +514,217 @@ It is called by I<prepare_and_insert> method.
 
 =cut
 
-    sub insert_observations {
-        my ($self, %args) = @_ ;
+sub insert_observations {
+    my ($self, %args) = @_ ;
 
-        my ($obs, $dry_run, $skip_state) =
-            map {$args{$_}} qw/obs dry_run skip_state/;
+    my ($obs, $dry_run, $skip_state) =
+        map {$args{$_}} qw/obs dry_run skip_state/;
 
-        # Pass everything but observations hash reference to other subs.
-        my %pass_args = map {$_ => $args{$_}}
-            qw/instrument db calc_radec columns dict dry_run skip_state
-               process_simulation
-               update_only_obstime update_only_inbeam/;
+    # Pass everything but observations hash reference to other subs.
+    my %pass_args = map {$_ => $args{$_}}
+        qw/instrument db calc_radec columns dict dry_run skip_state
+           process_simulation
+           update_only_obstime update_only_inbeam/;
 
-        my @success;
+    my @success;
 
-        my (@sub_obs, @base);
+    my (@sub_obs, @base);
 
-        foreach my $runnr (sort {$a <=> $b} keys %{$obs}) {
-            @sub_obs =  grep {$_} @{$obs->{$runnr}};
+    foreach my $runnr (sort {$a <=> $b} keys %{$obs}) {
+        @sub_obs =  grep {$_} @{$obs->{$runnr}};
 
-            @base = map {$_->simple_filename} @sub_obs;
+        @base = map {$_->simple_filename} @sub_obs;
 
-            my ($ans, $comment);
-
-            try {
-                ($ans, $comment) = $self->insert_obs_set('run-obs' => \@sub_obs,
-                                                         'file-id' => \@base,
-                                                         %pass_args);
-            }
-            catch JSA::Error with {
-                my ($e) = @_;
-
-                $ans = 'error';
-                $comment = "$e";
-            };
-
-            next unless defined $ans;
-
-            if ($ans eq 'inserted') {
-                push @success, map {$_->filename} @sub_obs;
-            }
-            elsif ($ans eq 'simulation') {
-                unless ($dry_run or $skip_state) {
-                    my $xfer = $self->_get_xfer_unconnected_dbh();
-                    $xfer->put_state(
-                        state => 'simulation', files => \@base);
-                }
-            }
-            elsif ($ans eq 'error') {
-                unless ($dry_run or $skip_state) {
-                    my $xfer = $self->_get_xfer_unconnected_dbh();
-                    $xfer->put_state(
-                        state => 'error', files => \@base,
-                        comment => $comment);
-                }
-            }
-            elsif ($ans eq 'nothing-to-do') {
-            }
-            else {
-                throw JSA::Error::BadArgs "Do not know what to run for state '$ans'."
-            }
-        }
-
-        return \@success;
-    }
-
-    # For each observation:
-    # 1. Insert a row in the COMMON table.
-    # 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
-    # 3. Insert a row in the FILES table for each subscan
-    #
-    # fails, the entire observation fails to go in to the DB.
-    sub insert_obs_set {
-        my ($self, %arg) = @_;
-
-        my $log = Log::Log4perl->get_logger('');
-
-        my ($inst, $db, $run_obs, $files, $dry_run, $skip_state) =
-           map {$arg{$_}} qw/instrument db run-obs file-id dry_run skip_state/;
-
-        my $dbh  = $db->handle();
-        my @file = @{$files};
-
-        my %pass_arg = map {$_ => $arg{$_}} qw/instrument columns dict/;
-        my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
-
-        foreach (@file) {
-          if (exists $touched{$_}) {
-              $log->trace("already processed: $_");
-
-              return;
-          }
-        }
-
-        @touched{@file} = ();
-
-        for my $obs (@{$run_obs}) {
-            my $headers = $obs->hdrhash();
-
-            $headers = $self->munge_header_INBEAM($headers);
-
-            if ($inst->can('fill_max_subscan')) {
-              $inst->fill_max_subscan($headers, $obs);
-            }
-
-            if ($inst->can('transform_header')) {
-              my ($hash , $array) = $inst->transform_header($headers);
-              $obs->hdrhash($hash);
-            }
-        }
-
-        my $common_obs = $run_obs->[0]
-            or do {
-                $log->debug('XXX First run obs is undefined|false; nothing to do.');
-                return ('nothing-to-do', 'First run obs is undef|false');
-            };
-
-        # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
-        # does not untie).  This is so that a single element array reference when
-        # assigned to one of the keys is assigned as reference (not as the element
-        # contained with in).
-        my $common_hdrs = {%{$common_obs->hdrhash}};
-
-        $log->debug(sprintf "[%s]...", join ', ', @file);
-
-        if (! $arg{'process_simulation'} && $self->is_simulation($common_hdrs)) {
-            $log->debug("simulation data; skipping" );
-            return ( 'simulation', '' );
-        }
-
-        # XXX Skip badly needed data verification for scuba2 until implemented.
-        unless (JSA::EnterData::SCUBA2->name_is_scuba2($inst->name)) {
-            my $verify = JCMT::DataVerify->new('Obs' => $common_obs)
-                or do {
-                    my $log = Log::Log4perl->get_logger('');
-                    $log->logdie( _dataverify_obj_fail_text($common_obs));
-                };
-
-            my %invalid = $verify->verify_headers;
-
-            foreach (keys %invalid) {
-                my $val = $invalid{$_}->[0];
-
-                if ($val =~ /does not match/i) {
-                    $log->debug("$_ : $val");
-                    undef $common_hdrs->{$_};
-                }
-                elsif ($val =~ /should not/i) {
-                    $log->debug("$_ : $val");
-                    undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
-                }
-            }
-        }
-
-        if ($arg{'calc_radec'}
-                && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
-
-            unless ($self->calc_radec($inst, $common_obs, $common_hdrs)) {
-                $log->debug("problem while finding bounds; skipping");
-                return ('error', $inst->name() . ': could not find bounds');
-            }
-        }
-
-        # COMMON table.
-        $db->begin_trans() if not $dry_run;
-
-        $self->fill_headers_COMMON($common_hdrs, $common_obs);
-
-        my $error = $self->_update_or_insert(
-            %pass_arg,
-            update_args => \%common_arg,
-            'dbhandle' => $dbh,
-            'table'    => 'COMMON',
-            'headers'  => $common_hdrs,
-            dry_run    => $dry_run);
-
-        if ($dbh->err()) {
-            my $text = $dbh->errstr();
-
-            $db->rollback_trans();
-
-            if ($self->_is_insert_dup_error($text)) {
-                $log->debug('File metadata already present');
-                return ('nothing-to-do' , 'ignored duplicate insert')
-            }
-
-            $log->debug($text) if defined $text;
-
-            return ('error', $text);
-        }
-
-        # FILES, ACSIS, SCUBA2 tables.
-        unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
-            $self->add_subsys_obs(%pass_arg,
-                                  'db'  => $db,
-                                  'obs' => $run_obs,
-                                  dry_run => $dry_run,
-                                  skip_state => $skip_state)
-                or return ('error', "while adding subsys obs: $run_obs");
-        }
+        my ($ans, $comment);
 
         try {
-            $db->commit_trans() if not $dry_run;
+            ($ans, $comment) = $self->insert_obs_set('run-obs' => \@sub_obs,
+                                                     'file-id' => \@base,
+                                                     %pass_args);
         }
-        catch Error::Simple with {
+        catch JSA::Error with {
             my ($e) = @_;
-            throw JSA::Error $e;
+
+            $ans = 'error';
+            $comment = "$e";
         };
 
-        $log->debug("successful");
+        next unless defined $ans;
 
-        return ('inserted', '');
+        if ($ans eq 'inserted') {
+            push @success, map {$_->filename} @sub_obs;
+        }
+        elsif ($ans eq 'simulation') {
+            unless ($dry_run or $skip_state) {
+                my $xfer = $self->_get_xfer_unconnected_dbh();
+                $xfer->put_state(
+                    state => 'simulation', files => \@base);
+            }
+        }
+        elsif ($ans eq 'error') {
+            unless ($dry_run or $skip_state) {
+                my $xfer = $self->_get_xfer_unconnected_dbh();
+                $xfer->put_state(
+                    state => 'error', files => \@base,
+                    comment => $comment);
+            }
+        }
+        elsif ($ans eq 'nothing-to-do') {
+        }
+        else {
+            throw JSA::Error::BadArgs "Do not know what to run for state '$ans'."
+        }
     }
+
+    return \@success;
+}
+
+# For each observation:
+# 1. Insert a row in the COMMON table.
+# 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
+# 3. Insert a row in the FILES table for each subscan
+#
+# fails, the entire observation fails to go in to the DB.
+sub insert_obs_set {
+    my ($self, %arg) = @_;
+
+    my $log = Log::Log4perl->get_logger('');
+
+    my ($inst, $db, $run_obs, $files, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/instrument db run-obs file-id dry_run skip_state/;
+
+    my $dbh  = $db->handle();
+    my @file = @{$files};
+
+    my %pass_arg = map {$_ => $arg{$_}} qw/instrument columns dict/;
+    my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
+
+    foreach (@file) {
+      if (exists $self->{'_cache_touched'}->{$_}) {
+          $log->debug("already processed: $_");
+
+          return;
+      }
+    }
+
+    $self->{'_cache_touched'}->{$_} = 1 foreach @file;
+
+    for my $obs (@{$run_obs}) {
+        my $headers = $obs->hdrhash();
+
+        $headers = $self->munge_header_INBEAM($headers);
+
+        if ($inst->can('fill_max_subscan')) {
+          $inst->fill_max_subscan($headers, $obs);
+        }
+
+        if ($inst->can('transform_header')) {
+          my ($hash , $array) = $inst->transform_header($headers);
+          $obs->hdrhash($hash);
+        }
+    }
+
+    my $common_obs = $run_obs->[0]
+        or do {
+            $log->debug('XXX First run obs is undefined|false; nothing to do.');
+            return ('nothing-to-do', 'First run obs is undef|false');
+        };
+
+    # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
+    # does not untie).  This is so that a single element array reference when
+    # assigned to one of the keys is assigned as reference (not as the element
+    # contained with in).
+    my $common_hdrs = {%{$common_obs->hdrhash}};
+
+    $log->debug(sprintf "[%s]...", join ', ', @file);
+
+    if (! $arg{'process_simulation'} && $self->is_simulation($common_hdrs)) {
+        $log->debug("simulation data; skipping" );
+        return ( 'simulation', '' );
+    }
+
+    # XXX Skip badly needed data verification for scuba2 until implemented.
+    unless (JSA::EnterData::SCUBA2->name_is_scuba2($inst->name)) {
+        my $verify = JCMT::DataVerify->new('Obs' => $common_obs)
+            or do {
+                my $log = Log::Log4perl->get_logger('');
+                $log->logdie( _dataverify_obj_fail_text($common_obs));
+            };
+
+        my %invalid = $verify->verify_headers;
+
+        foreach (keys %invalid) {
+            my $val = $invalid{$_}->[0];
+
+            if ($val =~ /does not match/i) {
+                $log->debug("$_ : $val");
+                undef $common_hdrs->{$_};
+            }
+            elsif ($val =~ /should not/i) {
+                $log->debug("$_ : $val");
+                undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
+            }
+        }
+    }
+
+    if ($arg{'calc_radec'}
+            && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
+
+        unless ($self->calc_radec($inst, $common_obs, $common_hdrs)) {
+            $log->debug("problem while finding bounds; skipping");
+            return ('error', $inst->name() . ': could not find bounds');
+        }
+    }
+
+    # COMMON table.
+    $db->begin_trans() if not $dry_run;
+
+    $self->fill_headers_COMMON($common_hdrs, $common_obs);
+
+    my $error = $self->_update_or_insert(
+        %pass_arg,
+        update_args => \%common_arg,
+        'dbhandle' => $dbh,
+        'table'    => 'COMMON',
+        'headers'  => $common_hdrs,
+        dry_run    => $dry_run);
+
+    if ($dbh->err()) {
+        my $text = $dbh->errstr();
+
+        $db->rollback_trans();
+
+        if ($self->_is_insert_dup_error($text)) {
+            $log->debug('File metadata already present');
+            return ('nothing-to-do' , 'ignored duplicate insert')
+        }
+
+        $log->debug($text) if defined $text;
+
+        return ('error', $text);
+    }
+
+    # FILES, ACSIS, SCUBA2 tables.
+    unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
+        $self->add_subsys_obs(%pass_arg,
+                              'db'  => $db,
+                              'obs' => $run_obs,
+                              dry_run => $dry_run,
+                              skip_state => $skip_state)
+            or return ('error', "while adding subsys obs: $run_obs");
+    }
+
+    try {
+        $db->commit_trans() if not $dry_run;
+    }
+    catch Error::Simple with {
+        my ($e) = @_;
+        throw JSA::Error $e;
+    };
+
+    $log->debug("successful");
+
+    return ('inserted', '');
 }
 
 sub _filter_header {
