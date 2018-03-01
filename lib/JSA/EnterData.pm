@@ -64,11 +64,6 @@ use NDF;
 
 $| = 1; # Make unbuffered
 
-BEGIN {
-    # Make sure that bad status from SMURF triggers bad exit status
-    $ENV{ADAM_EXIT} = 1;
-}
-
 =head2 METHODS
 
 =over 2
