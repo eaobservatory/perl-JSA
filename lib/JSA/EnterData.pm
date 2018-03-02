@@ -56,9 +56,13 @@ use OMP::DBbackend::Archive;
 use OMP::Info::ObsGroup;
 use OMP::DateTools;
 use OMP::General;
+use OMP::FileUtils;
+use OMP::Info::Obs;
+
 
 use DateTime;
 use DateTime::Format::ISO8601;
+use Time::Piece;
 
 use NDF;
 
@@ -96,7 +100,6 @@ sub new {
         unless -f $dict && -r _;
 
     my $obj = bless {
-        date  => undef,
         files => [],
         instruments => [],
         dictionary => $class->create_dictionary($dict),
@@ -148,41 +151,6 @@ sub instruments {
     }
 
     $self->{'instruments'} = [@_];
-}
-
-=item B<date>
-
-Returns the set date if no arguments given.
-
-    $date = $enter->date;
-
-Else, sets the date to date given as L<DateTime> object or as a string
-in C<yyyymmdd> format; returns nothing.  If date does not match
-expected type, then current date in local timezone is used.
-
-    $enter->date('20251013');
-
-=cut
-
-sub date {
-    my $self = shift;
-
-    return $self->{'date'} unless scalar @_;
-
-    my $date = shift;
-
-    if (! $date
-            || (! ref $date && $date !~ /^\d{8}$/)
-            || (ref $date && ! $date->isa('DateTime'))) {
-        $date = DateTime->now( 'time_zone' => 'UTC' ) ;
-    }
-    elsif (! ref $date) {
-        $date = DateTime::Format::ISO8601->parse_datetime($date);
-    }
-
-    $self->{'date'} = $date;
-
-    return;
 }
 
 =item B<force_db>
@@ -314,12 +282,9 @@ sub files_given {
 =item B<prepare_and_insert>
 
 Inserts observation in database retrieved from disk (see also
-I<insert_observations> method) for a date (see also I<date> method) or
-given list of files (see I<files> method).
+I<insert_observations> method) for a date or given list of files.
 
-Date can be given to the method, or can be set via I<new()> or
-I<date()> method. Current date is used if no date has been explicitly
-set.
+The current date is used if no date has been explicitly set.
 
     # Insert either for the set or current date; disk is searched.
     $enter->prepare_and_insert();
@@ -386,13 +351,19 @@ sub prepare_and_insert {
         process_simulation
         update_only_inbeam update_only_obstime/;
 
-    # Format date first before getting it back.
-    $self->date($date) if defined $date;
-    $date = $self->date;
+    my %obs_args = ();
+    if (defined $date) {
+        $date = _reformat_datetime($date);
+        $obs_args{'date'} = $date;
+    }
+    else {
+        # Set up $date just for usage in managing the touched files cache.
+        $date = $date = DateTime->now(time_zone => 'UTC')->ymd('');
+    }
 
     $arg{$key_use_list} = 0 unless defined $use_list;
 
-    if (defined $self->{'_cache_old_date'} && $date->ymd ne $self->{'_cache_old_date'}->ymd) {
+    if (defined $self->{'_cache_old_date'} && $date ne $self->{'_cache_old_date'}) {
         $log->debug("clearing file cache");
 
         $self->{'_cache_touched'} = {};
@@ -424,10 +395,10 @@ sub prepare_and_insert {
         # for each subscan in the observation.  No need to retrieve associated
         # obslog comments. That's <no. of subsystems used> *
         # <no. of subscans objects returned per observation>.
-        $group = $self->_get_obs_group('name' => $name,
-                                       'date' => $date,
+        $group = $self->_get_obs_group(name => $name,
                                        dry_run => $dry_run,
                                        skip_state => $skip_state,
+                                       %obs_args,
                                        map {($_ => $arg{ $_ })}
                                            ($key_use_list));
 
@@ -441,9 +412,9 @@ sub prepare_and_insert {
         );
 
         $log->debug(
-            ! $self->files_given
+            (exists $obs_args{'date'})
             ? sprintf("Inserting data for %s. Date [%s]",
-                      $name, $date->ymd)
+                      $name, $obs_args{'date'})
             : "Inserting given files");
 
         unless ($obs[0]) {
@@ -797,8 +768,8 @@ sub _filter_header {
 When no files are provided, returns a L<OMP::Info::ObsGroup> object
 given instrument name and date as a hash.
 
-    $obs = $enter->_get_obs_group('name' => 'ACSIS',
-                                  'date' => '2009-06-09',
+    $obs = $enter->_get_obs_group(name => 'ACSIS',
+                                  date => '20090609',
                                   dry_run => $dry_run,
                                   skip_state => $skip_state,
                                  );
@@ -829,21 +800,18 @@ sub _get_obs_group {
         'header_search' => 'files',
     );
 
-    require OMP::FileUtils;
-    require OMP::Info::Obs;
-
     my @file;
 
-    # OMP uses Time::Piece (instead of DateTime).
-    require Time::Piece;
-
-    $self->date($args{'date'} || $self->date());
-    my $date = $self->date();
-
     unless ($args{'given-files'}) {
+        throw JSA::Error::FatalError('Neither files nor date given to _get_obs_group')
+            unless exists $args{'date'};
+
+        # OMP uses Time::Piece (instead of DateTime).
+        my $date = Time::Piece->strptime($args{'date'}, '%Y%m%d');
+
         @file = OMP::FileUtils->files_on_disk(
-            'date' => Time::Piece->strptime($date->ymd(''), '%Y%m%d'),
-            'instrument' => $args{'name'});
+            date => $date,
+            instrument => $args{'name'});
     }
     else {
         @file = $self->files();
@@ -2853,7 +2821,7 @@ sub calcbounds_find_files {
     my $self = shift;
     my %opt = @_;
 
-    my $date = $opt{'date'};
+    my $date = _reformat_datetime($opt{'date'});
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -2880,33 +2848,22 @@ sub calcbounds_files_for_date {
     my $self = shift;
     my %opt = @_;
 
-    my $date = $opt{'date'};
+    my $date_string = $opt{'date'};
     my ($inst) = $self->instruments();
 
     my $log = Log::Log4perl->get_logger('');
 
-    if (! $date
-            || $date !~ /^\d{8}$/
-            || (ref $date && ! $date->isa('Time::Piece'))) {
-        $log->error_die(sprintf "Bad date, '%s', given.\n",
-                                defined $date ? $date : 'undef');
-        return;
-    }
-
-    my $date_string = ref $date ? $date->ymd('') : $date;
-
     $log->debug('Finding files for date ', $date_string);
 
     # O::FileUtils requires date to be Time::Piece object.
-    $date = Time::Piece->strptime($date, '%Y%m%d')
-        unless ref $date;
+    my $date = Time::Piece->strptime($date_string, '%Y%m%d');
 
     my @file;
 
     $log->debug('finding files for instrument ', $inst->name());
 
-    push @file, OMP::FileUtils->files_on_disk('date'       => $date,
-                                              'instrument' => $inst->name());
+    push @file, OMP::FileUtils->files_on_disk(date       => $date,
+                                              instrument => $inst->name());
 
     $log->debug('Files found for date ', $date_string, ' : ', scalar @file);
 
@@ -2966,9 +2923,11 @@ sub calcbounds_update_bound_cols {
     my $skip_state_found = $arg{'skip_state_found'};
     my $obs_types = $arg{'obs_types'};
 
-    # Transitional: set files and date in the object if given.
+    # Transitional: set files in the object if given.
     $self->files($arg{'files'}) if exists $arg{'files'};
-    $self->date($arg{'date'}) if exists $arg{'date'};
+
+    my %obs_args = ();
+    $obs_args{'date'} = _reformat_datetime($arg{'date'}) if exists $arg{'date'};
 
     my ($inst) = $self->instruments();
 
@@ -2979,7 +2938,8 @@ sub calcbounds_update_bound_cols {
 
     my $obs_list = $self->calcbounds_make_obs(
             dry_run => $dry_run,
-            skip_state => ($skip_state or $skip_state_found))
+            skip_state => ($skip_state or $skip_state_found),
+            %obs_args)
         or return;
 
     my $log = Log::Log4perl->get_logger('');
@@ -3082,12 +3042,16 @@ sub calcbounds_make_obs {
 
     my ($inst) = $self->instruments();
 
+    my %obs_args = ();
+    $obs_args{'date'} = $opt{'date'} if exists $opt{'date'};
+
     my $log = Log::Log4perl->get_logger('');
 
     my $group = $self->_get_obs_group(
-            'name' => $inst->name(),
+            name => $inst->name(),
             dry_run => $dry_run,
             skip_state => $skip_state,
+            %obs_args,
             ($self->files_given() ? ('given-files' => 1) : ()))
         or do {
             $log->warn('Could not make obs group.');
@@ -3201,6 +3165,19 @@ sub calculate_release_date {
         # immediate release
         return OMP::DateTools->yesterday(1);
     }
+}
+
+# Ensure a date is in YYYYMMDD format.
+sub _reformat_datetime {
+    my $date = shift;
+
+    throw JSA::Error::FatalError('date is undefined')
+        unless defined $date;
+
+    $date = DateTime::Format::ISO8601->parse_datetime($date)
+        unless ref $date;
+
+    return $date->ymd('');
 }
 
 # Note: functions below were imported from the calcbounds script.
