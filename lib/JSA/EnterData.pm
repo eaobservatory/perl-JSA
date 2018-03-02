@@ -100,7 +100,6 @@ sub new {
         unless -f $dict && -r _;
 
     my $obj = bless {
-        files => [],
         instruments => [],
         dictionary => $class->create_dictionary($dict),
 
@@ -226,59 +225,6 @@ sub get_dictionary {
     return $self->{'dictionary'};
 }
 
-=item B<files>
-
-If no array reference is given, returns the array reference of file
-names.
-
-    $files = $enter->files();
-
-Else, saves the given array reference  & returns nothing.
-
-    $enter->files([file_list()]);
-
-Throws I<JSA::Error> exception if the given argument is not an array
-reference, or is empty.
-
-=cut
-
-sub files {
-    my $self = shift @_;
-
-    return $self->{'files'}
-        unless scalar @_;
-
-    my ($files) = @_;
-
-    throw JSA::Error 'Need a non-empty array reference.'
-        unless $files && ref $files && scalar @{ $files };
-
-    my %seen;
-    my $old = $self->{'files'};
-    $self->{'files'} = [
-        grep {! $seen{$_} ++} (
-            ($old && ref $old ? @{$old} : ()),
-            @{$files}
-        )];
-
-    return;
-}
-
-=item B<files_given>
-
-Returns a truth value to indicate if any files were provided to process.
-
-    $use_date = ! $enter->files_given();
-
-=cut
-
-sub files_given {
-    my ($self) = @_;
-
-    my $files = $self->files;
-    return  !! ($files && scalar @{$files});
-}
-
 =item B<prepare_and_insert>
 
 Inserts observation in database retrieved from disk (see also
@@ -334,15 +280,6 @@ sub prepare_and_insert {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my $key_use_list = 'given-files';
-
-    # Transitional: force usage of given files, if any.
-    if (exists $arg{'files'}) {
-        $self->files($arg{'files'});
-        $arg{$key_use_list} = 1;
-    }
-
-    my ($date, $use_list) = @arg{('date', $key_use_list)};
     my $dry_run = $arg{'dry_run'};
     my $skip_state = $arg{'skip_state'};
 
@@ -352,8 +289,10 @@ sub prepare_and_insert {
         update_only_inbeam update_only_obstime/;
 
     my %obs_args = ();
-    if (defined $date) {
-        $date = _reformat_datetime($date);
+
+    my $date = undef;
+    if (exists $arg{'date'}) {
+        $date = _reformat_datetime($arg{'date'});
         $obs_args{'date'} = $date;
     }
     else {
@@ -361,7 +300,9 @@ sub prepare_and_insert {
         $date = $date = DateTime->now(time_zone => 'UTC')->ymd('');
     }
 
-    $arg{$key_use_list} = 0 unless defined $use_list;
+    if (exists $arg{'files'}) {
+        $obs_args{'files'} = _unique_files($arg{'files'});
+    }
 
     if (defined $self->{'_cache_old_date'} && $date ne $self->{'_cache_old_date'}) {
         $log->debug("clearing file cache");
@@ -398,9 +339,7 @@ sub prepare_and_insert {
         $group = $self->_get_obs_group(name => $name,
                                        dry_run => $dry_run,
                                        skip_state => $skip_state,
-                                       %obs_args,
-                                       map {($_ => $arg{ $_ })}
-                                           ($key_use_list));
+                                       %obs_args);
 
         next unless $group
                  && ref $group;
@@ -774,8 +713,8 @@ given instrument name and date as a hash.
                                   skip_state => $skip_state,
                                  );
 
-Else, returns a L<OMP::Info::ObsGroup> object created with already
-given files (see I<files> method).
+Else, returns a L<OMP::Info::ObsGroup> object created with
+given files.
 
     $obs = $enter->_get_obs_group;
 
@@ -802,7 +741,7 @@ sub _get_obs_group {
 
     my @file;
 
-    unless ($args{'given-files'}) {
+    unless (exists $args{'files'}) {
         throw JSA::Error::FatalError('Neither files nor date given to _get_obs_group')
             unless exists $args{'date'};
 
@@ -814,7 +753,7 @@ sub _get_obs_group {
             instrument => $args{'name'});
     }
     else {
-        @file = $self->files();
+        @file = @{$args{'files'}};
     }
 
     # Flatten 2-D array reference.
@@ -2923,11 +2862,9 @@ sub calcbounds_update_bound_cols {
     my $skip_state_found = $arg{'skip_state_found'};
     my $obs_types = $arg{'obs_types'};
 
-    # Transitional: set files in the object if given.
-    $self->files($arg{'files'}) if exists $arg{'files'};
-
     my %obs_args = ();
     $obs_args{'date'} = _reformat_datetime($arg{'date'}) if exists $arg{'date'};
+    $obs_args{'files'} = _unique_files($arg{'files'}) if exists $arg{'files'};
 
     my ($inst) = $self->instruments();
 
@@ -3044,6 +2981,7 @@ sub calcbounds_make_obs {
 
     my %obs_args = ();
     $obs_args{'date'} = $opt{'date'} if exists $opt{'date'};
+    $obs_args{'files'} = $opt{'files'} if exists $opt{'files'};
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -3051,8 +2989,7 @@ sub calcbounds_make_obs {
             name => $inst->name(),
             dry_run => $dry_run,
             skip_state => $skip_state,
-            %obs_args,
-            ($self->files_given() ? ('given-files' => 1) : ()))
+            %obs_args)
         or do {
             $log->warn('Could not make obs group.');
             return;
@@ -3178,6 +3115,19 @@ sub _reformat_datetime {
         unless ref $date;
 
     return $date->ymd('');
+}
+
+# Check that the argument is a non-empty array reference.
+# Returns any array reference without duplicates.
+sub _unique_files {
+    my $files = shift;
+
+    throw JSA::Error 'files must be a non-empty array reference'
+        unless $files && ref $files && scalar @$files;
+
+    my %seen = ();
+
+    return [grep {! $seen{$_} ++} @$files];
 }
 
 # Note: functions below were imported from the calcbounds script.
