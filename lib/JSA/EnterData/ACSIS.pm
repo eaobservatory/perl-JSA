@@ -3,7 +3,7 @@ package JSA::EnterData::ACSIS;
 use strict;
 use warnings;
 
-use base 'JSA::EnterData::Instrument';
+use parent 'JSA::EnterData';
 
 use Log::Log4perl;
 
@@ -14,22 +14,22 @@ JSA::EnterData::ACSIS - ACSIS specific methods.
 =head1 SYNOPSIS
 
     # Create new object, with specific header dictionary.
-    my $inst = JSA::EnterData::ACSIS->new
+    my $enter = JSA::EnterData::ACSIS->new();
 
-    my $name = $inst->name;
+    my $name = $enter->instrument_name();
 
-    my @cmd = $inst->get_bound_check_command;
+    my @cmd = $enter->get_bound_check_command;
     system( @cmd ) == 0
         or die "Problem with running bound check command for $name.";
 
     # Use table in a SQL later.
-    my $table = $inst->table;
+    my $table = $enter->instrument_table;
 
 
 =head1 DESCRIPTION
 
 JAS::EnterData::ACSIS is a object oriented module, having instrument
-specific methods in order to be called from L<JSA::EnterData>.
+specific methods.
 
 =head2 METHODS
 
@@ -87,28 +87,28 @@ sub get_bound_check_command {
 }
 
 
-=item B<name>
+=item B<instrument_name>
 
 Returns the name of the instrument involved.
 
-    $name = $inst->name;
+    $name = $enter->instrument_name();
 
 =cut
 
-sub name {
+sub instrument_name {
     return 'ACSIS';
 }
 
 
-=item B<table>
+=item B<instrument_table>
 
 Returns the database table related to the instrument.
 
-    $table = $inst->table;
+    $table = $enter->instrument_table();
 
 =cut
 
-sub table {
+sub instrument_table {
     return 'ACSIS';
 }
 
@@ -217,13 +217,13 @@ It Calculates:
 =cut
 
 sub calc_freq {
-    my ($self, $enter, $obs, $headerref) = @_;
+    my ($self, $obs, $headerref) = @_;
 
     # Filenames for a subsystem
     my @filenames = $obs->filename;
 
     # need the Frameset
-    my $wcs = $enter->read_ndf($filenames[0]);
+    my $wcs = $self->read_ndf($filenames[0]);
 
     # Change to BARYCENTRIC, GHz
     $wcs->Set('system(1)' => 'FREQ',

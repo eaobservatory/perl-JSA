@@ -3,7 +3,7 @@ package JSA::EnterData::DAS;
 use strict;
 use warnings;
 
-use base 'JSA::EnterData::ACSIS';
+use parent 'JSA::EnterData::ACSIS';
 
 =head1 NAME
 
@@ -12,22 +12,22 @@ JSA::EnterData::DAS - DAS specific methods.
 =head1 SYNOPSIS
 
     # Create new object, with specific header dictionary.
-    my $inst = new JSA::EnterData::DAS;
+    my $enter = new JSA::EnterData::DAS();
 
-    my $name = $inst->name();
+    my $name = $enter->instrument_name();
 
-    my @cmd = $inst->get_bound_check_command;
+    my @cmd = $enter->get_bound_check_command;
     system(@cmd) == 0
         or die "Problem with running bound check command for $name.";
 
     # Use table in a SQL later.
-    my $table = $inst->table();
+    my $table = $enter->instrument_table();
 
 
 =head1 DESCRIPTION
 
 JAS::EnterData::DAS is a object oriented module, having instrument specific
-methods in order to be called from L<JSA::EnterData>.
+methods.
 
 It inherits from L<JSA::EnterData::ACSIS>.
 
@@ -54,15 +54,15 @@ sub new {
     return bless $obj, $class;
 }
 
-=item B<name>
+=item B<instrument_name>
 
 Returns the name of the backend involved.
 
-    $name = $inst->name();
+    $name = $enter->instrument_name();
 
 =cut
 
-sub name {
+sub instrument_name {
     return 'DAS';
 }
 

@@ -7,15 +7,17 @@ JSA::EnterData - Parse headers and store in database
 =head1 SYNOPSIS
 
     # Create new object, with specific header dictionary.
-    my $enter = new JSA::EnterData('dict' => '/path/to/dict');
+    my $enter = new JSA::EnterData::SCUBA2('dict' => '/path/to/dict');
 
     # Upload metadata for Jun 25, 2008.
     $enter->prepare_and_insert(date => '20080625');
 
 =head1 DESCRIPTION
 
-JSA::EnterData is a object oriented module to provide back end support
-to load data to CADC.
+JSA::EnterData is a object oriented module to enter observation
+metadata into the JCMT database.  It is the base class for a number of
+instrument-specific subclasses and as such should generally not be used
+directly -- instead instances of the subclasses should be constructed.
 
 Reads the headers of all data from either the current date or the
 specified UT date, and uploads the results to the header database. If
@@ -41,9 +43,6 @@ use JSA::DB;
 use JSA::Headers qw/read_jcmtstate read_wcs/;
 use JSA::Datetime qw/make_datetime/;
 use JSA::DB::TableCOMMON;
-use JSA::EnterData::ACSIS;
-use JSA::EnterData::DAS;
-use JSA::EnterData::SCUBA2;
 use JSA::EnterData::StarCommand qw/try_star_command/;
 use JSA::Error qw/:try/;
 use JSA::Files qw/looks_like_rawfile/;
@@ -100,7 +99,6 @@ sub new {
         unless -f $dict && -r _;
 
     my $obj = bless {
-        instruments => [],
         dictionary => $class->create_dictionary($dict),
 
         # To keep track of already processed files.
@@ -108,48 +106,7 @@ sub new {
         _cache_touched => {},
     }, $class;
 
-    my $instruments = $args{'instruments'};
-    throw JSA::Error::FatalError('Instruments not specified')
-        unless defined $instruments;
-    throw JSA::Error::FatalError('Instruments not a reference')
-        unless ref $instruments;
-    $obj->instruments(@{$instruments});
-
     return $obj;
-}
-
-=item B<instruments>
-
-Returns a list of instrument objects when no arguments given.  Else,
-the list of given instrument objects is accepted for further use.
-
-    # Currently set.
-    $instruments = $enter->instruments;
-
-    # Set ACSIS as the only instrument.
-    $enter->instruments( JSA::EnterData::ACSIS->new );
-
-=cut
-
-sub instruments {
-    my $self = shift;
-
-    unless (scalar @_) {
-        my $inst = $self->{'instruments'};
-        return
-            defined $inst ? @{$inst} : () ;
-    }
-
-    foreach my $inst (@_) {
-        throw JSA::Error "Instrument '$inst' is unknown."
-            unless any {blessed $_ eq blessed $inst} (
-                JSA::EnterData::DAS->new,
-                JSA::EnterData::ACSIS->new,
-                JSA::EnterData::SCUBA2->new,
-            );
-    }
-
-    $self->{'instruments'} = [@_];
 }
 
 =item B<force_db>
@@ -327,71 +284,61 @@ sub prepare_and_insert {
 
     my $dict = $self->get_dictionary();
 
-    my ($observations, $group, $name, @files_added);
+    my $name = $self->instrument_name();
 
-    foreach my $inst ($self->instruments) {
-        $name = $inst->name;
+    # Retrieve observations from disk.  An Info::Obs object will be returned
+    # for each subscan in the observation.  No need to retrieve associated
+    # obslog comments. That's <no. of subsystems used> *
+    # <no. of subscans objects returned per observation>.
+    my $group = $self->_get_obs_group(
+        dry_run => $dry_run,
+        skip_state => $skip_state,
+        %obs_args);
 
-        # Retrieve observations from disk.  An Info::Obs object will be returned
-        # for each subscan in the observation.  No need to retrieve associated
-        # obslog comments. That's <no. of subsystems used> *
-        # <no. of subscans objects returned per observation>.
-        $group = $self->_get_obs_group(name => $name,
-                                       dry_run => $dry_run,
-                                       skip_state => $skip_state,
-                                       %obs_args);
+    return unless $group && ref $group;
 
-        next unless $group
-                 && ref $group;
+    my @obs = $self->_filter_header(
+        [$group->obs],
+        'OBS_TYPE' => [qw/FLATFIELD/],
+    );
 
-        my @obs = $self->_filter_header(
-            $inst,
-            [$group->obs],
-            'OBS_TYPE' => [qw/FLATFIELD/],
-        );
+    $log->debug(
+        (exists $obs_args{'date'})
+        ? sprintf("Inserting data for %s. Date [%s]",
+                  $name, $obs_args{'date'})
+        : "Inserting given files");
 
-        $log->debug(
-            (exists $obs_args{'date'})
-            ? sprintf("Inserting data for %s. Date [%s]",
-                      $name, $obs_args{'date'})
-            : "Inserting given files");
-
-        unless ($obs[0]) {
-            $log->debug("No observations found for instrument $name");
-            next;
-        }
-
-        $tables[1] = $inst->table;
-
-        $columns->{$name} = $self->get_columns($inst->table, $dbh);
-        $columns->{FILES} = $self->get_columns('FILES', $dbh);
-
-        # Need to create a hash with keys corresponding to the observation number
-        # (an array won't be very efficient since observations can be missing and
-        # run numbers can be large). The values in this hash have to be a reference
-        # to an array of Info::Obs objects representing each subsystem. We need to
-        # construct new Obs objects based on the subsystem number.
-        # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
-
-        foreach my $obs (@obs) {
-            my @subhdrs = $obs->subsystems;
-            $observations->{$obs->runnr} = \@subhdrs;
-        }
-
-        my $added = $self->insert_observations('db' => $db,
-                                               'instrument' => $inst,
-                                               'columns' => $columns,
-                                               'dict'    => $dict,
-                                               'obs' => $observations,
-                                               dry_run => $dry_run,
-                                               skip_state => $skip_state,
-                                               %update_args);
-
-        push @files_added, @{$added}
-            if $added && scalar @{$added};
+    unless ($obs[0]) {
+        $log->debug("No observations found for instrument $name");
+        return;
     }
 
-    return \@files_added;
+    $tables[1] = $self->instrument_table();
+
+    $columns->{$name} = $self->get_columns($self->instrument_table(), $dbh);
+    $columns->{FILES} = $self->get_columns('FILES', $dbh);
+
+    # Need to create a hash with keys corresponding to the observation number
+    # (an array won't be very efficient since observations can be missing and
+    # run numbers can be large). The values in this hash have to be a reference
+    # to an array of Info::Obs objects representing each subsystem. We need to
+    # construct new Obs objects based on the subsystem number.
+    # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
+
+    my %observations;
+    foreach my $obs (@obs) {
+        my @subhdrs = $obs->subsystems;
+        $observations{$obs->runnr} = \@subhdrs;
+    }
+
+    return $self->insert_observations(
+        db => $db,
+        columns => $columns,
+        dict    => $dict,
+        obs => \%observations,
+        dry_run => $dry_run,
+        skip_state => $skip_state,
+        %update_args);
 }
 
 =item B<insert_observations>
@@ -400,15 +347,12 @@ Inserts a row  in "FILES", "COMMON", and instrument related tables for
 each observation for each subscan and subsystem used.  Every insert
 per observation is done in one transaction.
 
-It takes a hash of database handle; an instrument object
-(I<JSA::EnterData::ACSIS>, I<JSA::EnterData::DAS>, or
-I<JSA::EnterData::SCUBA2>); hash reference of observations (run number
+It takes a hash of database handle; hash reference of observations (run number
 as keys, array reference of sub headers as values); a hash reference
 of columns (see I<get_columns>); and a hash reference of dictionary
 (see I<create_dictionary>).
 
     $enter->insert_observations('dbhandle' => $dbh,
-                                'instrument' => $inst,
                                 'columns' => \%cols,
                                 'dict'    => \%dict,
                                 'obs'     => \%obs,
@@ -427,7 +371,7 @@ sub insert_observations {
 
     # Pass everything but observations hash reference to other subs.
     my %pass_args = map {$_ => $args{$_}}
-        qw/instrument db calc_radec columns dict dry_run skip_state
+        qw/db calc_radec columns dict dry_run skip_state
            process_simulation
            update_only_obstime update_only_inbeam/;
 
@@ -495,13 +439,13 @@ sub insert_obs_set {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($inst, $db, $run_obs, $files, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/instrument db run-obs file-id dry_run skip_state/;
+    my ($db, $run_obs, $files, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/db run-obs file-id dry_run skip_state/;
 
     my $dbh  = $db->handle();
     my @file = @{$files};
 
-    my %pass_arg = map {$_ => $arg{$_}} qw/instrument columns dict/;
+    my %pass_arg = map {$_ => $arg{$_}} qw/columns dict/;
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
 
     foreach (@file) {
@@ -519,12 +463,12 @@ sub insert_obs_set {
 
         $headers = $self->munge_header_INBEAM($headers);
 
-        if ($inst->can('fill_max_subscan')) {
-          $inst->fill_max_subscan($headers, $obs);
+        if ($self->can('fill_max_subscan')) {
+          $self->fill_max_subscan($headers, $obs);
         }
 
-        if ($inst->can('transform_header')) {
-          my ($hash , $array) = $inst->transform_header($headers);
+        if ($self->can('transform_header')) {
+          my ($hash , $array) = $self->transform_header($headers);
           $obs->hdrhash($hash);
         }
     }
@@ -549,7 +493,7 @@ sub insert_obs_set {
     }
 
     # XXX Skip badly needed data verification for scuba2 until implemented.
-    unless (JSA::EnterData::SCUBA2->name_is_scuba2($inst->name)) {
+    unless (JSA::EnterData::SCUBA2->name_is_scuba2($self->instrument_name())) {
         my $verify = JCMT::DataVerify->new('Obs' => $common_obs)
             or do {
                 my $log = Log::Log4perl->get_logger('');
@@ -575,9 +519,9 @@ sub insert_obs_set {
     if ($arg{'calc_radec'}
             && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
 
-        unless ($self->calc_radec($inst, $common_obs, $common_hdrs)) {
+        unless ($self->calc_radec($common_obs, $common_hdrs)) {
             $log->debug("problem while finding bounds; skipping");
-            return ('error', $inst->name() . ': could not find bounds');
+            return ('error', $self->instrument_name() . ': could not find bounds');
         }
     }
 
@@ -633,14 +577,14 @@ sub insert_obs_set {
 }
 
 sub _filter_header {
-    my ($self, $inst, $obs, %ignore) = @_;
+    my ($self, $obs, %ignore) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
     return unless scalar @{$obs};
 
     return @{$obs}
-        if JSA::EnterData::ACSIS->name_is_similar($inst->name());
+        if JSA::EnterData::ACSIS->name_is_similar($self->instrument_name());
 
     my $remove_ok = sub {
         my ($href, $key) = @_;
@@ -705,10 +649,9 @@ sub _filter_header {
 =item B<_get_obs_group>
 
 When no files are provided, returns a L<OMP::Info::ObsGroup> object
-given instrument name and date as a hash.
+given date as a hash.
 
-    $obs = $enter->_get_obs_group(name => 'ACSIS',
-                                  date => '20090609',
+    $obs = $enter->_get_obs_group(date => '20090609',
                                   dry_run => $dry_run,
                                   skip_state => $skip_state,
                                  );
@@ -750,7 +693,7 @@ sub _get_obs_group {
 
         @file = OMP::FileUtils->files_on_disk(
             date => $date,
-            instrument => $args{'name'});
+            instrument => $self->instrument_name());
     }
     else {
         @file = @{$args{'files'}};
@@ -852,9 +795,9 @@ L<OMP::Info::Obs> object.  If optional header hash reference (see
 L<OMP::Info::Obs/hdrhash>) is not given, it will be retrieved from the
 given L<OMP::Info::Obs> object.
 
-    $skip = $enter->skip_obs($inst, $obs);
+    $skip = $enter->skip_obs($obs);
 
-    $skip = $enter->skip_obs($inst, $obs, $header);
+    $skip = $enter->skip_obs($obs, $header);
 
 C<JSA::Error> exception is thrown if header hash (reference) is
 undefined.
@@ -862,7 +805,7 @@ undefined.
 =cut
 
 sub skip_obs {
-    my ($self, $inst, $obs, $header) = @_;
+    my ($self, $obs, $header) = @_;
 
     $header = $obs->hdrhash unless defined $header;
 
@@ -872,7 +815,7 @@ sub skip_obs {
 
     # Tests are the same which control database changes.
     return $self->is_simulation($header)
-        || ! $self->calc_radec($inst, $obs, $header);
+        || ! $self->calc_radec($obs, $header);
 }
 
 =item B<is_simulation>
@@ -938,7 +881,6 @@ the I<OMP::Info::Objects> in its entirety.
 Returns true on success, false on failure.
 
     $ok = $enter->add_subsys_obs('dbhandle' => $dbh,
-                                 'instrument' => $inst,
                                  'columns' => \%cols,
                                  'dict'    => \%dict,
                                  'obs'     => \%obs_per_runnr,
@@ -954,19 +896,19 @@ sub add_subsys_obs {
 
     my $log = Log::Log4perl->get_logger('');
 
-    foreach my $k (qw/instrument db columns dict obs/) {
+    foreach my $k (qw/db columns dict obs/) {
         next if exists $args{$k} && $args{$k} && ref $args{$k};
 
         throw JSA::Error::BadArgs("No suitable value given for ${k}.");
     }
 
-    my ($inst, $db, $obs, $dry_run, $skip_state) =
-        map {$args{$_}} qw/instrument db obs dry_run skip_state/;
+    my ($db, $obs, $dry_run, $skip_state) =
+        map {$args{$_}} qw/db obs dry_run skip_state/;
 
     my $dbh = $db->handle();
 
     # Need to pass everything but observations to other subs.
-    my %pass_args = map {$_ => $args{$_}} qw/instrument columns dict/;
+    my %pass_args = map {$_ => $args{$_}} qw/columns dict/;
 
     my $subsysnr = 0;
     my $totsub = scalar @{$obs};
@@ -979,16 +921,16 @@ sub add_subsys_obs {
         my $subsys_hdrs = {%{$subsys_obs->hdrhash}};
 
         # Need to calculate the frequency information
-        $inst->calc_freq($self, $subsys_obs, $subsys_hdrs);
+        $self->calc_freq($subsys_obs, $subsys_hdrs);
 
         my $grouped;
-        if ($inst->can('transform_header')) {
-            (undef, $grouped) = $inst->transform_header($subsys_hdrs);
+        if ($self->can('transform_header')) {
+            (undef, $grouped) = $self->transform_header($subsys_hdrs);
         }
 
         my $added_files;
         foreach my $subh ($grouped ? @{$grouped} : $subsys_hdrs) {
-            $inst->_fill_headers_obsid_subsys($subh, $subsys_obs->obsid);
+            $self->_fill_headers_obsid_subsys($subh, $subsys_obs->obsid);
 
             my $error;
 
@@ -997,19 +939,17 @@ sub add_subsys_obs {
 
                 $self->_change_FILES('obs'          => $subsys_obs,
                                      'headers'      => $subsys_hdrs,
-                                     'instrument'   => $inst,
                                      'db'           => $db,
                                      dry_run        => $dry_run,
                                      skip_state     => $skip_state,
-                                     map({$_ => $pass_args{$_}}
-                                         qw/columns dict/));
+                                     %pass_args);
             }
 
-            if ($inst->can('merge_by_obsidss')
+            if ($self->can('merge_by_obsidss')
                     && exists $subsys_hdrs->{'SUBHEADERS'}) {
 
                 my $sys_sub = $subsys_hdrs->{'SUBHEADERS'};
-                my @temp = $inst->merge_by_obsidss($sys_sub);
+                my @temp = $self->merge_by_obsidss($sys_sub);
 
                 @{$sys_sub} = @{$temp[0]}
                     if scalar @temp;
@@ -1018,7 +958,7 @@ sub add_subsys_obs {
             $error = $self->_update_or_insert(
                 %pass_args,
                 'dbhandle' => $dbh,
-                'table'   => $inst->table,
+                'table'   => $self->instrument_table(),
                 'headers' => $subh,
                 dry_run   => $dry_run);
 
@@ -1694,16 +1634,14 @@ sub _fix_dates {
 =item B<fill_headers_FILES>
 
 Fills in the headers for C<FILES> database table, given a
-L<JSA::EnterData::ACSIS>, L<JSA::EnterData::DAS>, or
-L<JSA::EnterData::SCUBA2> object, a headers hash reference and an
-L<OMP::Info::Obs> object.
+headers hash reference and an L<OMP::Info::Obs> object.
 
-    $enter->fill_headers_FILES($inst, \%header, $obs);
+    $enter->fill_headers_FILES(\%header, $obs);
 
 =cut
 
 sub fill_headers_FILES {
-    my ($self, $inst, $header, $obs) = @_;
+    my ($self, $header, $obs) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1732,12 +1670,7 @@ sub fill_headers_FILES {
         "Created header [file_id] with value [%s]",
         join ',', @{$header->{'file_id'}});
 
-    $inst->_fill_headers_obsid_subsys($header, $obs->obsid);
-
-    # Further work needs to be done for SCUBA2.
-    if (my $fill = $inst->can('fill_headers_FILES')) {
-        $inst->$fill( $header, $obs );
-    }
+    $self->_fill_headers_obsid_subsys($header, $obs->obsid);
 
     return;
 }
@@ -2108,12 +2041,12 @@ Calculate RA/Dec extent (ICRS) of the observation and the base
 position.  It populates header with corners of grid (in decimal
 degrees).  Status is perl status: 1 is good, 0 bad.
 
-    $status = JSA::EnterData->calc_radec($inst, $obs, $header);
+    $status = JSA::EnterData->calc_radec($obs, $header);
 
 =cut
 
 sub calc_radec {
-    my ($self, $inst, $obs, $headerref) = @_;
+    my ($self, $obs, $headerref) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -2129,7 +2062,7 @@ sub calc_radec {
     my $pa = $headerref->{MAP_PA};
     $pa *= -1 if defined $pa;
 
-    my @command  = $inst->get_bound_check_command($temp->filename(), $pa);
+    my @command  = $self->get_bound_check_command($temp->filename(), $pa);
 
     $log->info(sprintf(
         "Performing bound calculation for files starting %s", $filenames[0]));
@@ -2290,13 +2223,13 @@ sub _change_FILES {
 
     my $table = 'FILES';
 
-    my ($headers, $obs, $db, $inst, $dry_run, $skip_state) =
-        @arg{qw/headers obs db instrument dry_run skip_state/};
+    my ($headers, $obs, $db, $dry_run, $skip_state) =
+        @arg{qw/headers obs db dry_run skip_state/};
 
     my $dbh = $db->handle();
 
     # Create headers that don't exist
-    $self->fill_headers_FILES($inst, $headers, $obs);
+    $self->fill_headers_FILES($headers, $obs);
 
     my $insert_ref = $self->get_insert_values(
         'table'     => $table,
@@ -2788,7 +2721,6 @@ sub calcbounds_files_for_date {
     my %opt = @_;
 
     my $date_string = $opt{'date'};
-    my ($inst) = $self->instruments();
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -2799,10 +2731,10 @@ sub calcbounds_files_for_date {
 
     my @file;
 
-    $log->debug('finding files for instrument ', $inst->name());
+    $log->debug('finding files for instrument ', $self->instrument_name());
 
     push @file, OMP::FileUtils->files_on_disk(date       => $date,
-                                              instrument => $inst->name());
+                                              instrument => $self->instrument_name());
 
     $log->debug('Files found for date ', $date_string, ' : ', scalar @file);
 
@@ -2817,14 +2749,9 @@ sub calcbounds_files_from_db {
     my $date = $opt{'date'};
     my $obs_types = $opt{'obs_types'};
 
-    my ($inst) = $self->instruments();
-
     my $log = Log::Log4perl->get_logger('');
 
-    $log->error_die('An instrument object was not given.')
-        unless ($inst && ref $inst && $inst->can('name'));
-
-    my $pattern = lc sprintf '%s%%', substr $inst->name(), 0, 1;
+    my $pattern = lc sprintf '%s%%', substr $self->instrument_name(), 0, 1;
     $pattern = sprintf '%s%s%%', $pattern, $date if $date;
 
     $log->info('Getting file paths from database matching ', $pattern);
@@ -2845,7 +2772,7 @@ sub calcbounds_files_from_db {
         'values' => [$pattern, $date, @$obs_types]);
 
     my @file;
-    @file = $inst->make_raw_paths(map {$_->{'file_id'}} @{$tmp})
+    @file = $self->make_raw_paths(map {$_->{'file_id'}} @{$tmp})
         if $tmp
         && ref $tmp
         && scalar @{ $tmp };
@@ -2865,8 +2792,6 @@ sub calcbounds_update_bound_cols {
     my %obs_args = ();
     $obs_args{'date'} = _reformat_datetime($arg{'date'}) if exists $arg{'date'};
     $obs_args{'files'} = _unique_files($arg{'files'}) if exists $arg{'files'};
-
-    my ($inst) = $self->instruments();
 
     my $n_err = 0;
 
@@ -2898,8 +2823,7 @@ sub calcbounds_update_bound_cols {
         'dict'     => $self->get_dictionary(),
     );
 
-    my $inst_scuba2 = $inst->can('name') ? $inst->name() : '';
-       $inst_scuba2 = JSA::EnterData::SCUBA2->name_is_scuba2($inst_scuba2);
+    my $inst_scuba2 = JSA::EnterData::SCUBA2->name_is_scuba2($self->instrument_name());
 
     for my $obs (@{$obs_list}) {
         my @subsys_obs = $obs->subsystems()
@@ -2941,7 +2865,7 @@ sub calcbounds_update_bound_cols {
 
         $log->debug('  calculating bounds');
 
-        unless ($self->calc_radec($inst, $common, \%header)) {
+        unless ($self->calc_radec($common, \%header)) {
             $log->error('  ERROR  while finding bounds');
 
             unless ($dry_run or $skip_state) {
@@ -2977,8 +2901,6 @@ sub calcbounds_make_obs {
     my $dry_run = $opt{'dry_run'};
     my $skip_state = $opt{'skip_state'};
 
-    my ($inst) = $self->instruments();
-
     my %obs_args = ();
     $obs_args{'date'} = $opt{'date'} if exists $opt{'date'};
     $obs_args{'files'} = $opt{'files'} if exists $opt{'files'};
@@ -2986,7 +2908,6 @@ sub calcbounds_make_obs {
     my $log = Log::Log4perl->get_logger('');
 
     my $group = $self->_get_obs_group(
-            name => $inst->name(),
             dry_run => $dry_run,
             skip_state => $skip_state,
             %obs_args)
@@ -3001,8 +2922,7 @@ sub calcbounds_make_obs {
             return;
         };
 
-    @obs = $self->_filter_header($inst, \@obs,
-                                  'OBS_TYPE' => [qw/FLATFIELD/]);
+    @obs = $self->_filter_header(\@obs, 'OBS_TYPE' => [qw/FLATFIELD/]);
 
     return unless scalar @obs;
     return \@obs;
@@ -3011,15 +2931,13 @@ sub calcbounds_make_obs {
 sub calcbounds_find_dark {
     my ($self, $header) = @_;
 
-    my ($inst) = $self->instruments();
+    return unless $self->can('_is_dark');
 
-    return unless $inst->can('_is_dark');
-
-    my $dark = $inst->_is_dark($header);
+    my $dark = $self->_is_dark($header);
     foreach my $sh (exists $header->{'SUBHEADERS'}
                          ? @{$header->{'SUBHEADERS'}}
                          : ()) {
-        $dark =  $inst->_is_dark($sh)
+        $dark =  $self->_is_dark($sh)
           or last;
     }
 

@@ -51,9 +51,6 @@ provides:
   JSA::EnterData::DAS:
     file: lib/JSA/EnterData/DAS.pm
     version: 0
-  JSA::EnterData::Instrument:
-    file: lib/JSA/EnterData/Instrument.pm
-    version: 0
   JSA::EnterData::SCUBA2:
     file: lib/JSA/EnterData/SCUBA2.pm
     version: 0

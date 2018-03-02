@@ -6,7 +6,7 @@ use warnings;
 use Carp qw/carp/;
 use List::Util qw/first/;
 
-use base 'JSA::EnterData::Instrument';
+use parent 'JSA::EnterData';
 
 =head1 NAME
 
@@ -17,20 +17,20 @@ JSA::EnterData::SCUBA2 - SCUBA2 specific methods.
     # Create new object, with specific header dictionary.
     my $scuba2 = new JSA::EnterData::SCUBA2();
 
-    my $name = $scuba2->name;
+    my $name = $scuba2->instrument_name();
 
     my @cmd = $scuba2->get_bound_check_command;
     system(@cmd) == 0
         or die "Problem with running bound check command for $name.";
 
     # Use table in a SQL later.
-    my $table = $scuba2->table;
+    my $table = $scuba2->instrument_table();
 
 
 =head1 DESCRIPTION
 
 JAS::EnterData::SCUBA2 is a object oriented module, having instrument specific
-methods in order to be called from L<JSA::EnterData>.
+methods.
 
 =head2 METHODS
 
@@ -97,15 +97,15 @@ sub get_bound_check_command {
 }
 
 
-=item B<name>
+=item B<instrument_name>
 
 Returns the name of the instrument involved.
 
-    $name = $scuba2->name;
+    $name = $scuba2->instrument_name();
 
 =cut
 
-sub name {
+sub instrument_name {
     return 'SCUBA-2';
 }
 
@@ -134,15 +134,15 @@ sub name_is_scuba2 {
 }
 
 
-=item B<table>
+=item B<instrument_table>
 
 Returns the database table related to the instrument.
 
-    $table = $scuba2->table;
+    $table = $scuba2->instrument_table();
 
 =cut
 
-sub table {
+sub instrument_table {
     return 'SCUBA2';
 }
 
@@ -794,12 +794,15 @@ reference and an L<OMP::Info::Obs> object.
 
     $scuba2->fill_headers_FILES(\%header, $obs);
 
-It needs to be called after L<fill_headers_FILES/JSA::EnterData>.
+This first calls the superclass method L<fill_headers_FILES/JSA::EnterData>.
 
 =cut
 
 sub fill_headers_FILES {
     my ($self, $header, $obs) = @_;
+
+    # Call the superclass version of this method.
+    $self->SUPER::fill_headers_FILES($header, $obs);
 
     # Add 'nsubscan' field.
     my $nsub = () = $header->{'NSUBSCAN'};
