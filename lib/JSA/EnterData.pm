@@ -43,7 +43,7 @@ use JSA::DB;
 use JSA::Headers qw/read_jcmtstate read_wcs/;
 use JSA::Datetime qw/make_datetime/;
 use JSA::DB::TableCOMMON;
-use JSA::EnterData::StarCommand qw/try_star_command/;
+use JSA::Starlink qw/try_star_command/;
 use JSA::Error qw/:try/;
 use JSA::Files qw/looks_like_rawfile/;
 use JSA::WriteList ();

@@ -54,9 +54,6 @@ provides:
   JSA::EnterData::SCUBA2:
     file: lib/JSA/EnterData/SCUBA2.pm
     version: 0
-  JSA::EnterData::StarCommand:
-    file: lib/JSA/EnterData/StarCommand.pm
-    version: 0.03
   JSA::Error:
     file: lib/JSA/Error.pm
     version: 0

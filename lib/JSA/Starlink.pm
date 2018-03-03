@@ -21,6 +21,8 @@ use Carp;
 use warnings;
 use File::Spec;
 use File::Basename;
+use File::Temp;
+use Log::Log4perl;
 use warnings::register;
 
 use Proc::SafeExec;
@@ -39,6 +41,7 @@ use Exporter 'import';
 our @EXPORT_OK = qw/
     check_star_env
     run_star_command
+    try_star_command
     prov_update_parent_path
     set_wcs_attribs
     get_ndf_bb
@@ -46,6 +49,7 @@ our @EXPORT_OK = qw/
 
 our $DEBUG = 0;
 
+our $PARGET = '/star/bin/kappa/parget';
 our %PARENT_PRODUCT_CACHE = ();
 
 =head1 FUNCTIONS
@@ -173,6 +177,106 @@ sub run_star_command {
     }
 
     return (\@out, \@errors, $exstat);
+}
+
+=item B<try_star_command>
+
+Given a hash of I<command> key and Starlink command and arguments as array
+reference value, returns a reference to a hash containing the requested
+I<values> retrieved from the command's output.  Values which could not be
+retrieved are given a value of undef.
+
+It catches and logs L<JSA::Error::StarlinkCommand> errors,
+returning undef.  It passes along L<JSA::Error::BadExec> errors.
+
+If no values are requested and an error did not occur, returns 1.
+
+    $values = try_star_command(
+        command => [qw/command and arguments/],
+        values => [qw/values to fetch/])
+
+=cut
+
+sub try_star_command {
+    my %arg = @_;
+
+    my @com = @{$arg{'command'}}
+        or throw JSA::Error::BadArgs 'No Starlink command given to run.';
+
+    my $cmd_run = join ' ', @com;
+    my $com_name = shift @com;
+
+    my $log = Log::Log4perl->get_logger('');
+    $log->debug("# Command to be run: $cmd_run");
+
+    # Set temporary ADAM directory to ensure we retrieve parameters from the
+    # correct instance of the command.
+    my $adam_dir = File::Temp->newdir();
+    local $ENV{'ADAM_USER'} = "$adam_dir";
+    $log->debug("# Using temporary ADAM directory: $adam_dir");
+
+    my $rc;
+    try {
+        my ($stdout, $stderr);
+        ($stdout, $stderr, $rc) = run_star_command($com_name, @com);
+
+        $log->debug("# Standard output ...\n", join("\n", @{$stdout}))
+            if defined $stdout && scalar @{$stdout};
+
+        $log->debug("# Standard error ...\n", join("\n", @{$stderr}))
+            if defined $stderr && scalar @{$stderr};
+
+        $log->debug("# Exit code: ", $rc, "\n")
+            if defined $rc;
+    }
+    catch JSA::Error::StarlinkCommand with {
+        my ($err) = @_;
+
+        $log->error_warn(join "\n",
+            "Error executing \"$cmd_run\" ...",
+            $err->text());
+
+        throw JSA::Error::FatalError $err
+            if $err->text() =~ /No such file or directory/;
+    };
+
+    # Allow JSA::Error::BadExec error to move up.
+
+    # run_star_command() throws Error when $rc != 0.
+    return undef unless defined $rc && $rc == 0;
+
+    return 1 unless exists $arg{'values'};
+
+    my @values = @{$arg{'values'}};
+
+    my $base = File::Basename::fileparse($com_name);
+
+    $log->debug("# Command for which to fetch values: $base");
+
+    my %out;
+
+    local $ENV{'ADAM_EXIT'} = '1';
+
+    for my $f (@values) {
+        $log->debug("# Fetching value for $f");
+
+        my $v = `$PARGET $f $base`;
+
+        if ($?) {
+            $log->warn("# Could not fetch value for $f");
+            $out{$f} = undef;
+            next;
+        }
+
+        $v =~ s/^\s+//;
+        $v =~ s/\s+$//;
+
+        $log->debug(sprintf("# %s : %s", $f, $v));
+
+        $out{$f} = $v;
+    }
+
+    return \%out;
 }
 
 =item B<prov_update_parent_path>
@@ -622,7 +726,7 @@ Tim Jenness E<lt>t.jenness@jach.hawaii.eduE<gt>,
 
 =head1 COPYRIGHT
 
-Copyright (C) 2008-2009 Science and Technology Facilities Council.
+Copyright (C) 2008-2013 Science and Technology Facilities Council.
 All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under

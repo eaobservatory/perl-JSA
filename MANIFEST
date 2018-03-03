@@ -18,7 +18,6 @@ lib/JSA/EnterData.pm
 lib/JSA/EnterData/ACSIS.pm
 lib/JSA/EnterData/DAS.pm
 lib/JSA/EnterData/SCUBA2.pm
-lib/JSA/EnterData/StarCommand.pm
 lib/JSA/Error.pm
 lib/JSA/Files.pm
 lib/JSA/Headers.pm
