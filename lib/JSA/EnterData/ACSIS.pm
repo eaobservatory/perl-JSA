@@ -290,24 +290,6 @@ sub fill_max_subscan {
     return;
 }
 
-
-=item B<name_is_similar>
-
-Given a instrument instance (L<JSA::EnterData::ACSIS>, L<JSA::EnterData::DAS>,
-L<JSA::EnterData::SCUBA2>), returns a truth value if the name is similar to
-"ACSIS" (for the purpose of data ingestion).
-
-    $possibly = JSA::EnterData::ACSIS->name_is_similar($inst);
-
-=cut
-
-sub name_is_similar {
-    my ($class, $name) = @_;
-
-    return defined $name
-           && scalar grep {lc $name eq lc $_} qw/acsis das/;
-}
-
 1;
 
 =pod

@@ -109,31 +109,6 @@ sub instrument_name {
     return 'SCUBA-2';
 }
 
-
-=item B<name_is_scuba2>
-
-Returns a truth value indicating if the given string matches some variation of
-"SCUBA-2".
-
-    #  Prints "matched".
-    print 'matched'
-        if $scuba2->name_is_scuba2('scuba2');
-
-Purpose of it is to reduce the number of times to reproduce same regular
-expression test.
-
-=cut
-
-# There could be a better place for this method than here.
-sub name_is_scuba2 {
-  my ($class, $name) = @_;
-
-  my $re = qr/^scuba-?2$/i;
-
-  return $name =~ $re;
-}
-
-
 =item B<instrument_table>
 
 Returns the database table related to the instrument.
@@ -146,6 +121,17 @@ sub instrument_table {
     return 'SCUBA2';
 }
 
+=item B<_do_verification>
+
+Should we use JCMT::DataVerify?
+
+=cut
+
+sub _do_verification {
+    my $self = shift;
+    # XXX Skip badly needed data verification for SCUBA-2 until implemented.
+    return 0;
+}
 
 =item B<raw_basename_regex>
 

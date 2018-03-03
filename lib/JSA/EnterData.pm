@@ -297,6 +297,8 @@ sub prepare_and_insert {
 
     return unless $group && ref $group;
 
+    # Note: this was previously SCUBA-2 specific, but can probably
+    # be called harmlessly for ACSIS since it doesn't have flatfields.
     my @obs = $self->_filter_header(
         [$group->obs],
         'OBS_TYPE' => [qw/FLATFIELD/],
@@ -492,8 +494,7 @@ sub insert_obs_set {
         return ( 'simulation', '' );
     }
 
-    # XXX Skip badly needed data verification for scuba2 until implemented.
-    unless (JSA::EnterData::SCUBA2->name_is_scuba2($self->instrument_name())) {
+    if ($self->_do_verification()) {
         my $verify = JCMT::DataVerify->new('Obs' => $common_obs)
             or do {
                 my $log = Log::Log4perl->get_logger('');
@@ -576,15 +577,23 @@ sub insert_obs_set {
     return ('inserted', '');
 }
 
+=item B<_do_verification>
+
+Should we use JCMT::DataVerify?
+
+=cut
+
+sub _do_verification {
+    my $self = shift;
+    return 1;
+}
+
 sub _filter_header {
     my ($self, $obs, %ignore) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
     return unless scalar @{$obs};
-
-    return @{$obs}
-        if JSA::EnterData::ACSIS->name_is_similar($self->instrument_name());
 
     my $remove_ok = sub {
         my ($href, $key) = @_;
@@ -2823,8 +2832,6 @@ sub calcbounds_update_bound_cols {
         'dict'     => $self->get_dictionary(),
     );
 
-    my $inst_scuba2 = JSA::EnterData::SCUBA2->name_is_scuba2($self->instrument_name());
-
     for my $obs (@{$obs_list}) {
         my @subsys_obs = $obs->subsystems()
           or next;
@@ -2849,16 +2856,16 @@ sub calcbounds_update_bound_cols {
 
         $log->info(join "\n    ", 'Processing files', @file_id);
 
-        if ($inst_scuba2) {
+        if ($self->instrument_name() eq 'SCUBA-2') {
             unless (_calcbounds_any_header_sub_val(\%header, 'SEQ_TYPE', $found_type)) {
                 $log->debug('  skipped uninteresting SEQ_TYPE');
                 next;
             }
+        }
 
-            if ($self->calcbounds_find_dark(\%header)) {
-                $log->debug('  skipped dark.');
-                next;
-            }
+        if ($self->calcbounds_find_dark(\%header)) {
+            $log->debug('  skipped dark.');
+            next;
         }
 
         _fix_dates(\%header);
@@ -2922,6 +2929,8 @@ sub calcbounds_make_obs {
             return;
         };
 
+    # Note: this was previously SCUBA-2 specific, but can probably
+    # be called harmlessly for ACSIS since it doesn't have flatfields.
     @obs = $self->_filter_header(\@obs, 'OBS_TYPE' => [qw/FLATFIELD/]);
 
     return unless scalar @obs;
