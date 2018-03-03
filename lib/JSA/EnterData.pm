@@ -282,8 +282,6 @@ sub prepare_and_insert {
     my $columns;
     $columns->{$tables[0]} = $self->get_columns($tables[0], $dbh);
 
-    my $dict = $self->get_dictionary();
-
     my $name = $self->instrument_name();
 
     # Retrieve observations from disk.  An Info::Obs object will be returned
@@ -336,7 +334,6 @@ sub prepare_and_insert {
     return $self->insert_observations(
         db => $db,
         columns => $columns,
-        dict    => $dict,
         obs => \%observations,
         dry_run => $dry_run,
         skip_state => $skip_state,
@@ -351,12 +348,10 @@ per observation is done in one transaction.
 
 It takes a hash of database handle; hash reference of observations (run number
 as keys, array reference of sub headers as values); a hash reference
-of columns (see I<get_columns>); and a hash reference of dictionary
-(see I<create_dictionary>).
+of columns (see I<get_columns>).
 
     $enter->insert_observations('dbhandle' => $dbh,
                                 'columns' => \%cols,
-                                'dict'    => \%dict,
                                 'obs'     => \%obs,
                                 dry_run   => $dry_run,
                                 skip_state=> $skip_state);
@@ -373,7 +368,7 @@ sub insert_observations {
 
     # Pass everything but observations hash reference to other subs.
     my %pass_args = map {$_ => $args{$_}}
-        qw/db calc_radec columns dict dry_run skip_state
+        qw/db calc_radec columns dry_run skip_state
            process_simulation
            update_only_obstime update_only_inbeam/;
 
@@ -447,7 +442,7 @@ sub insert_obs_set {
     my $dbh  = $db->handle();
     my @file = @{$files};
 
-    my %pass_arg = map {$_ => $arg{$_}} qw/columns dict/;
+    my %pass_arg = map {$_ => $arg{$_}} qw/columns/;
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
 
     foreach (@file) {
@@ -881,8 +876,7 @@ sub is_simulation {
 
 Adds subsystem observations, given a hash of database handle; hash
 reference of observations (run number as keys, array reference of sub
-headers as values); a hash reference of columns (see I<get_columns>);
-and a hash reference of dictionary (see I<create_dictionary>).
+headers as values); a hash reference of columns (see I<get_columns>).
 
 The observations hash reference is for a given run number, not the
 the I<OMP::Info::Objects> in its entirety.
@@ -891,7 +885,6 @@ Returns true on success, false on failure.
 
     $ok = $enter->add_subsys_obs('dbhandle' => $dbh,
                                  'columns' => \%cols,
-                                 'dict'    => \%dict,
                                  'obs'     => \%obs_per_runnr,
                                  dry_run   => $dry_run,
                                  skip_state=> $skip_state);
@@ -905,7 +898,7 @@ sub add_subsys_obs {
 
     my $log = Log::Log4perl->get_logger('');
 
-    foreach my $k (qw/db columns dict obs/) {
+    foreach my $k (qw/db columns obs/) {
         next if exists $args{$k} && $args{$k} && ref $args{$k};
 
         throw JSA::Error::BadArgs("No suitable value given for ${k}.");
@@ -917,7 +910,7 @@ sub add_subsys_obs {
     my $dbh = $db->handle();
 
     # Need to pass everything but observations to other subs.
-    my %pass_args = map {$_ => $args{$_}} qw/columns dict/;
+    my %pass_args = map {$_ => $args{$_}} qw/columns/;
 
     my $subsysnr = 0;
     my $totsub = scalar @{$obs};
@@ -1841,8 +1834,8 @@ sub get_columns {
 =item B<get_insert_values>
 
 Given a hash of a table name; a hash reference containing table column
-information (see global hash %columns); a hash reference containing
-the dictionary contents; and a hash reference containing observation
+information (see global hash %columns);
+and a hash reference containing observation
 headers, return a hash reference with the table's columns as the keys,
 and the insertion values as the values.
 
@@ -1852,14 +1845,12 @@ be anything.
 
     $vals = $enter->get_insert_values('table' => $table,
                                       'columns' => \%columns,
-                                      'dict' => \%dictionary,
                                       'headers' => \%hdrhash);
 
 =cut
 
 sub get_insert_values {
     my ($self, %args) = @_;
-    #my ($self, $table, $columns, $dictionary, $hdrhash) = @_;
 
     my ($table, $columns) = map {$args{$_}} qw/table columns/;
 
@@ -1886,8 +1877,10 @@ sub extract_column_headers {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($hdrhash, $table, $columns, $dict) =
-        map {$args{$_}} qw/headers table columns dict/;
+    my ($hdrhash, $table, $columns) =
+        map {$args{$_}} qw/headers table columns/;
+
+    my $dict = $self->get_dictionary();
 
     $log->trace(">Processing table: $table");
 
@@ -2243,7 +2236,7 @@ sub _change_FILES {
     my $insert_ref = $self->get_insert_values(
         'table'     => $table,
         'headers'   => $headers,
-        map({$_ => $arg{$_}} qw/columns dict/),
+        map({$_ => $arg{$_}} qw/columns/),
     );
 
     my ($files , $error);
@@ -2292,7 +2285,7 @@ It calls C<prepare_update_hash> to identify the necessary insert and
 update operations, and then calls the above methods as appropriate.
 
 Returns the error string the database handle, given a hash with
-C<table>, C<columns>, C<dict>, C<headers> as keys.  For details about
+C<table>, C<columns>, C<headers> as keys.  For details about
 values, see I<insert_hash>, I<update_hash>, and I<get_insert_values>
 methods.
 
@@ -2829,7 +2822,6 @@ sub calcbounds_update_bound_cols {
         # This is a hash reference, not just $cols, in order to cater to needs of
         # JSA::EnterData->get_insert_values().
         'columns'  => {$table => $self->get_columns($table, $dbh)},
-        'dict'     => $self->get_dictionary(),
     );
 
     for my $obs (@{$obs_list}) {
