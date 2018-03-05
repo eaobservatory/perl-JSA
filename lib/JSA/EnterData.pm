@@ -319,11 +319,8 @@ sub prepare_and_insert {
     my $db = new OMP::DBbackend::Archive();
     my $dbh = $db->handle();
 
-    my %columns = (
-        COMMON => $self->get_columns('COMMON', $dbh),
-        $name => $self->get_columns($self->instrument_table(), $dbh),
-        FILES => $self->get_columns('FILES', $dbh),
-    );
+    my %columns = map {$_ => $self->get_columns($_, $dbh)}
+        qw/COMMON FILES/, $self->instrument_table();
 
     return $self->insert_observations(
         db => $db,
@@ -1847,13 +1844,6 @@ sub get_insert_values {
     my ($self, %args) = @_;
 
     my ($table, $columns) = map {$args{$_}} qw/table columns/;
-
-    for (qw/SCUBA-2/) {
-        $columns->{$table} = $columns->{$_}
-            if 'scuba2' eq lc $table
-            && ! exists $columns->{$table}
-            && exists $columns->{$_};
-    }
 
     # Map headers to columns, translating from the dictionary as
     # necessary.
