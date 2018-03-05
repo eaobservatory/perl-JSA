@@ -269,19 +269,6 @@ sub prepare_and_insert {
 
     $self->{'_cache_old_date'} = $date;
 
-    # Tables of interest.  All instruments reference the COMMON table, so it is
-    # first on the array.  Actual instrument table will be the second element.
-    my @tables = qw/COMMON/;
-
-    my $db = OMP::DBbackend::Archive->new;
-    my $dbh = $db->handle;
-
-    # The %columns hash will contain a key for each table, each key's value
-    # being an anonymous hash containing the column information.  Store this
-    # information for the COMMON table initially.
-    my $columns;
-    $columns->{$tables[0]} = $self->get_columns($tables[0], $dbh);
-
     my $name = $self->instrument_name();
 
     # Retrieve observations from disk.  An Info::Obs object will be returned
@@ -313,11 +300,6 @@ sub prepare_and_insert {
         return;
     }
 
-    $tables[1] = $self->instrument_table();
-
-    $columns->{$name} = $self->get_columns($self->instrument_table(), $dbh);
-    $columns->{FILES} = $self->get_columns('FILES', $dbh);
-
     # Need to create a hash with keys corresponding to the observation number
     # (an array won't be very efficient since observations can be missing and
     # run numbers can be large). The values in this hash have to be a reference
@@ -331,9 +313,21 @@ sub prepare_and_insert {
         $observations{$obs->runnr} = \@subhdrs;
     }
 
+    # The %columns hash will contain a key for each table, each key's value
+    # being an anonymous hash containing the column information.
+
+    my $db = new OMP::DBbackend::Archive();
+    my $dbh = $db->handle();
+
+    my %columns = (
+        COMMON => $self->get_columns('COMMON', $dbh),
+        $name => $self->get_columns($self->instrument_table(), $dbh),
+        FILES => $self->get_columns('FILES', $dbh),
+    );
+
     return $self->insert_observations(
         db => $db,
-        columns => $columns,
+        columns => \%columns,
         obs => \%observations,
         dry_run => $dry_run,
         skip_state => $skip_state,
