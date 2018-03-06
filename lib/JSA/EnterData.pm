@@ -1810,7 +1810,8 @@ containing columns with their associated data types.
 sub get_columns {
     my ($self, $table, $dbh) = @_;
 
-    return {} unless defined $dbh;
+    throw JSA::Error('get_columns: database handle is undefined')
+        unless defined $dbh;
 
     # Do query to retrieve column info
     my $col_href = $dbh->selectall_hashref("SHOW COLUMNS FROM $table", "Field")
