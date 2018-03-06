@@ -974,15 +974,6 @@ sub add_subsys_obs {
     return 1;
 }
 
-sub prepare_insert_hash {
-    my ($self, $table, $field_values) = @_;
-
-    throw JSA::Error "Empty hash reference was given to insert."
-        unless scalar keys %{$field_values};
-
-    return $self->_handle_multiple_changes($table, $field_values);
-}
-
 sub _handle_multiple_changes {
     my ($self, $table, $vals) = @_;
 
@@ -2213,9 +2204,12 @@ sub _change_FILES {
 
     my ($files , $error);
     try {
+        throw JSA::Error "Empty hash reference in _change_FILES."
+            unless scalar keys %$insert_ref;
+
         _verify_file_name($insert_ref->{'file_id'});
 
-        my $hash = $self->prepare_insert_hash($table, $insert_ref);
+        my $hash = $self->_handle_multiple_changes($table, $insert_ref);
 
         ($error, $files) = $self->insert_hash('table'   => $table,
                                               'dbhandle'=> $dbh,
