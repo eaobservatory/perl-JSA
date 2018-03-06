@@ -427,8 +427,8 @@ sub insert_obs_set {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $run_obs, $files, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/db run-obs file-id dry_run skip_state/;
+    my ($db, $run_obs, $files, $columns, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/db run-obs file-id columns dry_run skip_state/;
 
     my $dbh  = $db->handle();
     my @file = @{$files};
@@ -517,11 +517,13 @@ sub insert_obs_set {
 
     $self->fill_headers_COMMON($common_hdrs, $common_obs);
 
+    my $table = 'COMMON';
+
     my $error = $self->_update_or_insert(
-        %pass_arg,
         update_args => \%common_arg,
         'dbhandle' => $dbh,
         'table'    => 'COMMON',
+        table_columns => $columns->{$table},
         'headers'  => $common_hdrs,
         dry_run    => $dry_run);
 
@@ -895,13 +897,10 @@ sub add_subsys_obs {
         throw JSA::Error::BadArgs("No suitable value given for ${k}.");
     }
 
-    my ($db, $obs, $dry_run, $skip_state) =
-        map {$args{$_}} qw/db obs dry_run skip_state/;
+    my ($db, $obs, $columns, $dry_run, $skip_state) =
+        map {$args{$_}} qw/db obs columns dry_run skip_state/;
 
     my $dbh = $db->handle();
-
-    # Need to pass everything but observations to other subs.
-    my %pass_args = map {$_ => $args{$_}} qw/columns/;
 
     my $subsysnr = 0;
     my $totsub = scalar @{$obs};
@@ -930,12 +929,15 @@ sub add_subsys_obs {
             unless ($added_files) {
                 $added_files++;
 
+                my $table = 'FILES';
+
                 $self->_change_FILES('obs'          => $subsys_obs,
                                      'headers'      => $subsys_hdrs,
                                      'db'           => $db,
+                                     table          => $table,
+                                     table_columns  => $columns->{$table},
                                      dry_run        => $dry_run,
-                                     skip_state     => $skip_state,
-                                     %pass_args);
+                                     skip_state     => $skip_state);
             }
 
             if ($self->can('merge_by_obsidss')
@@ -948,10 +950,12 @@ sub add_subsys_obs {
                     if scalar @temp;
             }
 
+            my $table = $self->instrument_table();
+
             $error = $self->_update_or_insert(
-                %pass_args,
                 'dbhandle' => $dbh,
-                'table'   => $self->instrument_table(),
+                'table'   => $table,
+                table_columns => $columns->{$table},
                 'headers' => $subh,
                 dry_run   => $dry_run);
 
@@ -1503,16 +1507,16 @@ sub update_hash {
 
 =item B<transform_value>
 
-Given a table name, column name, and value to be inserted in a table,
+Given a hash of columns, and value to be inserted in a table,
 alter the value if the database expects the value to be in a different
 format than that of the headers.
 
-    $enter->transform_value($table, \%columns, \%values);
+    $enter->transform_value($table_columns, \%values);
 
 =cut
 
 sub transform_value {
-    my ($self, $table, $columns, $values) = @_;
+    my ($self, $table_columns, $values) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1528,9 +1532,9 @@ sub transform_value {
       my $val = $values->{$column};
       next unless defined($val);
 
-      if (exists $columns->{$table}{$column}) {
+      if (exists $table_columns->{$column}) {
           # Column is defined for this table, get the data type
-          my $data_type = $columns->{$table}{$column};
+          my $data_type = $table_columns->{$column};
 
           if ($data_type eq 'datetime') {
               # Temporarily (needs to be handled at the header source) set a
@@ -1824,60 +1828,44 @@ sub get_columns {
 
 =item B<get_insert_values>
 
-Given a hash of a table name; a hash reference containing table column
-information (see global hash %columns);
-and a hash reference containing observation
+Given a hash of a table columns and a hash reference containing observation
 headers, return a hash reference with the table's columns as the keys,
 and the insertion values as the values.
 
-For FILES table, an additional hash reference is needed to list the
-already processed files.  Keys are the (base) file names, values could
-be anything.
-
-    $vals = $enter->get_insert_values('table' => $table,
-                                      'columns' => \%columns,
-                                      'headers' => \%hdrhash);
+    $vals = $enter->get_insert_values(\%table_columns, \%headers);
 
 =cut
 
 sub get_insert_values {
-    my ($self, %args) = @_;
-
-    my ($table, $columns) = map {$args{$_}} qw/table columns/;
+    my ($self, $table_columns, $headers) = @_;
 
     # Map headers to columns, translating from the dictionary as
     # necessary.
-
-    my $main = $self->extract_column_headers(%args);
+    my $main = $self->extract_column_headers($table_columns, $headers);
 
     # Do value transformation
-    $self->transform_value($table, $columns, $main);
+    $self->transform_value($table_columns, $main);
 
     return $main;
 }
 
 sub extract_column_headers {
-    my ($self, %args) = @_;
+    my ($self, $table_columns, $hdrhash) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($hdrhash, $table, $columns) =
-        map {$args{$_}} qw/headers table columns/;
-
     my $dict = $self->get_dictionary();
-
-    $log->trace(">Processing table: $table");
 
     my %values;
 
     foreach my $header (sort {lc $a cmp lc $b} keys %$hdrhash) {
         my $alt_head = lc $header;
 
-        if (exists $columns->{$table}{$alt_head}) {
+        if (exists $table_columns->{$alt_head}) {
             $values{ $alt_head } = $hdrhash->{$header};
         }
         elsif (exists $dict->{$alt_head}
-                && exists $columns->{$table}{$dict->{$alt_head}}) {
+                && exists $table_columns->{$dict->{$alt_head}}) {
             # Found header alias in dictionary and column exists in table
             my $alias = $dict->{$alt_head};
             $values{$alias} = $hdrhash->{$header};
@@ -2207,21 +2195,20 @@ sub _change_FILES {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my $table = 'FILES';
+    my ($headers, $obs, $db, $table, $table_columns, $dry_run, $skip_state) =
+        @arg{qw/headers obs db table table_columns dry_run skip_state/};
 
-    my ($headers, $obs, $db, $dry_run, $skip_state) =
-        @arg{qw/headers obs db dry_run skip_state/};
+    throw JSA::Error('_change_FILES: columns not defined')
+        unless defined $table_columns;
+
+    $log->trace(">Processing table: $table");
 
     my $dbh = $db->handle();
 
     # Create headers that don't exist
     $self->fill_headers_FILES($headers, $obs);
 
-    my $insert_ref = $self->get_insert_values(
-        'table'     => $table,
-        'headers'   => $headers,
-        map({$_ => $arg{$_}} qw/columns/),
-    );
+    my $insert_ref = $self->get_insert_values($table_columns, $headers);
 
     my ($files , $error);
     try {
@@ -2269,7 +2256,7 @@ It calls C<prepare_update_hash> to identify the necessary insert and
 update operations, and then calls the above methods as appropriate.
 
 Returns the error string the database handle, given a hash with
-C<table>, C<columns>, C<headers> as keys.  For details about
+C<table>, C<table_columns>, C<headers> as keys.  For details about
 values, see I<insert_hash>, I<update_hash>, and I<get_insert_values>
 methods.
 
@@ -2280,12 +2267,19 @@ methods.
 sub _update_or_insert {
     my ($self, %args) = @_;
 
+    my $table = $args{'table'};
+    my $table_columns = $args{'table_columns'};
+    my $headers = $args{'headers'};
+    my $dry_run = $args{'dry_run'};
+
+    throw JSA::Error('_update_or_insert: columns not defined')
+        unless defined $table_columns;
+
     my $log = Log::Log4perl->get_logger('');
 
-    my $vals = $self->get_insert_values(%args);
+    $log->trace(">Processing table: $table");
 
-    my $table = $args{'table'};
-    my $dry_run = $args{'dry_run'};
+    my $vals = $self->get_insert_values($table_columns, $headers);
 
     my $update_args = $args{'update_args'} // {};
 
@@ -2803,9 +2797,7 @@ sub calcbounds_update_bound_cols {
     my %pass = (
         'dbhandle' => $dbh,
         'table'    => $table,
-        # This is a hash reference, not just $cols, in order to cater to needs of
-        # JSA::EnterData->get_insert_values().
-        'columns'  => {$table => $self->get_columns($table, $dbh)},
+        table_columns  => $self->get_columns($table, $dbh),
     );
 
     for my $obs (@{$obs_list}) {
