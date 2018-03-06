@@ -46,7 +46,7 @@ use JSA::DB::TableCOMMON;
 use JSA::Starlink qw/try_star_command/;
 use JSA::Error qw/:try/;
 use JSA::Files qw/looks_like_rawfile/;
-use JSA::WriteList ();
+use JSA::WriteList qw/write_list/;
 use JSA::DB::TableTransfer;
 use JCMT::DataVerify;
 
@@ -341,9 +341,9 @@ It takes a hash of database handle; hash reference of observations (run number
 as keys, array reference of sub headers as values); a hash reference
 of columns (see I<get_columns>).
 
-    $enter->insert_observations('dbhandle' => $dbh,
-                                'columns' => \%cols,
-                                'obs'     => \%obs,
+    $enter->insert_observations(dbhandle  => $dbh,
+                                columns   => \%cols,
+                                obs       => \%obs,
                                 dry_run   => $dry_run,
                                 skip_state=> $skip_state);
 
@@ -375,9 +375,10 @@ sub insert_observations {
         my ($ans, $comment);
 
         try {
-            ($ans, $comment) = $self->insert_obs_set('run-obs' => \@sub_obs,
-                                                     'file-id' => \@base,
-                                                     %pass_args);
+            ($ans, $comment) = $self->insert_obs_set(
+                run_obs => \@sub_obs,
+                files => \@base,
+                %pass_args);
         }
         catch JSA::Error with {
             my ($e) = @_;
@@ -428,7 +429,7 @@ sub insert_obs_set {
     my $log = Log::Log4perl->get_logger('');
 
     my ($db, $run_obs, $files, $columns, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/db run-obs file-id columns dry_run skip_state/;
+       map {$arg{$_}} qw/db run_obs files columns dry_run skip_state/;
 
     my $dbh  = $db->handle();
     my @file = @{$files};
@@ -437,11 +438,11 @@ sub insert_obs_set {
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
 
     foreach (@file) {
-      if (exists $self->{'_cache_touched'}->{$_}) {
-          $log->debug("already processed: $_");
+        if (exists $self->{'_cache_touched'}->{$_}) {
+            $log->debug("already processed: $_");
 
-          return;
-      }
+            return;
+        }
     }
 
     $self->{'_cache_touched'}->{$_} = 1 foreach @file;
@@ -452,12 +453,12 @@ sub insert_obs_set {
         $headers = $self->munge_header_INBEAM($headers);
 
         if ($self->can('fill_max_subscan')) {
-          $self->fill_max_subscan($headers, $obs);
+            $self->fill_max_subscan($headers, $obs);
         }
 
         if ($self->can('transform_header')) {
-          my ($hash , $array) = $self->transform_header($headers);
-          $obs->hdrhash($hash);
+            my ($hash , $array) = $self->transform_header($headers);
+            $obs->hdrhash($hash);
         }
     }
 
@@ -477,7 +478,7 @@ sub insert_obs_set {
 
     if (! $arg{'process_simulation'} && $self->is_simulation($common_hdrs)) {
         $log->debug("simulation data; skipping" );
-        return ( 'simulation', '' );
+        return ('simulation', '');
     }
 
     if ($self->_do_verification()) {
@@ -521,10 +522,10 @@ sub insert_obs_set {
 
     my $error = $self->_update_or_insert(
         update_args => \%common_arg,
-        'dbhandle' => $dbh,
-        'table'    => 'COMMON',
+        dbhandle   => $dbh,
+        table      => 'COMMON',
         table_columns => $columns->{$table},
-        'headers'  => $common_hdrs,
+        headers    => $common_hdrs,
         dry_run    => $dry_run);
 
     if ($dbh->err()) {
@@ -544,12 +545,13 @@ sub insert_obs_set {
 
     # FILES, ACSIS, SCUBA2 tables.
     unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
-        $self->add_subsys_obs(%pass_arg,
-                              'db'  => $db,
-                              'obs' => $run_obs,
-                              dry_run => $dry_run,
-                              skip_state => $skip_state)
-            or return ('error', "while adding subsys obs: $run_obs");
+        $self->add_subsys_obs(
+            %pass_arg,
+            db  => $db,
+            obs => $run_obs,
+            dry_run => $dry_run,
+            skip_state => $skip_state)
+        or return ('error', "while adding subsys obs: $run_obs");
     }
 
     try {
@@ -672,13 +674,6 @@ sub _get_obs_group {
 
     my $xfer = $self->_get_xfer_unconnected_dbh();
 
-    my %obs = (
-        'nocomments' => 1,
-        'retainhdr'  => 1,
-        'ignorebad'  => 1,
-        'header_search' => 'files',
-    );
-
     my @file;
 
     unless (exists $args{'files'}) {
@@ -724,7 +719,12 @@ sub _get_obs_group {
         my $err;
 
         try {
-            push @obs, OMP::Info::Obs->readfile($file , %obs);
+            push @obs, OMP::Info::Obs->readfile(
+                $file,
+                nocomments => 1,
+                retainhdr  => 1,
+                ignorebad  => 1,
+                header_search => 'files');
         }
         catch OMP::Error::ObsRead with {
             ($err) = @_;
@@ -739,7 +739,7 @@ sub _get_obs_group {
             $text = 'Unknown Error';
         };
 
-        if ( $err ) {
+        if ($err) {
             $text .=  ': ' . $err->text();
 
             $xfer->put_state(
@@ -770,17 +770,17 @@ sub _get_obs_group {
         }
 
         push @headers, {
-            'filename' => $ob->{'FILENAME'}->[0],
-            'header' => $header,
+            filename => $ob->{'FILENAME'}->[0],
+            header => $header,
         };
     }
 
     my $merged = OMP::FileUtils->merge_dupes(@headers);
 
-    @obs = OMP::Info::Obs->hdrs_to_obs('retainhdr' => $obs{'retainhdr'},
-                                       'fits'      => $merged);
+    @obs = OMP::Info::Obs->hdrs_to_obs(retainhdr => 1,
+                                       fits      => $merged);
 
-    return OMP::Info::ObsGroup->new('obs' => [@obs]);
+    return OMP::Info::ObsGroup->new(obs => \@obs);
 }
 
 
@@ -849,10 +849,10 @@ sub is_simulation {
     my @order = ('SIMULATE', 'OBS_TYPE');
 
     foreach my $name (@order) {
-      my $val = $self->_find_header('headers' => $header,
-                                    'name'   => $name,
-                                    'test'   => 'defined',
-                                    'value'  => 1);
+      my $val = $self->_find_header(headers => $header,
+                                    name   => $name,
+                                    test   => 'defined',
+                                    value  => 1);
 
       my $test = $sim{$name};
 
@@ -876,9 +876,9 @@ the I<OMP::Info::Objects> in its entirety.
 
 Returns true on success, false on failure.
 
-    $ok = $enter->add_subsys_obs('dbhandle' => $dbh,
-                                 'columns' => \%cols,
-                                 'obs'     => \%obs_per_runnr,
+    $ok = $enter->add_subsys_obs(dbhandle  => $dbh,
+                                 columns   => \%cols,
+                                 obs       => \%obs_per_runnr,
                                  dry_run   => $dry_run,
                                  skip_state=> $skip_state);
 
@@ -931,9 +931,9 @@ sub add_subsys_obs {
 
                 my $table = 'FILES';
 
-                $self->_change_FILES('obs'          => $subsys_obs,
-                                     'headers'      => $subsys_hdrs,
-                                     'db'           => $db,
+                $self->_change_FILES(obs            => $subsys_obs,
+                                     headers        => $subsys_hdrs,
+                                     db             => $db,
                                      table          => $table,
                                      table_columns  => $columns->{$table},
                                      dry_run        => $dry_run,
@@ -953,10 +953,10 @@ sub add_subsys_obs {
             my $table = $self->instrument_table();
 
             $error = $self->_update_or_insert(
-                'dbhandle' => $dbh,
-                'table'   => $table,
+                dbhandle  => $dbh,
+                table     => $table,
                 table_columns => $columns->{$table},
-                'headers' => $subh,
+                headers   => $subh,
                 dry_run   => $dry_run);
 
             if ($dbh->err()) {
@@ -965,7 +965,7 @@ sub add_subsys_obs {
                 $db->rollback_trans() if not $dry_run;
                 $log->debug("$error");
 
-                return ( 'error', $text);
+                return ('error', $text);
             }
         }
 
@@ -975,13 +975,13 @@ sub add_subsys_obs {
 }
 
 sub _handle_multiple_changes {
-    my ($self, $table, $vals) = @_;
+    my ($self, $vals) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
     # Go through the hash and work out whether we have multiple inserts
     my @have_ref;
-    my $nrows = 1;
+    my $nrows = undef;
     foreach my $key (keys %$vals) {
         my $ref = ref $vals->{$key}
             or next;
@@ -990,18 +990,17 @@ sub _handle_multiple_changes {
             unless $ref eq 'ARRAY';
 
         my $row_count = scalar @{$vals->{$key}};
-        if (@have_ref) {
+        if (defined $nrows) {
             # count rows
             $log->logdie("Uneven row count in insert hash ARRAY ref for key '$key'",
-                         " ($row_count != $nrows) compared to first key '$have_ref[0]'",
-                         "(table $table)\n")
+                         " ($row_count != $nrows) compared to first key '$have_ref[0]'\n")
             unless $row_count == $nrows;
         }
         else {
-          $nrows = $row_count;
+            $nrows = $row_count;
         }
 
-        push(@have_ref, $key);
+        push @have_ref, $key;
     }
 
     # Now create an array of insert hashes with array references unrolled
@@ -1021,11 +1020,11 @@ sub _handle_multiple_changes {
                 $row{$refkey} = shift @{$local{$refkey}};
             }
 
-            push(@change, \%row);
+            push @change, \%row;
         }
     }
 
-    return [@change];
+    return \@change;
 }
 
 =item B<insert_hash>
@@ -1036,9 +1035,9 @@ the executed statement output.  (Copied from example in L<DBI>.)
 
 In case of error, returns the value as returned by C<DBI->execute>.
 
-    $status = $enter->insert_hash('table'     => $table,
-                                  'dbhandle' => $dbh,
-                                  'insert'   => \%to_insert
+    $status = $enter->insert_hash(table      => $table,
+                                  dbhandle   => $dbh,
+                                  insert     => \%to_insert
                                   dry_run    => $dry_run);
 
 =cut
@@ -1204,7 +1203,7 @@ sub prepare_update_hash {
 
     my @unique_key = ref $unique_key ? @{$unique_key} : $unique_key ;
 
-    my $rows = $self->_handle_multiple_changes($table, $field_values);
+    my $rows = $self->_handle_multiple_changes($field_values);
 
     my $sql = 'select * ';
 
@@ -1252,7 +1251,7 @@ sub prepare_update_hash {
 
         my $indb = $ref->[0];
 
-        my %differ;
+        my %differ = ();
         my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
         my $am_pm_end = qr/\d\d[APM]$/;
 
@@ -1293,10 +1292,10 @@ sub prepare_update_hash {
             $log->debug("continuing with $key");
 
             my %test = (
-                'start' => exists $start{$key},
-                'end'   => exists $end{$key},
-                'old'   => $old,
-                'new'   => $new,
+                start => exists $start{$key},
+                end   => exists $end{$key},
+                old   => $old,
+                new   => $new,
             );
 
             my $in_range = any {$test{$_}} (qw/start end/);
@@ -1384,9 +1383,9 @@ sub prepare_update_hash {
         $log->debug("differences to update: " . (join ' ', keys %differ));
 
         push @update_hash, {
-            'differ'        => {%differ},
-            'unique_val'    => [@unique_val],
-            'unique_key'    => [@unique_key],
+            differ        => \%differ,
+            unique_val    => [@unique_val],
+            unique_key    => [@unique_key],
         };
 
     }
@@ -1427,11 +1426,11 @@ sub _get_primary_key {
     my ($table) = @_;
 
     my %keys = (
-        'ACSIS'     => 'obsid_subsysnr',
-        'COMMON'    => 'obsid',
-        'FILES'     => [qw/obsid_subsysnr file_id/],
-        'SCUBA2'    => 'obsid_subsysnr',
-        'transfer'  => 'file_id',
+        ACSIS     => 'obsid_subsysnr',
+        COMMON    => 'obsid',
+        FILES     => [qw/obsid_subsysnr file_id/],
+        SCUBA2    => 'obsid_subsysnr',
+        transfer  => 'file_id',
     );
 
     return unless exists $keys{$table};
@@ -1460,8 +1459,8 @@ sub update_hash {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my @change      = @{$change};
-    my @sorted      = sort keys %{$change[0]->{'differ'}};
+    my @change = @{$change};
+    my @sorted = sort keys %{$change[0]->{'differ'}};
 
     return 1 unless scalar @sorted;
 
@@ -1519,48 +1518,48 @@ sub transform_value {
     );
 
     foreach my $column (keys %$values) {
-      # Store column's current value
-      my $val = $values->{$column};
-      next unless defined($val);
+        # Store column's current value
+        my $val = $values->{$column};
+        next unless defined($val);
 
-      if (exists $table_columns->{$column}) {
-          # Column is defined for this table, get the data type
-          my $data_type = $table_columns->{$column};
+        if (exists $table_columns->{$column}) {
+            # Column is defined for this table, get the data type
+            my $data_type = $table_columns->{$column};
 
-          if ($data_type eq 'datetime') {
-              # Temporarily (needs to be handled at the header source) set a
-              # zero date (0000-00-00T00:00:00) to undef.
-              (my $non_zero = $val) =~ tr/0T :-//d;
+            if ($data_type eq 'datetime') {
+                # Temporarily (needs to be handled at the header source) set a
+                # zero date (0000-00-00T00:00:00) to undef.
+                (my $non_zero = $val) =~ tr/0T :-//d;
 
-              unless ($non_zero) {
-                  undef $values->{$column};
+                unless ($non_zero) {
+                    undef $values->{$column};
 
-                  $log->trace(sprintf
-                      "Converted date [%s] to [undef] for column [%s]",
-                      $val, $column);
-              }
-          }
-          elsif ($data_type =~ /^tinyint/ or $data_type =~ /^int/) {
-              if (exists $transform_bool{$val}) {
-                  # This value needs to be transformed to the new value
-                  # defined in the %transform_bool hash
-                  $values->{$column} = $transform_bool{$val};
+                    $log->trace(sprintf
+                        "Converted date [%s] to [undef] for column [%s]",
+                        $val, $column);
+                }
+            }
+            elsif ($data_type =~ /^tinyint/ or $data_type =~ /^int/) {
+                if (exists $transform_bool{$val}) {
+                    # This value needs to be transformed to the new value
+                    # defined in the %transform_bool hash
+                    $values->{$column} = $transform_bool{$val};
 
-                  $log->trace(sprintf
-                      "Transformed value [%s] to [%s] for column [%s]",
-                      $val, $values->{$column}, $column);
-              }
-          }
-          elsif ($column eq 'lststart' or $column eq 'lstend') {
-              # Convert LSTSTART and LSTEND to decimal hours
-              my $ha = new Astro::Coords::Angle::Hour($val, units => 'sex');
-              $values->{$column} = $ha->hours;
+                    $log->trace(sprintf
+                        "Transformed value [%s] to [%s] for column [%s]",
+                        $val, $values->{$column}, $column);
+                }
+            }
+            elsif ($column eq 'lststart' or $column eq 'lstend') {
+                # Convert LSTSTART and LSTEND to decimal hours
+                my $ha = new Astro::Coords::Angle::Hour($val, units => 'sex');
+                $values->{$column} = $ha->hours;
 
-              $log->trace(sprintf
-                  "Converted time [%s] to [%s] for column [%s]",
-                  $val, $values->{$column}, $column);
-          }
-      }
+                $log->trace(sprintf
+                    "Converted time [%s] to [%s] for column [%s]",
+                    $val, $values->{$column}, $column);
+            }
+        }
     }
 
     return 1;
@@ -1682,9 +1681,9 @@ sub munge_header_INBEAM {
     # Find INBEAM values, but remove dummy placeholder values.
     # (See also _get_obs_group where these are inserted.)
     my @val = map {($_ eq 'NOTHING') ? undef : $_} $self->_find_header(
-        'headers' => $headers,
-        'name'   => $name,
-        'value'  => 1,
+        headers => $headers,
+        name   => $name,
+        value  => 1,
     );
 
     $headers->{$name} = (scalar @val)
@@ -1919,8 +1918,8 @@ missing or C<test> hash reference value is missing.
 
     print "skipped obs"
         if $enter->skip_obs_calc(
-            'headers' => $obs->hdrhash(),
-            'test' => {
+            headers => $obs->hdrhash(),
+            test => {
                 'OBS_TYPE' => qr/\b(?: skydip | FLAT_?FIELD  )\b/xi
             });
 
@@ -1933,7 +1932,7 @@ sub skip_obs_calc {
 
     # Skip list.
     my %test =
-        exists $arg{'test'} && defined $arg{'test'} ? %{$arg{'test' }} : ();
+        exists $arg{'test'} && defined $arg{'test'} ? %{$arg{'test'}} : ();
 
     scalar keys %test
         or throw JSA::Error::BadArgs('No "test" hash reference given.');
@@ -1954,9 +1953,9 @@ sub skip_obs_calc {
     }
 
     foreach my $name (sort keys %test) {
-        $self->_find_header('headers' => $header,
-                            'name'    => $name,
-                            'value-regex' => $test{$name})
+        $self->_find_header(headers => $header,
+                            name    => $name,
+                            value_regex => $test{$name})
             or next;
 
         $log->debug("Matched \"$name\" with $test{$name}; obs may be skipped.");
@@ -1974,7 +1973,7 @@ C<OMP::Info::Obs> object -- as a hash, returns a truth value if
 bounding box calculation should be skipped.
 
     print "skipped calc_radec()"
-        if $enter->skip_calc_radec('headers' => $obs->hdrhash());
+        if $enter->skip_calc_radec(headers => $obs->hdrhash());
 
 Default skip list is ...
 
@@ -1986,8 +1985,8 @@ regular expressions ...
 
     print "skipped calc_radec()"
         if $enter->skip_calc_radec(
-            'headers' => $obs->hdrhash(),
-            'test' => {
+            headers => $obs->hdrhash(),
+            test => {
                 'OBS_TYPE' => qr/\b(?: skydip | FLAT_?FIELD  )\b/xi
             });
 
@@ -1998,7 +1997,7 @@ sub skip_calc_radec {
 
     my $skip = qr/\b skydips? \b/xi;
 
-    return $self->skip_obs_calc('test' => {'OBS_TYPE' => $skip}, %arg);
+    return $self->skip_obs_calc(test => {OBS_TYPE => $skip}, %arg);
 }
 
 =item B<calc_radec>
@@ -2019,13 +2018,13 @@ sub calc_radec {
     # File names for a subsystem
     my @filenames = $obs->filename;
 
-    my $temp = File::Temp->new('template' => _file_template('radec'));
+    # Now need to write these files to a temp file
+    my $temp = File::Temp->new(template => '/tmp/radec-XXXXXXXXXX');
     $temp->unlink_on_destroy(1);
-    # Now need to write these files to  temp file
-    my $rc = JSA::WriteList::write_list($temp->filename(), [@filenames]);
+    write_list($temp->filename(), [@filenames]);
 
     # PA (may not be present)
-    my $pa = $headerref->{MAP_PA};
+    my $pa = $headerref->{'MAP_PA'};
     $pa *= -1 if defined $pa;
 
     my @command  = $self->get_bound_check_command($temp->filename(), $pa);
@@ -2043,8 +2042,8 @@ sub calc_radec {
 
     return unless defined $values;
 
-    my %result = ('REFLAT' => undef,
-                  'REFLON' => undef);
+    my %result = (REFLAT => undef,
+                  REFLON => undef);
 
     foreach my $k (sort values %par_corner) {
         my $res = $values->{$k};
@@ -2080,10 +2079,10 @@ sub calc_radec {
     # This means we have to look at JCMTSTATE anyway (but we still ask SMURF because that
     # will save us doing coordinate conversion)
 
-    my $tracksys = $self->_find_header('headers' => $headerref,
-                                       'name'   => 'TRACKSYS',
-                                       'value'  => 1,
-                                       'test'   => 'true');
+    my $tracksys = $self->_find_header(headers => $headerref,
+                                       name   => 'TRACKSYS',
+                                       value  => 1,
+                                       test   => 'true');
 
     my %state;
     unless ($tracksys) {
@@ -2100,24 +2099,24 @@ sub calc_radec {
 
     # check for APP or AZEL (should never be AZEL!)
     if ($not_app_azel->($tracksys)
-            || (exists $state{TCS_TR_SYS}
-                && $not_app_azel->($state{TCS_TR_SYS}))) {
+            || (exists $state{'TCS_TR_SYS'}
+                && $not_app_azel->($state{'TCS_TR_SYS'}))) {
         foreach my $k (qw/REFLON REFLAT/) {
             $result{$k} = $values->{$k};
         }
 
         # convert to radians
-        $result{REFLON} = Astro::Coords::Angle::Hour->new(
-            $result{REFLON}, units => 'sex', range => '2PI')->degrees
+        $result{'REFLON'} = Astro::Coords::Angle::Hour->new(
+            $result{'REFLON'}, units => 'sex', range => '2PI')->degrees
             if defined $result{'REFLON'};
 
-        $result{REFLAT} = Astro::Coords::Angle->new(
-            $result{REFLAT}, units => 'sex', range => 'PI')->degrees
+        $result{'REFLAT'} = Astro::Coords::Angle->new(
+            $result{'REFLAT'}, units => 'sex', range => 'PI')->degrees
             if defined $result{'REFLAT'};
     }
 
-    $headerref->{obsra}  = $result{REFLON};
-    $headerref->{obsdec} = $result{REFLAT};
+    $headerref->{'obsra'}  = $result{'REFLON'};
+    $headerref->{'obsdec'} = $result{'REFLAT'};
 
     return 1;
 }
@@ -2209,13 +2208,14 @@ sub _change_FILES {
 
         _verify_file_name($insert_ref->{'file_id'});
 
-        my $hash = $self->_handle_multiple_changes($table, $insert_ref);
+        my $hash = $self->_handle_multiple_changes($insert_ref);
 
-        ($error, $files) = $self->insert_hash('table'   => $table,
-                                              'dbhandle'=> $dbh,
-                                              'insert'  => $hash,
-                                              dry_run   => $dry_run,
-                                              conditional => 1);
+        ($error, $files) = $self->insert_hash(
+            table     => $table,
+            dbhandle  => $dbh,
+            insert    => $hash,
+            dry_run   => $dry_run,
+            conditional => 1);
 
         $error = $dbh->errstr
             if $dbh->err();
@@ -2355,15 +2355,15 @@ any value).
                                      'name'  => 'OBSEND',
                                      'value' => undef));
 
-=item I<value-regex> regex
+=item I<value_regex> regex
 
-To actually match header value, specify I<value-regex> key with value
+To actually match header value, specify I<value_regex> key with value
 of a regular expression, in which case I<C<value> is ignored>.
 
     print "OBS_TYPE is 'skydip'."
         if $enter->_find_header('headers' => $hdrhash,
                                 'name'  => 'OBS_TYPE',
-                                'value-regex' => qr/\b skydip \b/xi);
+                                'value_regex' => qr/\b skydip \b/xi);
 
 =back
 
@@ -2372,7 +2372,7 @@ of a regular expression, in which case I<C<value> is ignored>.
 sub _find_header {
     my ($self, %args) = @_;
     my ($head, $name, $val_re) =
-      @args{qw/headers name value-regex/};
+      @args{qw/headers name value_regex/};
 
     defined $val_re && ! ref $val_re
         and $val_re = qr/\b${val_re}\b/x;
@@ -2446,8 +2446,8 @@ sub _make_lowercase_header {
         }
 
         if ($type eq 'ARRAY') {
-            $h->{ $name } = [ map uc $_, @{ $h->{ $name } } ];
-            $args{'_case-changed'}++;
+            $h->{ $name } = [map uc $_, @{$h->{$name}}];
+            $args{'_case-changed'} ++;
             next;
         }
 
@@ -2464,7 +2464,7 @@ sub _make_lowercase_header {
     return $args{'_case-changed'} if $is_array;
 
     my $subh = 'SUBHEADERS';
-    return $self->_make_lowercase_header(%args, 'headers' => $head->{$subh})
+    return $self->_make_lowercase_header(%args, headers => $head->{$subh})
         if exists $head->{$subh};
 
     return $args{'_case-changed'};
@@ -2587,8 +2587,8 @@ sub _verify_file_name {
         }
 
         return $xfer{$name} =
-            JSA::DB::TableTransfer->new('dbhandle'     => $dbh,
-                                        'transactions' => 0);
+            new JSA::DB::TableTransfer(dbhandle     => $dbh,
+                                       transactions => 0);
     }
 }
 
@@ -2608,7 +2608,7 @@ sub _get_xfer_unconnected_dbh {
     $name ||= 'xfer-new-dbh';
 
     return $self->_get_xfer(sub {
-            my $db = JSA::DB->new('name' => $name);
+            my $db = new JSA::DB(name => $name);
             $db->use_transaction(0);
             return $db->dbhandle();
         }, $name);
@@ -2652,14 +2652,6 @@ sub _basename {
     require File::Basename;
     my ($base) = File::Basename::fileparse($_[0]);
     return $base;
-}
-
-sub _file_template {
-    my ($prefix) = @_;
-
-    return sprintf '/tmp/_%s-%s',
-                   ($prefix // 'EnterData'),
-                   join '', ('X') x 10;
 }
 
 # Note: methods below were imported from the calcbounds script.
@@ -2743,8 +2735,8 @@ sub calcbounds_files_from_db {
 
     my $jdb = new JSA::DB();
     my $tmp = $jdb->run_select_sql(
-        'sql'    => $sql,
-        'values' => [$pattern, $date, @$obs_types]);
+        sql    => $sql,
+        values => [$pattern, $date, @$obs_types]);
 
     my @file;
     @file = $self->make_raw_paths(map {$_->{'file_id'}} @{$tmp})
@@ -2790,8 +2782,8 @@ sub calcbounds_update_bound_cols {
 
     my $table = 'COMMON';
     my %pass = (
-        'dbhandle' => $dbh,
-        'table'    => $table,
+        dbhandle => $dbh,
+        table    => $table,
         table_columns  => $self->get_columns($table, $dbh),
     );
 
@@ -2858,7 +2850,7 @@ sub calcbounds_update_bound_cols {
         $log->info('  UPDATING headers with bounds');
 
         $self->_update_or_insert(%pass,
-                                 'headers'  => \%header,
+                                 headers    => \%header,
                                  dry_run    => $dry_run,
                                  update_args => {update_only_obsradec => 1});
     }
@@ -2946,13 +2938,13 @@ sub calculate_release_date {
 
     if ( $obs->projectid =~ /^mjlsc/i && $obs->isScience) {
         # CLS. Should properly check the SURVEY FITS header
-        return DateTime->new('month' => 3,
-                             'year' => 2016,
-                             'day' => 1,
-                             'hour' => 23,
-                             'minute' => 59,
-                             'second' => 59,
-                             'time_zone' => 'UTC');
+        return DateTime->new(month => 3,
+                             year => 2016,
+                             day => 1,
+                             hour => 23,
+                             minute => 59,
+                             second => 59,
+                             time_zone => 'UTC');
 
     }
     elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
@@ -2963,13 +2955,13 @@ sub calculate_release_date {
     elsif ($obs->projectid =~ /ec/i) {
         # Do not release EC data.
 
-        return DateTime->new('month' => 1,
-                             'year' => 2031,
-                             'day' => 1,
-                             'hour' => 0,
-                             'minute' => 0,
-                             'second' => 0,
-                             'time_zone' => 0);
+        return DateTime->new(month => 1,
+                             year => 2031,
+                             day => 1,
+                             hour => 0,
+                             minute => 0,
+                             second => 0,
+                             time_zone => 0);
 
     }
     elsif ($obs->isScience) {
