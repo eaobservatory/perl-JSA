@@ -6,7 +6,7 @@ use warnings;
 our $VERSION = '0.01';
 
 use Exporter 'import';
-our @EXPORT_OK = qw/write_list clear_list/;
+our @EXPORT_OK = qw/write_list/;
 
 use Carp ();
 
@@ -16,19 +16,17 @@ use JSA::Error qw/:try/;
 
 =head1 NAME
 
-JSA::WriteList - Functions to write a list to a temporary file.
+JSA::WriteList - Functions to write a list to a file.
 
 =head1 SYNOPSIS
 
-    use JSA::WriteList qw/write_list clear_list/;
+    use JSA::WriteList qw/write_list/;
 
-    $file = write_list($save, ['/tmp/one', '/tmp/two']);
-    # . . .
-    clear_list();
+    write_list($save, ['/tmp/one', '/tmp/two']);
 
 =head1 DESCRIPTION
 
-This funcational module has methods related writing a file list to a
+This functional module has methods related writing a file list to a
 file.
 
 =head2 FUNCTIONS
@@ -41,53 +39,30 @@ Writes a given array reference of files to a given file; returns a
 true value on success.  On error, throws L<JSA::Error>. If C<close()>
 fails, then it C<croak>s (see L<Carp>).
 
-    $ok = write_list($path, ['/tmp/one', '/tmp/two']);
-
-=item B<clear_list>
-
-Removes the file gievn earlier. On success, returns a true value; on
-error, prints a warning & returns nothing.
-
-    clear_list();
+    write_list($path, ['/tmp/one', '/tmp/two']);
 
 =cut
 
-{
-    my ($path);
+sub write_list {
+    my ($save, $files) = @_;
 
-    sub write_list {
-        my ($save, $files) = @_;
+    open my $fh, '>', $save
+        or throw JSA::Error::FatalError("Cannot write to $save: $!");
 
-        undef $path;
-
-        open my $fh, '>', $save
-            or throw JSA::Error::FatalError("Cannot write to $save: $!");
-
-        my $err;
-        for my $i (0 .. $#{$files}) {
-            unless (print $fh $files->[$i] . "\n") {
-                $err = sprintf "%s (lines written so far: %d)" , $! , $i;
-                last;
-            }
+    my $err;
+    for my $i (0 .. $#{$files}) {
+        unless (print $fh $files->[$i] . "\n") {
+            $err = sprintf "%s (lines written so far: %d)" , $! , $i;
+            last;
         }
-
-        close($fh)
-            or Carp::croak("Could not close $path: $!");
-
-        throw JSA::Error::FatalError("Error writing to $save: $err") if $err;
-
-        $path = $save;
-        return 1;
     }
 
-    sub clear_list {
-        if (defined $path && -e $path && ! unlink($path)) {
-            Carp::carp("Could not remove $path: $!");
-            return;
-        }
+    close($fh)
+        or Carp::croak("Could not close $save: $!");
 
-        return 1;
-    }
+    throw JSA::Error::FatalError("Error writing to $save: $err") if $err;
+
+    return 1;
 }
 
 
