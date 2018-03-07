@@ -322,7 +322,7 @@ sub prepare_and_insert {
     my %columns = map {$_ => $self->get_columns($_, $dbh)}
         qw/COMMON FILES/, $self->instrument_table();
 
-    return $self->insert_observations(
+    $self->insert_observations(
         db => $db,
         columns => \%columns,
         obs => \%observations,
@@ -363,58 +363,13 @@ sub insert_observations {
            process_simulation
            update_only_obstime update_only_inbeam/;
 
-    my @success;
-
-    my (@sub_obs, @base);
-
     foreach my $runnr (sort {$a <=> $b} keys %{$obs}) {
-        @sub_obs =  grep {$_} @{$obs->{$runnr}};
+        my @sub_obs =  grep {$_} @{$obs->{$runnr}};
 
-        @base = map {$_->simple_filename} @sub_obs;
-
-        my ($ans, $comment);
-
-        try {
-            ($ans, $comment) = $self->insert_obs_set(
-                run_obs => \@sub_obs,
-                files => \@base,
-                %pass_args);
-        }
-        catch JSA::Error with {
-            my ($e) = @_;
-
-            $ans = 'error';
-            $comment = "$e";
-        };
-
-        next unless defined $ans;
-
-        if ($ans eq 'inserted') {
-            push @success, map {$_->filename} @sub_obs;
-        }
-        elsif ($ans eq 'simulation') {
-            unless ($dry_run or $skip_state) {
-                my $xfer = $self->_get_xfer_unconnected_dbh();
-                $xfer->put_state(
-                    state => 'simulation', files => \@base);
-            }
-        }
-        elsif ($ans eq 'error') {
-            unless ($dry_run or $skip_state) {
-                my $xfer = $self->_get_xfer_unconnected_dbh();
-                $xfer->put_state(
-                    state => 'error', files => \@base,
-                    comment => $comment);
-            }
-        }
-        elsif ($ans eq 'nothing-to-do') {
-        }
-        else {
-            throw JSA::Error::BadArgs "Do not know what to run for state '$ans'."
-        }
+        $self->insert_obs_set(
+            run_obs => \@sub_obs,
+            %pass_args);
     }
-
-    return \@success;
 }
 
 # For each observation:
@@ -428,11 +383,11 @@ sub insert_obs_set {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $run_obs, $files, $columns, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/db run_obs files columns dry_run skip_state/;
+    my ($db, $run_obs, $columns, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/db run_obs columns dry_run skip_state/;
 
     my $dbh  = $db->handle();
-    my @file = @{$files};
+    my @file = map {$_->simple_filename} @$run_obs;
 
     my %pass_arg = map {$_ => $arg{$_}} qw/columns/;
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
@@ -447,7 +402,7 @@ sub insert_obs_set {
 
     $self->{'_cache_touched'}->{$_} = 1 foreach @file;
 
-    for my $obs (@{$run_obs}) {
+    for my $obs (@$run_obs) {
         my $headers = $obs->hdrhash();
 
         $headers = $self->munge_header_INBEAM($headers);
@@ -465,7 +420,7 @@ sub insert_obs_set {
     my $common_obs = $run_obs->[0]
         or do {
             $log->debug('XXX First run obs is undefined|false; nothing to do.');
-            return ('nothing-to-do', 'First run obs is undef|false');
+            return;
         };
 
     # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
@@ -478,13 +433,17 @@ sub insert_obs_set {
 
     if (! $arg{'process_simulation'} && $self->is_simulation($common_hdrs)) {
         $log->debug("simulation data; skipping" );
-        return ('simulation', '');
+
+        $self->_get_xfer_unconnected_dbh()->put_state(
+                state => 'simulation', files => \@file)
+            unless ($dry_run or $skip_state);
+
+        return;
     }
 
     if ($self->_do_verification()) {
         my $verify = JCMT::DataVerify->new('Obs' => $common_obs)
             or do {
-                my $log = Log::Log4perl->get_logger('');
                 $log->logdie( _dataverify_obj_fail_text($common_obs));
             };
 
@@ -504,62 +463,65 @@ sub insert_obs_set {
         }
     }
 
-    if ($arg{'calc_radec'}
-            && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
-
-        unless ($self->calc_radec($common_obs, $common_hdrs)) {
-            $log->debug("problem while finding bounds; skipping");
-            return ('error', $self->instrument_name() . ': could not find bounds');
-        }
-    }
-
-    # COMMON table.
-    $db->begin_trans() if not $dry_run;
-
-    $self->fill_headers_COMMON($common_hdrs, $common_obs);
-
-    my $table = 'COMMON';
-
-    my $error = $self->_update_or_insert(
-        update_args => \%common_arg,
-        dbhandle   => $dbh,
-        table      => 'COMMON',
-        table_columns => $columns->{$table},
-        headers    => $common_hdrs,
-        dry_run    => $dry_run);
-
-    if ($dbh->err()) {
-        my $text = $dbh->errstr();
-
-        $db->rollback_trans();
-
-        $log->debug($text) if defined $text;
-
-        return ('error', $text);
-    }
-
-    # FILES, ACSIS, SCUBA2 tables.
-    unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
-        $self->add_subsys_obs(
-            %pass_arg,
-            db  => $db,
-            obs => $run_obs,
-            dry_run => $dry_run,
-            skip_state => $skip_state)
-        or return ('error', "while adding subsys obs: $run_obs");
-    }
-
     try {
+        if ($arg{'calc_radec'}
+                && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
+
+            unless ($self->calc_radec($common_obs, $common_hdrs)) {
+                $log->debug("problem while finding bounds; skipping");
+
+                throw JSA::Error('could not find bounds');
+            }
+        }
+
+        # COMMON table.
+        $db->begin_trans() if not $dry_run;
+
+        $self->fill_headers_COMMON($common_hdrs, $common_obs);
+
+        my $table = 'COMMON';
+
+        $self->_update_or_insert(
+            update_args => \%common_arg,
+            dbhandle   => $dbh,
+            table      => 'COMMON',
+            table_columns => $columns->{$table},
+            headers    => $common_hdrs,
+            dry_run    => $dry_run);
+
+        if ($dbh->err()) {
+            my $text = $dbh->errstr();
+
+            $db->rollback_trans();
+
+            throw JSA::Error($text);
+        }
+
+        # FILES, ACSIS, SCUBA2 tables.
+        unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
+            $self->add_subsys_obs(
+                %pass_arg,
+                db  => $db,
+                obs => $run_obs,
+                dry_run => $dry_run,
+                skip_state => $skip_state);
+        }
+
         $db->commit_trans() if not $dry_run;
+
+        $log->debug("successful");
     }
     catch Error::Simple with {
-        my ($e) = @_;
-        throw JSA::Error $e;
+        my $e = shift;
+        my $text = $e->text();
+        $log->debug('error inserting obs set: ' . $text) if $text;
+        $text = 'unknown error' unless $text;
+
+        $self->_get_xfer_unconnected_dbh()->put_state(
+                state => 'error', files => \@file,
+                comment => $text)
+            unless ($dry_run or $skip_state);
     };
-
-    $log->debug("successful");
-
-    return ('inserted', '');
 }
 
 =item B<_do_verification>
@@ -869,8 +831,6 @@ headers as values); a hash reference of columns (see I<get_columns>).
 The observations hash reference is for a given run number, not the
 the I<OMP::Info::Objects> in its entirety.
 
-Returns true on success, false on failure.
-
     $ok = $enter->add_subsys_obs(dbhandle  => $dbh,
                                  columns   => \%cols,
                                  obs       => \%obs_per_runnr,
@@ -947,7 +907,7 @@ sub add_subsys_obs {
 
             my $table = $self->instrument_table();
 
-            $error = $self->_update_or_insert(
+            $self->_update_or_insert(
                 dbhandle  => $dbh,
                 table     => $table,
                 table_columns => $columns->{$table},
@@ -958,15 +918,12 @@ sub add_subsys_obs {
                 my $text = $dbh->errstr();
 
                 $db->rollback_trans() if not $dry_run;
-                $log->debug("$error");
+                $log->debug("$text");
 
-                return ('error', $text);
+                throw JSA::Error($text);
             }
         }
-
     }
-
-    return 1;
 }
 
 sub _handle_multiple_changes {
@@ -2182,9 +2139,8 @@ It is a wrapper around I<update_hash> and I<insert_hash> methods.
 It calls C<prepare_update_hash> to identify the necessary insert and
 update operations, and then calls the above methods as appropriate.
 
-Returns the error string the database handle, given a hash with
-C<table>, C<table_columns>, C<headers> as keys.  For details about
-values, see I<insert_hash>, I<update_hash>, and I<get_insert_values>
+Given a hash with C<table>, C<table_columns>, C<headers> as keys.  For details
+about values, see I<insert_hash>, I<update_hash>, and I<get_insert_values>
 methods.
 
     $enter->_update_or_insert(%hash);
@@ -2228,8 +2184,6 @@ sub _update_or_insert {
                            dry_run => $dry_run);
 
     }
-
-    return $args{'dbhandle'}->errstr;
 }
 
 # KLUDGE to avoid duplicate inserts due to same obsid.  First hash reference
