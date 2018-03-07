@@ -405,12 +405,17 @@ sub insert_obs_set {
     }
 
     if ($self->_do_verification()) {
-        my $verify = JCMT::DataVerify->new('Obs' => $common_obs)
-            or do {
-                $log->logdie( _dataverify_obj_fail_text($common_obs));
-            };
+        my $verify = JCMT::DataVerify->new(Obs => $common_obs);
 
-        my %invalid = $verify->verify_headers;
+        unless (defined $verify) {
+            $log->logdie(join "\n",
+                'Could not make JCMT::DataVerify object:',
+                $common_obs->summary('text'),
+                Dumper([sort $common_obs->filename()]),
+            );
+        }
+
+        my %invalid = $verify->verify_headers();
 
         foreach (keys %invalid) {
             my $val = $invalid{$_}->[0];
@@ -2272,53 +2277,6 @@ sub _find_header {
         if exists $head->{$subh};
 
     return;
-}
-
-=item B<_dataverify_obj_fail_text>
-
-Given an observation returns a string to log, to die with when JCMT::DataVerify
-object cannot be created.
-
-    die _dataverify_obj_fail_text($obs);
-
-Optionally accepts a string to be printed before observation summary (see
-L<OMP::Info::Obs>). It also accepts an optional integer for that many space of
-indent.
-
-=cut
-
-sub _dataverify_obj_fail_text {
-    my ($obs, $prefix , $indent) = @_;
-
-    $prefix //= 'Could not make JCMT::DataVerify object;';
-
-    $indent //= 2;
-
-    my $title_space = (' ') x $indent;
-    my $data_space  = ($title_space) x $indent;
-
-    my $files;
-    my @file = sort grep {defined $_} $obs->filename();
-    if (scalar @file) {
-        $files = $title_space
-               . 'obs file '
-               . (scalar @file > 1
-                    ? "range:\n" . $data_space . join (' - ', @file[0, -1])
-                    : ":\n"      . $data_space . $file[0]);
-    }
-
-    my $summ = $obs->summary('text');
-
-    if (defined $summ) {
-        $summ =~ s/^/$data_space/mg;
-        $summ = $title_space . "obs summary:\n" . $summ;
-    }
-
-    return unless (defined $files || defined $summ);
-
-    return join "\n",
-        $prefix,
-        grep {defined $_ && length $_} $files, $summ;
 }
 
 =item B<_verify_file_name>
