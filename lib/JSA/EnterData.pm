@@ -322,53 +322,16 @@ sub prepare_and_insert {
     my %columns = map {$_ => $self->get_columns($_, $dbh)}
         qw/COMMON FILES/, $self->instrument_table();
 
-    $self->insert_observations(
-        db => $db,
-        columns => \%columns,
-        obs => \%observations,
-        dry_run => $dry_run,
-        skip_state => $skip_state,
-        %update_args);
-}
-
-=item B<insert_observations>
-
-Inserts a row  in "FILES", "COMMON", and instrument related tables for
-each observation for each subscan and subsystem used.  Every insert
-per observation is done in one transaction.
-
-It takes a hash of database handle; hash reference of observations (run number
-as keys, array reference of sub headers as values); a hash reference
-of columns (see I<get_columns>).
-
-    $enter->insert_observations(dbhandle  => $dbh,
-                                columns   => \%cols,
-                                obs       => \%obs,
-                                dry_run   => $dry_run,
-                                skip_state=> $skip_state);
-
-It is called by I<prepare_and_insert> method.
-
-=cut
-
-sub insert_observations {
-    my ($self, %args) = @_ ;
-
-    my ($obs, $dry_run, $skip_state) =
-        map {$args{$_}} qw/obs dry_run skip_state/;
-
-    # Pass everything but observations hash reference to other subs.
-    my %pass_args = map {$_ => $args{$_}}
-        qw/db calc_radec columns dry_run skip_state
-           process_simulation
-           update_only_obstime update_only_inbeam/;
-
-    foreach my $runnr (sort {$a <=> $b} keys %{$obs}) {
-        my @sub_obs =  grep {$_} @{$obs->{$runnr}};
+    foreach my $runnr (sort {$a <=> $b} keys %observations) {
+        my @sub_obs =  grep {$_} @{$observations{$runnr}};
 
         $self->insert_obs_set(
+            db => $db,
+            columns => \%columns,
             run_obs => \@sub_obs,
-            %pass_args);
+            dry_run => $dry_run,
+            skip_state => $skip_state,
+            %update_args);
     }
 }
 
