@@ -533,11 +533,6 @@ sub insert_obs_set {
 
         $db->rollback_trans();
 
-        if ($self->_is_insert_dup_error($text)) {
-            $log->debug('File metadata already present');
-            return ('nothing-to-do' , 'ignored duplicate insert')
-        }
-
         $log->debug($text) if defined $text;
 
         return ('error', $text);
@@ -2167,10 +2162,7 @@ sub _change_FILES {
     if ( $dbh->err() ) {
         $db->rollback_trans() if not $dry_run;
 
-        $log->debug($self->_is_insert_dup_error($error)
-                ? "File metadata already present"
-                : $error)
-            if defined $error;
+        $log->debug($error) if defined $error;
 
         return;
     }
@@ -2363,25 +2355,6 @@ sub _find_header {
         if exists $head->{$subh};
 
     return;
-}
-
-=item B<_is_insert_dup_error>
-
-Returns a truth value to indicate if the error was due to insertion of duplicate
-row, given a plain string or an L<Error> object.  It compares the expected
-Sybase error text.
-
-    $dbh->rollback
-        if $enter->_is_insert_dup_error($dbh->errstr);
-
-=cut
-
-sub _is_insert_dup_error {
-    my ($self, $err) = @_;
-
-    my $text = ref $err ? $err->text : $err;
-
-    return $text && $text =~ /duplicate entry/i;
 }
 
 =item B<_dataverify_obj_fail_text>
