@@ -2086,7 +2086,7 @@ sub calc_radec {
 
     my %state;
     unless ($tracksys) {
-        (undef, %state) = $self->read_ndf($filenames[0], qw/TCS_TR_SYS/);
+        %state = read_jcmtstate($filenames[0], 'start', qw/TCS_TR_SYS/);
         $log->logdie("Error reading state information from file $filenames[0]\n")
             unless keys %state;
     }
@@ -2119,66 +2119,6 @@ sub calc_radec {
     $headerref->{'obsdec'} = $result{'REFLAT'};
 
     return 1;
-}
-
-=item B<read_ndf>
-
-Open an NDF file, read the frameset and the first entry from the
-supplied list of JCMTSTATE components (can be empty).
-
-Returns hash of JCMTSTATE information and the Starlink::AST object.
-
-    ($wcs, %state) = JSA::EnterData->read_ndf($file, @state);
-
-returns empty list on error.  In scalar context just returns WCS
-frameset...
-
-    $wcs = JSA::EnterData->read_ndf($file);
-
-On error, flushes error to standard error and returns empty list.
-
-=cut
-
-sub read_ndf {
-    my ($self, $file, @statekeys) = @_;
-
-    my $log = Log::Log4perl->get_logger('');
-
-    my $wcs;
-    my $E;
-
-    try {
-        $wcs = read_wcs($file);
-    } catch JSA::Error::FatalError with {
-        $E = shift;
-    } otherwise {
-        $E = shift;
-    };
-
-    if (defined $E) {
-        $log->error("$E");
-        return ();
-    }
-
-    # if we have keys to read and are in list
-    # context, read the state
-    my %state;
-    if (@statekeys && wantarray()) {
-        try {
-            %state = read_jcmtstate($file, 'start', @statekeys);
-        } catch JSA::Error::FatalError with {
-            $E = shift;
-        } otherwise {
-            $E = shift;
-        };
-
-        if (defined $E) {
-            $log->error("$E");
-            return ();
-        }
-    }
-
-    return wantarray ? ($wcs, %state) : $wcs;
 }
 
 sub _change_FILES {

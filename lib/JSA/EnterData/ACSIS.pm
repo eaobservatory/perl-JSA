@@ -7,6 +7,8 @@ use parent 'JSA::EnterData';
 
 use Log::Log4perl;
 
+use JSA::Headers qw/read_wcs/;
+
 =head1 NAME
 
 JSA::EnterData::ACSIS - ACSIS specific methods.
@@ -223,7 +225,7 @@ sub calc_freq {
     my @filenames = $obs->filename;
 
     # need the Frameset
-    my $wcs = $self->read_ndf($filenames[0]);
+    my $wcs = read_wcs($filenames[0]);
 
     # Change to BARYCENTRIC, GHz
     $wcs->Set('system(1)' => 'FREQ',
