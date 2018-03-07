@@ -2425,51 +2425,6 @@ sub _find_header {
     return;
 }
 
-sub _make_lowercase_header {
-    my ($self, %args) = @_;
-
-    my ($head, $name) = @args{qw/headers name/};
-
-    return unless $head && ref $head;
-
-    my $is_array = ref $head eq 'ARRAY';
-
-    foreach my $h ($is_array ? @{$head} : $head) {
-        next unless exists $h->{$name};
-
-        my $type = ref $h->{$name};
-
-        unless ($type) {
-            $h->{$name} = uc $h->{$name};
-            $args{'_case-changed'} ++;
-            next;
-        }
-
-        if ($type eq 'ARRAY') {
-            $h->{ $name } = [map uc $_, @{$h->{$name}}];
-            $args{'_case-changed'} ++;
-            next;
-        }
-
-        if ($type eq 'HASH') {
-            for my $k (keys %{$h->{$name}}) {
-                $h->{$name}{$k} = lc $h->{$name}{$k};
-                $args{'_case-changed'} ++;
-            }
-        }
-    }
-
-    # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
-    # pseudo header with array reference of hash references as value.
-    return $args{'_case-changed'} if $is_array;
-
-    my $subh = 'SUBHEADERS';
-    return $self->_make_lowercase_header(%args, headers => $head->{$subh})
-        if exists $head->{$subh};
-
-    return $args{'_case-changed'};
-}
-
 =item B<_is_insert_dup_error>
 
 Returns a truth value to indicate if the error was due to insertion of duplicate
