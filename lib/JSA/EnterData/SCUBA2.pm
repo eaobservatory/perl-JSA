@@ -213,8 +213,7 @@ BEGIN {
 
 Given a header hash reference, returns an array of hash references of
 headers grouped by subarray.  The returned headers have subheaders
-with subarray appended, "obsid_subsysnr" field filled in (see
-I<transform_subheader> method).
+with subarray appended, "obsid_subsysnr" field filled in.
 
     @grouped = $scuba2->transform_header(\%header);
 
@@ -719,7 +718,7 @@ sub merge_by_obsidss {
 =item B<_fill_headers_obsid_subsys>
 
 Does nothing. Field "obsid_subsysnr" is taken care by
-I<transform_subheader> method.
+I<transform_header> method.
 
 =cut
 
