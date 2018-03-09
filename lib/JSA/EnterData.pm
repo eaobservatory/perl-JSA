@@ -2692,7 +2692,7 @@ sub calculate_release_date {
     }
     elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
         # EC05 is a public calibrator monitoring project
-        return OMP::DateTools->yesterday(1);
+        return DateTime::Format::ISO8601->parse_datetime($obsdate);
 
     }
     elsif ($obs->projectid =~ /ec/i) {
@@ -2725,7 +2725,7 @@ sub calculate_release_date {
     }
     else {
         # immediate release
-        return OMP::DateTools->yesterday(1);
+        return DateTime::Format::ISO8601->parse_datetime($obsdate);
     }
 }
 
