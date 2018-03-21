@@ -179,6 +179,11 @@ files being renamed, converted to FITS and/or merged, and then captured
 using dpCapture, they are simply copied to the transfer directory
 (provided that the --persist option is given).
 
+=item B<--convertinput>
+
+When using a custom DR command, enable conversion of input files from
+FITS to SDF.  (Has no effect otherwise when this is always done.)
+
 =back
 
 =head1 QUESTIONS
@@ -236,7 +241,7 @@ print Dumper \%ENV;
 my ($cleanup, $drcommand, $drparameters, $help, $id, $indir, $inputs,
     $instrument, $log, $man, $mode, $specified_outdir, $parameters, $persist,
     $tmpdir, $transdir, $ut, $show_version, $version, $debugxfer,
-    $raw_output);
+    $raw_output, $convert_input);
 
 my $status = GetOptions(
     "cleanup=s"     => \$cleanup,
@@ -260,6 +265,7 @@ my $status = GetOptions(
     'debugxfer'     => \$debugxfer,
     'fileversion:i' => \$version,
     'rawoutput'     => \$raw_output,
+    'convertinput'  => \$convert_input,
 );
 
 pod2usage(1) if $help;
@@ -453,10 +459,12 @@ unless ($skipdp) {
         }
     }
 
-    if (($nfits != @files) && ($nsdf != @files)) {
-        # mixed NDF and FITS
-        die "There are $nfits FITS files and $nsdf NDFs out of ".@files.
-            " files and this is a bit confusing";
+    if ($convert_input or not defined $drcommand) {
+        if (($nfits != @files) && ($nsdf != @files)) {
+            # mixed NDF and FITS
+            die "There are $nfits FITS files and $nsdf NDFs out of ".@files.
+                " files and this is a bit confusing";
+        }
     }
 
     unless (defined $drcommand) {
@@ -522,35 +530,34 @@ unless ($skipdp) {
         }
     }
 
-    # Convert FITS files into NDF and update name supplied to DR. We
-    # could do this before we read the FITS headers but it is more
-    # efficient to delay conversion in case some other error condition
-    # is hit first. Conversion will take a non-trivial amount of time
-
-    # For now assume that we want to convert to NDF even if using a
-    # custom-specified DR command.
-    if ($nfits > 0) {
-        my @new;
-        for my $f (@files) {
-            if (looks_like_cadcfile( $f )) {
-                my $out = convert_to_ndf( $f );
-                if ($out) {
-                    push(@new, $out );
+    if ($convert_input or not defined $drcommand) {
+        # Convert FITS files into NDF and update name supplied to DR. We
+        # could do this before we read the FITS headers but it is more
+        # efficient to delay conversion in case some other error condition
+        # is hit first. Conversion will take a non-trivial amount of time
+        if ($nfits > 0) {
+            my @new;
+            for my $f (@files) {
+                if (looks_like_cadcfile( $f )) {
+                    my $out = convert_to_ndf( $f );
+                    if ($out) {
+                        push(@new, $out );
+                    }
+                } else {
+                    log_warning("File $f does not use the CADC naming convention. " .
+                                "Skipping.\n");
                 }
-            } else {
-                log_warning("File $f does not use the CADC naming convention. " .
-                            "Skipping.\n");
             }
-        }
-        if (@new) {
-            @files = @new;
+            if (@new) {
+                @files = @new;
 
-            # Scan the directory again, so that it includes the converted files
-            # and we don't mistake them for new pipeline products.
-            %post_retrieve = scan_dir();
-        }
-        else {
-            die "No files left to process after conversion to NDF";
+                # Scan the directory again, so that it includes the converted files
+                # and we don't mistake them for new pipeline products.
+                %post_retrieve = scan_dir();
+            }
+            else {
+                die "No files left to process after conversion to NDF";
+            }
         }
     }
 }
