@@ -318,6 +318,13 @@ else {
 
 $cleanup = "cadc" unless defined $cleanup;
 
+# Use default scan_dir pattern (SDF, FITS and PNG) unless we are have a custom
+# command, which may also be processing TXT files.
+my $scan_dir_pattern = undef;
+if (defined $drcommand) {
+    $scan_dir_pattern = qr/\.(sdf|fits|png|txt)$/
+}
+
 prepare_environment();
 
 # We require that STARLINK_DIR and ORAC_DIR are set
@@ -404,7 +411,7 @@ my %all_existing_files = scan_dir(qr/.*/);
 unless ($skipdp) {
     # Get a hash of the existing files so that we can see which ones
     # dpRetrieve has fetched.
-    my %existing_files = scan_dir();
+    my %existing_files = scan_dir($scan_dir_pattern);
 
     retrieve_data($inputs, 1);
 
@@ -416,7 +423,7 @@ unless ($skipdp) {
     }
 
     # Now scan the directory again
-    %post_retrieve = scan_dir();
+    %post_retrieve = scan_dir($scan_dir_pattern);
 
     # compare the old list with the new and return a list of files that
     # should be processed
@@ -553,7 +560,7 @@ unless ($skipdp) {
 
                 # Scan the directory again, so that it includes the converted files
                 # and we don't mistake them for new pipeline products.
-                %post_retrieve = scan_dir();
+                %post_retrieve = scan_dir($scan_dir_pattern);
             }
             else {
                 die "No files left to process after conversion to NDF";
@@ -562,7 +569,7 @@ unless ($skipdp) {
     }
 }
 else {
-    %post_retrieve = scan_dir();
+    %post_retrieve = scan_dir($scan_dir_pattern);
     $useoracdr = 1;
     $oracinst = $instrument;
 }
@@ -593,7 +600,7 @@ unless (defined $drcommand) {
     }
 
     # scan the directory again
-    my %post_process = scan_dir();
+    my %post_process = scan_dir($scan_dir_pattern);
     my @drfiles = compare_file_lists(\%post_retrieve, \%post_process);
 
     # Read all the FITS headers from these files
