@@ -43,8 +43,6 @@ my %_config = (
     'db-config' => '/jac_sw/etc/enterdata/enterdata.cfg',
 
     'name' => __PACKAGE__,
-
-    'dbhandle' => undef,
 );
 
 =head1 METHODS
@@ -72,7 +70,7 @@ Transactions are set to be used (see C<use_transaction> method).
 sub new {
     my ($class, %arg) = @_;
 
-    my $obj = {};
+    my $obj = {_dbh => {}};
 
     foreach my $k (keys %_config) {
         $obj->{$k} = exists $arg{$k} ? $arg{$k} : $_config{$k};
@@ -91,34 +89,94 @@ generated internally from I<db-config> parameter (see I<new> method).
 
     $dbh = $jdb->dbhandle();
 
+Uses the "name" to differentiate one data instance from another, re-using
+a cached handle if one has already been created for the current "name".
+
 Override internal database handle to jcmt database ...
 
-    $jdb->dbhandle( $dbh );
+    $jdb->dbhandle($dbh);
 
 Passes up any errors thrown.
 
+Database handles are released at the end of the program via C<END>.
+
 =cut
 
-sub dbhandle {
-  my $self = shift @_;
+{
+    my %_handles;
 
-  my $name = $self->_name() || 'extern-dbh';
+    sub dbhandle {
+        my $self = shift @_;
 
-  unless (scalar @_) {
-      return $self->{ $name }
-        if exists $self->{ $name }
-        && ref $self->{ $name };
+        my $name = $self->_name() || 'extern-dbh';
 
-      return connect_to_db($self->{'db-config'}, $name);
-  }
+        my $log = Log::Log4perl->get_logger('');
 
-  my $log = Log::Log4perl->get_logger('');
-  $log->debug('Setting external database handle.');
+        # If we have been given a handle, store it and return.
+        # (And don't register it in %_handles, meaning we will not
+        # automatically disconnect in END.)
+        if (scalar @_) {
+            my $dbh = shift;
 
-  $self->{$name} = shift @_;
+            $log->debug('Setting external database handle.');
 
-  return;
+            $self->{'_dbh'}->{$name} = $dbh;
+
+            return;
+        }
+
+        # Check for a handle by name in this instance.
+        if (exists $self->{'_dbh'}->{$name}) {
+            my $dbh = $self->{'_dbh'}->{$name};
+
+            return $dbh if $dbh->ping();
+        }
+
+        # Check for handle in the class-level cache by "key", which is
+        # made up of the name and configuration file.  Do this to
+        # replicate the old module-level caching previously provided by
+        # the JSA::DB::MySQL module.
+        my $config = $self->{'db-config'};
+        my $key = join(':', $name, $config);
+        my $dbh = undef;
+
+        if (exists $_handles{$key}) {
+            $dbh = $_handles{$key} if $_handles{$key}->ping();
+        }
+
+        unless (defined $dbh) {
+            # Make a new connection.
+            $dbh = connect_to_db($config);
+
+            # Store in the class-level cache.
+            $_handles{$key} = $dbh;
+        }
+
+        # Store in the instance cache.
+        $self->{'_dbh'}->{$name} = $dbh;
+
+        return $dbh;
+    }
+
+    sub _release_dbh {
+        my $log = Log::Log4perl->get_logger('');
+
+        foreach my $k (keys %_handles) {
+            my $v = $_handles{$k};
+
+            if ($v) {
+                $v->disconnect()
+                    or $log->warn("Problem disconnecting from $k: " , $v->errstr());
+
+                undef $v;
+            }
+        }
+
+        return
+    }
 }
+
+END {_release_dbh();}
 
 =item B<use_transaction>
 

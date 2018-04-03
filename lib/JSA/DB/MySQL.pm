@@ -18,8 +18,6 @@ JSA::DB::MySQL - Connects to a MySQL database server
 This package provides a database handle given "ini" style database log in
 configuration with "database" section.  See L<OMP::Config> for details.
 
-Database handles are released at the end of the program via C<END>.
-
 =head1 FUNCTIONS
 
 =over 2
@@ -38,27 +36,12 @@ use OMP::Config;
 
 our @EXPORT_OK = qw/connect_to_db/;
 
-$OMP::Config::DEBUG = 0;
-
-{
-    my $omp_cf;
-    my %_handles;
-    my %_log;
-
 =item B<connect_to_db>
 
 Returns a database handle given a C<ini> style database configuration
 file with C<database> as the section (see L<OMP::Config> for details).
 
-  $dbh = connect_to_db( $ini_config_file );
-
-Optionally takes a "name" to differentiate one instance from another
-given same database configuration.
-
-  $jsa_dbh = connect_to_db( $ini_config_file, 'JSA::DB' );
-
-Returns a cached handle if a handle has already been created for a
-set of configuration.
+  $dbh = connect_to_db($ini_config_file);
 
 Sets C<$dbh-E<gt>{'RaiseError'}> and C<$dbh-E<gt>{'AutoCommit'}> (see L<DBI>).
 
@@ -67,69 +50,37 @@ given database.
 
 =cut
 
-    sub connect_to_db {
-        my ($config, $name) = @_;
+sub connect_to_db {
+    my $config = shift;
 
-        $omp_cf ||= OMP::Config->new;
+    local $OMP::Config::DEBUG = 0;
 
-        $omp_cf->configDatabase($config);
+    my $omp_cf = new OMP::Config();
 
-        my ($driver, $server, $db, $user, $pass) =
-            map {$omp_cf->getData("database.$_")}
-                qw/driver server  database  user  password/;
+    $omp_cf->configDatabase($config);
 
-        die "DBI driver $driver not recognized" unless $driver eq 'mysql';
+    my ($driver, $server, $db, $user, $pass) =
+        map {$omp_cf->getData("database.$_")}
+            qw/driver server database user password/;
 
-        my $key = join ':', ($name ? $name : '', $server, $db, $user);
+    die "DBI driver $driver not recognized" unless $driver eq 'mysql';
 
-        my $log = Log::Log4perl->get_logger('');
+    my $log = Log::Log4perl->get_logger('');
 
-        my $log_text = "Connecting to ${server}..${db} as ${user}\n";
-        unless (exists $_log{$log_text}) {
-            $log->info($log_text);
-            $_log{$log_text}++;
-        };
+    $log->info("Connecting to ${server}..${db} as ${user}\n");
 
-        if (exists $_handles{$key} && $_handles{$key}) {
-            #$log->trace("  found cached connection");
-            return $_handles{ $key };
-        }
+    my $dbh = DBI->connect(
+        "dbi:mysql:database=$db;host=$server;mysql_connect_timeout=10;mysql_auto_reconnect=1",
+        $user, $pass, {
+            'RaiseError' => 1,
+            'PrintError' => 0,
+            'AutoCommit' => 1,
+    }) or $log->logcroak( $DBI::errstr );
 
-        my $dbh = DBI->connect(
-            "dbi:mysql:database=$db;host=$server;mysql_connect_timeout=10;mysql_auto_reconnect=1",
-            $user, $pass, {
-                'RaiseError' => 1,
-                'PrintError' => 0,
-                'AutoCommit' => 1,
-        }) or $log->logcroak( $DBI::errstr );
+    $dbh->do("use $db") or $log->logdie($_->errstr);
 
-        $dbh->do("use $db") or $log->logdie($_->errstr);
-
-        $_handles{$key} = $dbh;
-
-        return $dbh ;
-    }
-
-    sub _release_dbh {
-        my $log = Log::Log4perl->get_logger('');
-
-        foreach my $k (keys %_handles) {
-            my $v = $_handles{$k};
-
-            if ($v) {
-                $v->disconnect()
-                    or $log->warn("Problem disconnecting from $k: " , $v->errstr());
-
-                undef $v;
-            }
-        }
-
-        return
-    }
+    return $dbh ;
 }
-
-END {_release_dbh();}
-
 
 1;
 
