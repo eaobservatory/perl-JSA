@@ -2309,52 +2309,32 @@ sub _verify_file_name {
                              ($size > 1 ? 's' : ''), join ', ', @bad ;
 }
 
-# JSA::DB::TableTransfer object, to be created as needed.
-# $dbh can be a subroutine reference, in which case it is called
-# to get the database handle.  (This is so that, if the name is found
-# in the cache, we need not make a new handle.)
-{
-    my %xfer;
-
-    sub _get_xfer {
-        my ($self, $dbh, $name) = @_;
-
-        $name ||= 'default-xfer';
-
-        return $xfer{$name}
-            if exists  $xfer{$name}
-            && defined $xfer{$name};
-
-        if ('CODE' eq ref $dbh) {
-            $dbh = $dbh->();
-        }
-
-        return $xfer{$name} =
-            new JSA::DB::TableTransfer(dbhandle     => $dbh,
-                                       transactions => 0);
-    }
-}
-
 =item B<_get_xfer_unconnected_dbh>
 
-It is similar to above I<_get_xfer> method about what it accepts and
-returns.  Difference is that this method uses a new database handle
+Get a JSA::DB::TableTransfer object, to be created as needed.
+This method uses a new database handle
 unconnected to the one used elsewhere.  (Note it's not entirely
 unconnected -- if the default (or a previous) name is used, then
 a cached object is returned.
 
 =cut
 
-sub _get_xfer_unconnected_dbh {
-    my ($self, $name) = @_;
+{
+    my %xfer;
 
-    $name ||= 'xfer-new-dbh';
+    sub _get_xfer_unconnected_dbh {
+        my ($self, $name) = @_;
 
-    return $self->_get_xfer(sub {
-            my $db = new JSA::DB(name => $name);
-            $db->use_transaction(0);
-            return $db->dbhandle();
-        }, $name);
+        $name ||= 'xfer-new-dbh';
+
+        return $xfer{$name} if exists $xfer{$name};
+
+        my $db = new JSA::DB(name => $name);
+        $db->use_transaction(0);
+
+        return $xfer{$name} = new JSA::DB::TableTransfer(
+            db => $db, transactions => 0);
+    }
 }
 
 sub _compare_dates {

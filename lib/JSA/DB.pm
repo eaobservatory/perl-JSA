@@ -599,8 +599,7 @@ sub update_or_insert {
     my $old_tran = $self->use_transaction();
     $self->use_transaction(0);
 
-    my $dbh = $arg{'dbhandle'};
-    $dbh    = $self->dbhandle() unless $dbh;
+    my $dbh = $self->dbhandle();
 
     my $log = Log::Log4perl->get_logger('');
 

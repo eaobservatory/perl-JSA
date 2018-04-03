@@ -10,7 +10,7 @@ JSA::DB::TableTransfer - Check file status, transfer files to CADC
 
 Make an object ...
 
-    $xfer = new JSA::DB::TableTransfer('dbhandle' => $dbh);
+    $xfer = new JSA::DB::TableTransfer(db => new JSA::DB());
 
 Set copied state for some files ...
 
@@ -46,9 +46,6 @@ use List::MoreUtils qw/any/;
 use Log::Log4perl;
 
 use JSA::Error qw/:try/;
-use OMP::Config;
-
-$OMP::Config::DEBUG = 0;
 
 my $_state_table = 'transfer';
 
@@ -77,10 +74,10 @@ The state types are ...
 
 Make a C<JSA::DB::TableTransfer> object.  It takes a hash of parameters ...
 
-    dbhandle     - JSA::DB object, which has succesfully connected to database;
+    db           - JSA::DB object, which has succesfully connected to database;
     transactions - (optional) truth value, used when changing tables;
 
-    $xfer = new JSA::DB::TableTransfer('dbhandle' => $dbh);
+    $xfer = new JSA::DB::TableTransfer(db => $jsa_db);
 
 Throws L<JSA::Error::BadArgs> error when database handle is invalid object.
 
@@ -89,14 +86,14 @@ Throws L<JSA::Error::BadArgs> error when database handle is invalid object.
 sub new {
     my ($class, %arg) = @_;
 
-    my $dbh = $arg{'dbhandle'};
-    throw JSA::Error::BadArgs "Database handle object is invalid."
-        unless defined $dbh
-            && ref $dbh;
+    my $db = $arg{'db'};
+    throw JSA::Error::BadArgs "JSA database object is invalid."
+        unless defined $db
+            && ref $db;
 
     my $obj = {};
 
-    foreach (qw/dbhandle transactions/) {
+    foreach (qw/db transactions/) {
         next unless exists $arg{$_};
 
         $obj->{$_} = $arg{$_};
@@ -191,7 +188,7 @@ sub add_found {
     my $vals = _process_paths($files)
         or return;
 
-    my $db = $self->_make_jdb();
+    my $db = $self->_jdb();
 
     return $db->insert('table'   => $_state_table,
                        'columns' => ['file_id', 'status', 'location'],
@@ -230,7 +227,7 @@ sub put_found {
     my $vals = _process_paths($files)
         or return;
 
-    my $db = $self->_make_jdb();
+    my $db = $self->_jdb();
 
     return $db->update_or_insert('table'       => $_state_table,
                                  'unique-keys' => ['file_id'],
@@ -373,7 +370,8 @@ sub unique_keys {
 
 =item B<_dbhandle>
 
-Returns the database handle.
+Returns the database handle, which is obtained from our JSA::DB
+object.
 
     $dbh = $xfer->_dbhandle();
 
@@ -382,7 +380,7 @@ Returns the database handle.
 sub _dbhandle {
     my $self = shift @_;
 
-    return $self->{'dbhandle'};
+    return $self->_jdb()->dbhandle();
 }
 
 sub _use_trans {
@@ -422,7 +420,7 @@ sub get_files {
 
     $log->info("Getting files from JAC database with state '${state}'");
 
-    my $db = $self->_make_jdb();
+    my $db = $self->_jdb();
     my $out = $db->select_loop('table'   => $_state_table,
                                'columns' => [@select],
                                'where'   => [keys %where],
@@ -510,7 +508,7 @@ sub put_state {
 
     (my $state_col, $state) = _alt_state($_state{$state});
 
-    my $db = $self->_make_jdb();
+    my $db = $self->_jdb();
 
     my @alt = map {_fix_file_name($_)} sort @{$files};
 
@@ -518,8 +516,7 @@ sub put_state {
         'table'         => $self->name(),
         'unique-keys'   => ['file_id'],
         'columns'       => ['file_id', $state_col, 'comment'],
-        'values'        => [map {[$_, $state, $args{'comment'}]} @alt],
-        'dbhandle'      => $self->_dbhandle());
+        'values'        => [map {[$_, $state, $args{'comment'}]} @alt]);
 }
 
 sub _check_hashref {
@@ -550,16 +547,10 @@ sub _alt_state {
     return ('error' => 1);
 }
 
-sub _make_jdb {
+sub _jdb {
     my ($self) = @_;
 
-    require JSA::DB;
-
-    my $dbh = $self->_dbhandle();
-    return JSA::DB->new('name' => 'transfer-change-add',
-                        ($dbh && ref $dbh
-                            ? ('dbhandle' => $dbh)
-                            : ()));
+    return $self->{'db'};
 }
 
 
