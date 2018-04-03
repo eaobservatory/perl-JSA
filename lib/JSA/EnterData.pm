@@ -317,7 +317,7 @@ sub prepare_and_insert {
     # being an anonymous hash containing the column information.
 
     my $db = new OMP::DBbackend::Archive();
-    my $dbh = $db->handle();
+    my $dbh = $db->handle_checked();
 
     my %columns = map {$_ => $self->get_columns($_, $dbh)}
         qw/COMMON FILES/, $self->instrument_table();
@@ -2521,7 +2521,7 @@ sub calcbounds_update_bound_cols {
         map {; "obsra$_" , "obsdec$_"} ('', qw/tl bl tr br/);
 
     my $db = new OMP::DBbackend::Archive();
-    my $dbh = $db->handle;
+    my $dbh = $db->handle_checked();
 
     my $table = 'COMMON';
     my %pass = (
