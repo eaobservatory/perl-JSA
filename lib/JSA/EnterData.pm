@@ -792,14 +792,14 @@ sub is_simulation {
 
 =item B<add_subsys_obs>
 
-Adds subsystem observations, given a hash of database handle; hash
+Adds subsystem observations, given a hash of OMP database object; hash
 reference of observations (run number as keys, array reference of sub
 headers as values); a hash reference of columns (see I<get_columns>).
 
 The observations hash reference is for a given run number, not the
 the I<OMP::Info::Objects> in its entirety.
 
-    $ok = $enter->add_subsys_obs(dbhandle  => $dbh,
+    $ok = $enter->add_subsys_obs(db        => $db,
                                  columns   => \%cols,
                                  obs       => \%obs_per_runnr,
                                  dry_run   => $dry_run,
