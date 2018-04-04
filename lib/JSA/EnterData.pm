@@ -31,6 +31,7 @@ use strict;
 use warnings;
 
 use Data::Dumper;
+use File::Basename;
 use File::Temp;
 use List::MoreUtils qw/any all/;
 use List::Util qw/min max/;
@@ -2370,7 +2371,6 @@ sub _find_extreme_value {
 sub _basename {
     return unless scalar @_;
 
-    require File::Basename;
     my ($base) = File::Basename::fileparse($_[0]);
     return $base;
 }

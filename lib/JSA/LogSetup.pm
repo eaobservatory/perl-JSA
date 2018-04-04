@@ -64,7 +64,10 @@ our @EXPORT_OK = qw/
 
 use Carp ();
 use DateTime;
+use Data::Dumper;
+use Fcntl ':mode';
 use File::Spec;
+use File::Path 2.08;
 use File::Temp;
 use Net::Domain ();
 
@@ -173,7 +176,6 @@ sub get_dumper {
     my (@in) = @_;
 
     return sub {
-        require Data::Dumper;
         local $Data::Dumper::Sortkeys = 1;
         local $Data::Dumper::Indent = 1;
         local $Data::Dumper::Deepcopy = 1;
@@ -362,10 +364,6 @@ sub _path_as_base {
 sub _make_per_day_logfile {
     my ($date, $parent_dir, $basename) = @_;
 
-    require File::Path;
-    # Get make_path() changes.
-    import File::Path 2.08;
-
     my ($y, $m, $d) = map {sprintf '%02d', $date->$_()} ('year', 'month', 'day');
 
     # Directory tree is something like /parent/201201/12 for date of Jan 12, 2012.
@@ -389,9 +387,6 @@ sub _make_per_day_logfile {
 
 sub _make_group_writable {
     my ( @file ) = @_;
-
-    require Fcntl;
-    import Fcntl ':mode';
 
     my $sys_log_re = _get_sys_log_re();
 

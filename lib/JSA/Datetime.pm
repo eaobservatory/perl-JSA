@@ -48,6 +48,8 @@ our @EXPORT_OK = qw/
 /;
 
 use DateTime;
+use DateTime::Duration;
+use DateTime::Format::ISO8601;
 
 =item B<make_datetime>
 
@@ -89,8 +91,6 @@ L<DateTime::Format::ISO8601> for details).
 sub parse_iso8601_datetime {
     my ($time, $base_dt) = @_;
 
-    require DateTime::Format::ISO8601;
-
     my $dt_format = DateTime::Format::ISO8601->new(
         $base_dt ? ('base_datetime' => $base_dt) : ());
 
@@ -118,8 +118,6 @@ sub make_limited_datetime {
                                  map {$_ => $now->$_} qw/year month day/);
 
     if ($now < $limit) {
-        require DateTime::Duration;
-
         my $day = DateTime::Duration->new('days' => 1);
         my $past = $now - $day;
         $past->$_(0) foreach qw/set_hour set_minute set_second/;

@@ -4,6 +4,8 @@ use strict;
 use warnings;
 
 use Carp qw/carp/;
+use Data::Dumper;
+use File::Spec;
 use List::Util qw/first/;
 
 use parent 'JSA::EnterData';
@@ -190,8 +192,6 @@ sub make_raw_paths {
 
     my $re   = $self->raw_basename_regex();
     my $root = $self->raw_parent_dir();
-
-    require File::Spec;
 
     my @path;
     foreach my $name (@base) {
@@ -879,8 +879,6 @@ sub fill_max_subscan {
 
 sub _dump {
     my (@thing) = @_;
-
-    require Data::Dumper;
 
     local $Data::Dumper::Sortkeys = 1;
     local $Data::Dumper::Indent = 1;

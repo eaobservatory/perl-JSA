@@ -37,6 +37,7 @@ the rows (to be implemented).
 use strict; use warnings;
 
 use File::Spec;
+use File::Basename qw/fileparse/;
 use DateTime;
 use DateTime::Duration;
 use Pod::Usage;
@@ -244,9 +245,6 @@ sub _process_paths {
     return unless scalar @path;
 
     my $state = $_state{'found'};
-
-    require File::Basename;
-    import File::Basename qw/fileparse/;
 
     my @val;
     for my $f (@path) {

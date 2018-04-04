@@ -5,6 +5,7 @@ use warnings;
 
 use parent 'JSA::EnterData';
 
+use File::Spec;
 use Log::Log4perl;
 
 use JSA::Headers qw/read_wcs/;
@@ -173,8 +174,6 @@ sub make_raw_paths {
 
     my $re   = $self->raw_basename_regex();
     my $root = $self->raw_parent_dir();
-
-    require File::Spec;
 
     my @path;
     foreach my $name (@base) {
