@@ -368,7 +368,7 @@ sub insert_obs_set {
     for my $obs (@$run_obs) {
         my $headers = $obs->hdrhash();
 
-        $headers = $self->munge_header_INBEAM($headers);
+        $self->munge_header_INBEAM($headers);
 
         if ($self->can('fill_max_subscan')) {
             $self->fill_max_subscan($headers, $obs);
@@ -1587,9 +1587,9 @@ sub fill_headers_FILES {
 
 Given a header hash reference, removes all the I<INBEAM> header occurrences
 which have C<SHUTTER>; combines any remaining header values (in subheaders) in a
-space separated list. Returns a possibly changed header hash reference.
+space separated list.
 
-    $changed = $enter->munge_header_INBEAM($header_hash);
+    $enter->munge_header_INBEAM($header_hash);
 
 =cut
 
@@ -1609,8 +1609,6 @@ sub munge_header_INBEAM {
     $headers->{$name} = (scalar @val)
         ? $self->_combine_inbeam_values(@val)
         : undef;
-
-    return $headers;
 }
 
 =item B<_combine_inbeam_values>
