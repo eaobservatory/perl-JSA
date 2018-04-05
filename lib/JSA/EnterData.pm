@@ -2533,7 +2533,11 @@ sub calcbounds_update_bound_cols {
         $log->info(join "\n    ", 'Processing files', @file_id);
 
         if ($self->instrument_name() eq 'SCUBA-2') {
-            unless (_calcbounds_any_header_sub_val(\%header, 'SEQ_TYPE', $found_type)) {
+            # Retrieve all of the SEQ_TYPE values and check each of them,
+            # because _find_header(value_regex => ...) will return false
+            # as soon as it finds a header that doesn't match.
+            unless (scalar grep {$_ eq $found_type} $self->_find_header(
+                        headers => \%header, name => 'SEQ_TYPE', value => 1)) {
                 $log->debug('  skipped uninteresting SEQ_TYPE');
                 next;
             }
@@ -2732,49 +2736,6 @@ sub _unique_files {
 
     return [grep {! $seen{$_} ++} @$files];
 }
-
-# Note: functions below were imported from the calcbounds script.
-
-sub _calcbounds_check_hash_val {
-    my ($href, $key, $check) = @_;
-
-    return
-        unless $href
-            && $key
-            && $check
-            && exists $href->{$key};
-
-    my $string = $href->{$key};
-
-    return unless defined $string;
-
-    # Compiled regex given.
-    if (ref $check) {
-        my ($found) = ($string =~ $check);
-        return $found;
-    }
-
-    return $string if $string eq $check;
-
-    return;
-}
-
-sub _calcbounds_any_header_sub_val {
-    my ($header, $key, $check) = @_;
-
-    my $found = _calcbounds_check_hash_val($header, $key, $check);
-    return $found if $found;
-
-    if (exists $header->{'SUBHEADERS'}) {
-        for my $sh (@{$header->{'SUBHEADERS'}}) {
-            $found = _calcbounds_check_hash_val($sh, $key, $check);
-            return $found if $found;
-        }
-    }
-
-    return;
-}
-
 
 1;
 
