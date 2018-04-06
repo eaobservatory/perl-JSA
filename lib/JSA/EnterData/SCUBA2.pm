@@ -789,16 +789,7 @@ sub fill_headers_FILES {
     # Call the superclass version of this method.
     $self->SUPER::fill_headers_FILES($header, $obs);
 
-    # Add 'nsubscan' field.
-    my $nsub = () = $header->{'NSUBSCAN'};
-
     my @file = @{$header->{'file_id'}};
-
-    if ($nsub < scalar @file) {
-        $header->{'nsubscan'} =
-            [map {/_(\d+)[.]sdf$/ ? 0 + $1 : ()} @{$header->{'file_id'}}];
-
-    }
 
     unless (exists $header->{'obsid_subsysnr'}) {
         if (exists $header->{'OBSIDSS'}) {
