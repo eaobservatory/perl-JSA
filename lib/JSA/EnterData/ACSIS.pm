@@ -272,25 +272,6 @@ sub calc_freq {
     return;
 }
 
-=item B<fill_max_subscan>
-
-Fills in the I<max_subscan> for C<ACSIS> database table, given a
-headers hash reference and an L<OMP::Info::Obs> object.
-
-    $inst->fill_max_subscan(\%header, $obs);
-
-=cut
-
-sub fill_max_subscan {
-    my ($self, $header, $obs) = @_;
-
-    my $obsid = $obs->obsid;
-    my @subscans = $obs->simple_filename;
-    $header->{'max_subscan'} = scalar @subscans;
-
-    return;
-}
-
 1;
 
 =pod

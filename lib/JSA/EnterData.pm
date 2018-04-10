@@ -371,9 +371,7 @@ sub insert_obs_set {
 
         $self->munge_header_INBEAM($headers);
 
-        if ($self->can('fill_max_subscan')) {
-            $self->fill_max_subscan($headers, $obs);
-        }
+        $self->fill_max_subscan($headers, $obs);
 
         if ($self->can('transform_header')) {
             my ($hash , $array) = $self->transform_header($headers);
@@ -1221,6 +1219,10 @@ sub prepare_update_hash {
 
             my $in_range = any {$test{$_}} (qw/start end/);
 
+            # Temporarily list columns where we always want to keep
+            # the maximum value here.
+            my $keep_max = grep {$_ eq $key} qw/max_subscan/;
+
             # INBEAM header: special handling.
             if ($key =~ $inbeam_re) {
                 my $combined = $self->_combine_inbeam_values($old, $new);
@@ -1274,6 +1276,12 @@ sub prepare_update_hash {
                     if ($new != $old) {
                         $differ{$key} = $new if $new != $old;
                         $log->debug("$key = " . $new);
+                    }
+                }
+                elsif ($keep_max) {
+                    if ($new > $old) {
+                        $differ{$key} = $new;
+                        $log->debug("$key = " . $new . " (new maximum)");
                     }
                 }
                 else {
@@ -1705,6 +1713,24 @@ sub _combine_inbeam_values {
     return undef unless scalar @vals;
 
     return join(' ', sort {$a cmp $b} @vals);
+}
+
+=item B<fill_max_subscan>
+
+Fills in the I<max_subscan> value, given a
+headers hash reference and an L<OMP::Info::Obs> object.
+
+    $inst->fill_max_subscan(\%header, $obs);
+
+=cut
+
+sub fill_max_subscan {
+    my ($self, $header, $obs) = @_;
+
+    $header->{'max_subscan'} = max $self->_find_header(
+        headers => $header,
+        name => 'NSUBSCAN',
+        value => 1);
 }
 
 =item B<get_columns>
