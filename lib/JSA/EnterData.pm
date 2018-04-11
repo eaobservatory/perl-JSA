@@ -708,37 +708,6 @@ sub _get_obs_group {
 }
 
 
-=item B<skip_obs>
-
-Returns a truth value indicating if an observation is a simulation run,
-or for which RA/Dec cannot be calculated. It accepts an
-L<OMP::Info::Obs> object.  If optional header hash reference (see
-L<OMP::Info::Obs/hdrhash>) is not given, it will be retrieved from the
-given L<OMP::Info::Obs> object.
-
-    $skip = $enter->skip_obs($obs);
-
-    $skip = $enter->skip_obs($obs, $header);
-
-C<JSA::Error> exception is thrown if header hash (reference) is
-undefined.
-
-=cut
-
-sub skip_obs {
-    my ($self, $obs, $header) = @_;
-
-    $header = $obs->hdrhash unless defined $header;
-
-    # Alternatively could (silently) return false.
-    throw JSA::Error "FITS headers are undefined."
-        unless defined $header;
-
-    # Tests are the same which control database changes.
-    return $self->is_simulation($header)
-        || ! $self->calc_radec($obs, $header);
-}
-
 =item B<is_simulation>
 
 Returns a truth value to indicate if the given headers are of
