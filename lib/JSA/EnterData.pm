@@ -1822,12 +1822,11 @@ sub create_dictionary {
 
 =item B<skip_obs_calc>
 
-Given a hash of C<headers> key with L<OMP::Info::Obs> object header hash
-reference (or C<obs> key & L<OMP::Info::Obs> object); and C<test> as key & hash
+Given a hash of headers and C<test> as key & hash
 reference of header name and related values as regular expression, returns a
 truth value if observation should be skipped.
 
-Throws L<JSA::Error::BadArgs> exception when headers (or L<*::Obs> object) are
+Throws L<JSA::Error::BadArgs> exception when headers are
 missing or C<test> hash reference value is missing.
 
     print "skipped obs"
@@ -1851,20 +1850,10 @@ sub skip_obs_calc {
     scalar keys %test
         or throw JSA::Error::BadArgs('No "test" hash reference given.');
 
-    my $header;
-    if (exists $arg{'headers'}) {
-        throw JSA::Error::BadArgs('No "headers" value given to check if to find bounding box.')
-            unless defined $arg{'headers'};
+    throw JSA::Error::BadArgs('No "headers" value given to check if to find bounding box.')
+        unless defined $arg{'headers'};
 
-        $header = $arg{'headers'};
-    }
-    else {
-        JSA::Error::BadArgs('No "obs" value given to check if to find bounding box.')
-            unless exists $arg{'obs'} && defined $arg{'obs'};
-
-        JSA::Error::BadArgs("Could not get header hash from \"$arg{'obs'}\"")
-            unless $header = $arg{'obs'}->hdrhash();
-    }
+    my $header = $arg{'headers'};
 
     foreach my $name (sort keys %test) {
         $self->_find_header(headers => $header,
