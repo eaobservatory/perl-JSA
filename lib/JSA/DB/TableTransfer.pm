@@ -472,10 +472,10 @@ sub put_state {
     my @alt = map {_fix_file_name($_)} sort @{$files};
 
     $db->update_or_insert(
-        'table'         => $self->name(),
-        'unique-keys'   => ['file_id'],
-        'columns'       => ['file_id', $state_col, 'comment'],
-        'values'        => [map {[$_, $state, $args{'comment'}]} @alt]);
+        table   => $self->name(),
+        keys    => ['file_id'],
+        columns => ['file_id', $state_col, 'comment'],
+        values  => [map {[$_, $state, $args{'comment'}]} @alt]);
 }
 
 sub _check_hashref {

@@ -554,28 +554,24 @@ sub delete {
 
 =item B<update_or_insert>
 
-Any output of C<update> or C<insert> call back references is returned.
-Accepts the following arguments as hash value of ...
+Accepts the following arguments:
 
-  table   - table name in question;
+    table   - table name in question;
 
-  unique-keys - sub set of column names to search for for UPDATE;
+    keys    - sub set of column names to search for for UPDATE;
 
-  columns - array reference of column names to be UPDATEd and/or
-            INSERTed;
+    columns - array reference of column names to be UPDATEd and/or
+              INSERTed;
 
-  values  - array reference of array references of values to be
-            UPDATEd and/or INSERTed (see update() & insert() method).
+    values  - array reference of array references of values to be
+              UPDATEd and/or INSERTed (see update() & insert() method).
 
-  update-only - truth value to skip INSERT even if no rows exist.
-
-    $affected =
-      $db->update_or_insert('table' => $name,
-                            # For UPDATE.
-                            'unique-keys' => ['a', 'b'],
-                            # For UPDATE & INSERT.
-                            'columns' => ['a', 'b', 'c'],
-                            'values'  => [[1, 2, 3], [4, 6, 7]]);
+    $db->update_or_insert(table   => $name,
+                          # For UPDATE.
+                          keys    => ['a', 'b'],
+                          # For UPDATE & INSERT.
+                          columns => ['a', 'b', 'c'],
+                          values  => [[1, 2, 3], [4, 6, 7]]);
 
 
 See also I<update()> and I<insert()> methods.
@@ -587,13 +583,9 @@ See also I<update()> and I<insert()> methods.
 sub update_or_insert {
     my ($self, %arg) = @_;
 
-    my ($keys, $cols, $vals) = @arg{qw/unique-keys columns values/};
+    my ($table, $keys, $cols, $vals) = @arg{qw/table keys columns values/};
 
-    my %pass = ('columns' => $cols,
-                map {$_ => $arg{$_}} qw/table update-only/);
-
-    my @key        = _to_list($keys);
-    $pass{'where'} = _where_string([map {" $_ = ? "} @key]);
+    my $where = _where_string([map {" $_ = ? "} @$keys]);
 
     # Handle transaction self.  Save old transaction setting to reinstate later.
     my $old_tran = $self->use_transaction();
@@ -604,7 +596,7 @@ sub update_or_insert {
     my $log = Log::Log4perl->get_logger('');
 
     foreach my $v (@$vals) {
-        my ($key_val, $idx) = _extract_key_val($cols, $v, @key);
+        my ($key_val, $idx) = _extract_key_val($cols, $v, @$keys);
 
         my $set = [map {sprintf '%s = %s',
                              $cols->[ $_ ],
@@ -612,10 +604,24 @@ sub update_or_insert {
 
         _start_trans($dbh);
 
-        my $rows = $self->_run_update_or_insert(%pass,
-                                             'set'        => $set,
-                                             'where-bind' => $key_val,
-                                             'values'     => $v);
+        my $rows = $self->update(
+            table  => $table,
+            set    => $set,
+            where  => $where,
+            values => $key_val);
+
+        my $e = $dbh->err();
+        $log->debug('After update, rows: ', $rows, '  err: ', defined $e ? $e : '');
+
+        unless ($rows) {
+            $self->insert(
+                table   => $table,
+                columns => $cols,
+                values  => $vals);
+
+            $e = $dbh->err();
+            $log->debug('After insert, rows: ', $rows, '  err: ', defined $e ? $e : '');
+        }
 
         _end_trans($dbh);
     }
@@ -628,67 +634,6 @@ sub update_or_insert {
 =head2 INTERNAL METHODS
 
 =over 2
-
-=item B<_run_update_or_insert>
-
-Returns the number of rows affected due to UPDATE or INSERT given a
-hash of ...
-
-    table   - name;
-
-    set     - array reference for SET clause for UPDATE query;
-
-    where   - array reference for WHERE clauses with place holders;
-
-    where-bind - array reference of values for place holders in WHERE
-                 clause;
-
-    columns - array reference of column names for INSERT query;
-
-    values  - array reference of (array references, each for a new row,
-              of) values to be inserted.
-
-Note that C<values> are not used in UPDATE query only in INSERT.
-Array reference for SET clause must be have values in place as place
-holders are not (yet) supported by L<DBD::Sybase>.
-
-    $rows =
-      $self->_run_update_or_insert('table'   => $name,
-                                   'set'     => ['a = 1', 'b = 2'],
-                                   'where    => ['c = ?'],
-                                   'where-bind' => [3],
-                                   'columns' => [qw/a b c/],
-                                   'values'  => [1, 2, 3]
-                                  );
-
-See also I<update()> and I<insert()> methods.
-
-=cut
-
-sub _run_update_or_insert {
-    my ($self, %arg) = @_;
-
-    my $dbh = $self->dbhandle();
-    my $log = Log::Log4perl->get_logger('');
-
-    my $rows =
-      $self->update('values'  => $arg{'where-bind'},
-                    map {$_ => $arg{$_}} qw/table set where/);
-
-    my $e = $dbh->err();
-    $log->debug('After update, rows: ', $rows, '  err: ', defined $e ? $e : '');
-
-    return if $arg{'update-only'};
-
-    unless ($rows) {
-      $rows = $self->insert(map {$_ => $arg{$_}} qw/table columns values/);
-
-      $e = $dbh->err();
-      $log->debug('After insert, rows: ', $rows, '  err: ', defined $e ? $e : '');
-    }
-
-    return $rows;
-}
 
 =item B<_run_change_loop>
 
