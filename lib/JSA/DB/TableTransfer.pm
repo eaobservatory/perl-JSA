@@ -198,45 +198,6 @@ sub add_found {
     );
 }
 
-=item B<set_found>
-
-Updates state of C<found> of given array reference of files (absolute
-paths).
-
-    $xfer->set_found([@files]);
-
-=cut
-
-sub set_found {
-    my ($self, $files) = @_;
-
-    return $self->put_found($files, my $update_only = 1);
-}
-
-=item B<put_found>
-
-Adds or changes state of C<found> of given array reference of files
-(absolute paths).
-
-    $xfer->put_found([@files]);
-
-=cut
-
-sub put_found {
-    my ($self, $files, $mod_only) = @_;
-
-    my $vals = _process_paths($files)
-        or return;
-
-    my $db = $self->_jdb();
-
-    return $db->update_or_insert('table'       => $_state_table,
-                                 'unique-keys' => ['file_id'],
-                                 'columns'     => ['file_id', 'status', 'location'],
-                                 'values'      => $vals,
-                                 'update-only' => $mod_only);
-}
-
 sub _process_paths {
     my ($paths) = @_;
 
