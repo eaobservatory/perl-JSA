@@ -603,44 +603,21 @@ sub update_or_insert {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($key_val, $idx, $set, $rows);
+    foreach my $v (@$vals) {
+        my ($key_val, $idx) = _extract_key_val($cols, $v, @key);
 
-    # Test if a plain array reference is given or an array reference of array
-    # references.
-    unless (ref $vals->[0]) {
-        ($key_val, $idx) = _extract_key_val($cols, $vals, @key);
-
-        $set  = [map {" $cols->[ $_ ] = $vals->[ $_ ] "} @{$idx}];
+        my $set = [map {sprintf '%s = %s',
+                             $cols->[ $_ ],
+                             _massage_for_col($v->[$_]) } @{$idx}];
 
         _start_trans($dbh);
 
-        $rows = $self->_run_update_or_insert(%pass,
+        my $rows = $self->_run_update_or_insert(%pass,
                                              'set'        => $set,
                                              'where-bind' => $key_val,
-                                             'values'     => $vals);
+                                             'values'     => $v);
 
         _end_trans($dbh);
-    }
-    else {
-        my $end = scalar @{$vals} - 1;
-
-        foreach my $i (0 .. $end) {
-            my $v = $vals->[$i];
-            ($key_val, $idx) = _extract_key_val($cols, $v, @key);
-
-            $set = [map {sprintf '%s = %s',
-                                 $cols->[ $_ ],
-                                 _massage_for_col($v->[$_]) } @{$idx}];
-
-            _start_trans($dbh);
-
-            $rows = $self->_run_update_or_insert(%pass,
-                                                 'set'        => $set,
-                                                 'where-bind' => $key_val,
-                                                 'values'     => $v);
-
-            _end_trans($dbh);
-        }
     }
 
     $self->use_transaction($old_tran);
