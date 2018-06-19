@@ -471,7 +471,7 @@ sub put_state {
 
     my @alt = map {_fix_file_name($_)} sort @{$files};
 
-    return $db->update_or_insert(
+    $db->update_or_insert(
         'table'         => $self->name(),
         'unique-keys'   => ['file_id'],
         'columns'       => ['file_id', $state_col, 'comment'],
