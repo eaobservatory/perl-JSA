@@ -1541,16 +1541,23 @@ sub fill_headers_FILES {
     # We need to know whether a nsubscan header is even required so %columns really
     # needs to be accessed. For now we kluge it.
     unless (exists $header->{'nsubscan'}) {
-        if (scalar(@files) > 1) {
-            $header->{'nsubscan'} =
-                [map {$_->value('NSUBSCAN')} $obs->fits->subhdrs];
-        }
-        elsif (exists $header->{'NSUBSCAN'}) {
+        if (exists $header->{'NSUBSCAN'}) {
+            $log->debug('fill_headers_FILES: NSUBSCAN already present at top level');
+
             # not really needed because the key becomes case insensitive
             $header->{'nsubscan'} = $header->{'NSUBSCAN'};
         }
         else {
-            $log->logdie("Internal error - NSUBSCAN does not exist yet there is only one file!\n");
+            $log->debug('fill_headers_FILES: NSUBSCAN not present at top level');
+
+            # We need to get the NSUBSCAN values from the subheaders.  We can't
+            # use $self->_find_header because we need to retain the ordering.
+            my @subscans = map {$_->{'NSUBSCAN'}} @{$header->{'SUBHEADERS'}};
+
+            $log->logdie('fill_headers_FILES: number of NSUBSCAN headers does not match number of files')
+                unless (scalar @files) == (scalar @subscans);
+
+            $header->{'nsubscan'} = \@subscans;
         }
     }
 
