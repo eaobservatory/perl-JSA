@@ -573,8 +573,9 @@ Accepts the following arguments:
                           columns => ['a', 'b', 'c'],
                           values  => [[1, 2, 3], [4, 6, 7]]);
 
-
-See also I<update()> and I<insert()> methods.
+Note: this method uses an "INSERT ... ON DUPLICATE KEY UPDATE ..." statement,
+so it should not be used on tables with multiple unique indexes.  (See the
+MySQL documentation for this statement for details.)
 
 =back
 
@@ -595,33 +596,26 @@ sub update_or_insert {
 
     my $log = Log::Log4perl->get_logger('');
 
+    my %keys = map {$_ => 1} @$keys;
+    my @non_key_cols = grep {not exists $keys{$_}} @$cols;
+
+    my $sql = sprintf(
+        'INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s',
+        $table,
+        join(', ', @$cols),
+        join(', ', map {'?'} @$cols),
+        join(', ', map {$_ . ' = VALUES(' . $_ . ')'} @non_key_cols),
+    );
+
+    $log->debug('Insert/update query: ' . $sql);
+
     foreach my $v (@$vals) {
-        my ($key_val, $idx) = _extract_key_val($cols, $v, @$keys);
-
-        my $set = [map {sprintf '%s = %s',
-                             $cols->[ $_ ],
-                             _massage_for_col($v->[$_]) } @{$idx}];
-
         _start_trans($dbh);
 
-        my $rows = $self->update(
-            table  => $table,
-            set    => $set,
-            where  => $where,
-            values => $key_val);
+        my $rows = $self->_run_change_sql($sql, @$v);
 
         my $e = $dbh->err();
-        $log->debug('After update, rows: ', $rows, '  err: ', defined $e ? $e : '');
-
-        unless ($rows) {
-            $self->insert(
-                table   => $table,
-                columns => $cols,
-                values  => $vals);
-
-            $e = $dbh->err();
-            $log->debug('After insert, rows: ', $rows, '  err: ', defined $e ? $e : '');
-        }
+        $log->debug('After insert/update, rows: ', $rows, '  err: ', defined $e ? $e : '');
 
         _end_trans($dbh);
     }
@@ -789,41 +783,6 @@ errors.  On error, rolls back a transaction.  Returns nothing.
     }
 }
 
-=item B<_extract_key_val>
-
-Returns a list of two array references -- one of (database table) key
-values, other of indexen which do not relate to keys -- given an array
-reference of table column names, an array reference of related values,
-and a list of key names.
-
-    ($keyvals, $indices) = _extract_key_val($cols, $vals, @key);
-
-=cut
-
-sub _extract_key_val {
-    my ($cols, $vals, @key) = @_;
-
-    return unless scalar @key;
-
-    my $end = scalar @{$cols} - 1;
-
-    my (@idx, @keyidx, @keyval);
-
-    foreach my $i (0 .. $end) {
-        if (any {$cols->[$i] eq $_} @key) {
-            push @keyidx, $i;
-            push @keyval, $vals->[$i];
-        }
-        else {
-            push @idx, $i;
-        }
-    }
-
-    return unless scalar @keyidx;
-
-    return ([@keyval], [@idx]);
-}
-
 =item B<_check_input>
 
 Checks if input for change operations meet certain criteria.
@@ -981,21 +940,6 @@ sub _simplify_arrayref_hashrefs {
     return
       [map {$_->{$key[0]}} @{$in}];
 }
-
-sub _massage_for_col {
-    my @in = @_;
-
-    for (@in) {
-        $_ =  ! defined $_
-              ? 'NULL'
-              : looks_like_number($_)
-                ? $_
-                : "'$_'";
-    }
-
-    return @in;
-}
-
 
 1;
 
