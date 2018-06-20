@@ -25,6 +25,7 @@ configuration with "database" section.  See L<OMP::Config> for details.
 
 use strict; use warnings;
 
+use Data::Dumper;
 use List::Util qw/sum max/;
 use List::MoreUtils qw/any all firstidx/;
 use Log::Log4perl;
@@ -584,7 +585,8 @@ MySQL documentation for this statement for details.)
 sub update_or_insert {
     my ($self, %arg) = @_;
 
-    my ($table, $keys, $cols, $vals) = @arg{qw/table keys columns values/};
+    my ($table, $keys, $cols, $vals, $dry_run) = @arg{
+        qw/table keys columns values dry_run/};
 
     my $where = _where_string([map {" $_ = ? "} @$keys]);
 
@@ -610,6 +612,11 @@ sub update_or_insert {
     $log->debug('Insert/update query: ' . $sql);
 
     foreach my $v (@$vals) {
+        if ($dry_run) {
+            $log->debug('Dry-run: would have inserted/updated values: ' . Dumper($v));
+            next;
+        }
+
         _start_trans($dbh);
 
         my $rows = $self->_run_change_sql($sql, @$v);

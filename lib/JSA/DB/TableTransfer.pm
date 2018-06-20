@@ -461,7 +461,7 @@ sub _check_filename_part {
 sub put_state {
     my ($self, %args) = @_;
 
-    my ($files, $state) = map {$args{$_}} qw/files state/;
+    my ($files, $state, $dry_run) = map {$args{$_}} qw/files state dry_run/;
 
     _check_state( $state );
 
@@ -475,7 +475,8 @@ sub put_state {
         table   => $self->name(),
         keys    => ['file_id'],
         columns => ['file_id', $state_col, 'comment'],
-        values  => [map {[$_, $state, $args{'comment'}]} @alt]);
+        values  => [map {[$_, $state, $args{'comment'}]} @alt],
+        dry_run => $dry_run);
 }
 
 sub _check_hashref {

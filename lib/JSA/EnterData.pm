@@ -397,8 +397,9 @@ sub insert_obs_set {
         $log->debug("simulation data; skipping" );
 
         $self->_get_xfer_unconnected_dbh()->put_state(
-                state => 'simulation', files => \@file)
-            unless ($dry_run or $skip_state);
+                state => 'simulation', files => \@file,
+                dry_run => $dry_run)
+            unless $skip_state;
 
         return;
     }
@@ -486,8 +487,8 @@ sub insert_obs_set {
 
         $self->_get_xfer_unconnected_dbh()->put_state(
                 state => 'error', files => \@file,
-                comment => $text)
-            unless ($dry_run or $skip_state);
+                comment => $text, dry_run => $dry_run)
+            unless $skip_state;
     };
 }
 
@@ -628,8 +629,9 @@ sub _get_obs_group {
             my $ignored = 'Unreadable or empty file';
 
             $xfer->put_state(
-                    state => 'ignored', files => [$base], comment => $ignored)
-                unless $dry_run || $skip_state;
+                    state => 'ignored', files => [$base], comment => $ignored,
+                    dry_run => $dry_run)
+                unless $skip_state;
 
             $log->warn("$ignored: $file; skipped.\n");
 
@@ -667,8 +669,9 @@ sub _get_obs_group {
             $text .=  ': ' . $err->text();
 
             $xfer->put_state(
-                    state => 'error', files => [$base], comment => $text)
-                unless $dry_run || $skip_state;
+                    state => 'error', files => [$base], comment => $text,
+                    dry_run => $dry_run)
+                unless $skip_state;
 
             $log->error($text);
         }
@@ -2075,10 +2078,11 @@ sub _change_FILES {
         return;
     }
 
-    if ((not ($dry_run || $skip_state)) and $files and scalar @{$files}) {
+    if ((not $skip_state) and $files and scalar @{$files}) {
         my $xfer = $self->_get_xfer_unconnected_dbh();
         $xfer->put_state(
-            state => 'ingested', files => [map _basename($_), @{$files}]);
+            state => 'ingested', files => [map _basename($_), @{$files}],
+            dry_run => $dry_run);
     }
 
     return;
@@ -2539,12 +2543,13 @@ sub calcbounds_update_bound_cols {
         unless ($self->calc_radec($common, \%header)) {
             $log->error('  ERROR  while finding bounds');
 
-            unless ($dry_run or $skip_state) {
+            unless ($skip_state) {
                 $log->debug('Setting file paths with error state');
                 my $xfer = $self->_get_xfer_unconnected_dbh();
                 $xfer->put_state(
                         state => 'error', files => \@file_id,
-                        comment => 'bound calc');
+                        comment => 'bound calc',
+                        dry_run => $dry_run);
             }
 
             $n_err ++;
