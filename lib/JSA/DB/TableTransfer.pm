@@ -179,42 +179,31 @@ sub get_found_files {
 Adds state of C<found> of given array reference of files (absolute
 paths).
 
-    $xfer->add_found([@files]);
+    $xfer->add_found(files => [@files]);
 
 =cut
 
 sub add_found {
-    my ($self, $files) = @_;
+    my ($self, %args) = @_;
 
-    my $vals = _process_paths($files)
-        or return;
+    my ($files, $dry_run) = map {$args{$_}} qw/files dry_run/;
+
+    return unless scalar @$files;
+
+    my $state = $_state{'found'};
+    my @values = map {
+        my $alt = _fix_file_name((fileparse($_, ''))[0]);
+        [$alt, $state, $alt eq $_ ? undef : $_];
+    } @$files;
 
     my $db = $self->_jdb();
 
     return $db->insert('table'   => $_state_table,
                        'columns' => ['file_id', 'status', 'location'],
-                       'values'  => $vals,
+                       'values'  => \@values,
                        'on_duplicate' => 'status=status', # Should do nothing
+                       'dry_run' => $dry_run,
     );
-}
-
-sub _process_paths {
-    my ($paths) = @_;
-
-    my @path = @{$paths};
-
-    return unless scalar @path;
-
-    my $state = $_state{'found'};
-
-    my @val;
-    for my $f (@path) {
-        my $alt = _fix_file_name((fileparse($f, ''))[0]);
-        push @val, [$alt, $state, $alt eq $f ? undef : $f];
-    }
-
-    return unless scalar @val;
-    return [@val];
 }
 
 =item B<code_to_descr>

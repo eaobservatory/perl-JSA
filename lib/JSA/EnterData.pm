@@ -638,8 +638,8 @@ sub _get_obs_group {
             next;
         }
 
-        $xfer->add_found([$base], '')
-            unless $dry_run || $skip_state;
+        $xfer->add_found(files => [$base], dry_run => $dry_run)
+            unless $skip_state;
 
         my $text = '';
         my $err;

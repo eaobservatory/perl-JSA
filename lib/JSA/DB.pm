@@ -441,7 +441,8 @@ Returns number of affected rows if any.
       $jdb->insert('table'   => 'the_table',
                    'columns' => ['a', 'b'],
                    'values'  => [[1, 2], [4, 6]],
-                   'on_duplicate' => 'col="val"');
+                   'on_duplicate' => 'col="val"',
+                   'dry_run' => $dry_run);
 
 On database error, rollbacks the transaction, errors are passed up.
 
@@ -449,6 +450,8 @@ On database error, rollbacks the transaction, errors are passed up.
 
 sub insert {
     my ($self, %arg) = @_;
+
+    my $log = Log::Log4perl->get_logger('');
 
     _check_input(
         %arg,
@@ -459,19 +462,27 @@ sub insert {
         },
     );
 
-    my @cols = @{ $arg{'columns'} };
-    my $size = scalar @cols;
+    my ($table, $cols, $dry_run, $values) = @arg{qw/table columns dry_run values/};
 
-    my $sql = sprintf 'INSERT INTO %s (%s) VALUES (%s)',
-                      $arg{'table'},
-                      join(', ', @cols),
-                      join(', ', ('?') x $size);
+    my $sql = sprintf(
+        'INSERT INTO %s (%s) VALUES (%s)',
+        $table,
+        join(', ', @$cols),
+        join(', ', map {'?'} @$cols));
 
     $sql .= ' ON DUPLICATE KEY UPDATE ' . $arg{'on_duplicate'}
         if exists $arg{'on_duplicate'};
 
+    if ($dry_run) {
+        $log->debug(
+            'Dry-run: would have done insert: ' . $sql .
+            ' with values: ' . Dumper($values));
+
+        return 0;
+    }
+
     return $self->_run_change_loop('sql'    => $sql,
-                                   'values' => $arg{'values'});
+                                   'values' => $values);
 }
 
 =item B<update>
