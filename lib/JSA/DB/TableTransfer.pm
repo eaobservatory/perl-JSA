@@ -302,19 +302,6 @@ sub get_files_not_end_state {
     return $out;
 }
 
-=item B<name>
-
-Returns the name of the table in which to collect, change states for
-raw files.
-
-    $name = JSA::DB::TableTransfer->name();
-
-=cut
-
-sub name {
-    return $_state_table;
-}
-
 =item B<unique_keys>
 
 Returns list of columns to uniquely identify a row.
@@ -472,7 +459,7 @@ sub put_state {
     my @alt = map {_fix_file_name($_)} sort @{$files};
 
     $db->update_or_insert(
-        table   => $self->name(),
+        table   => $_state_table,
         keys    => ['file_id'],
         columns => ['file_id', $state_col, 'comment'],
         values  => [map {[$_, $state, $args{'comment'}]} @alt],
