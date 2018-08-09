@@ -328,20 +328,7 @@ sub merge_pngs {
 
                 # Montage does not copy any EXIF headers over to the output
                 # so we have to do that manually
-                my $exif = Image::ExifTool->new();
-                $exif->ExtractInfo($rsp);
-                my @keywords = $exif->GetValue('Keywords');
-
-                # Now write out what we have, skipping the RA and Dec keys
-                # since they will be wrong for a merged image
-                my $outexif = Image::ExifTool->new();
-                foreach my $k (@keywords) {
-                    next if $k =~ /astro:(RA|Dec)/;
-                    $outexif->SetNewValue(Keywords => $k);
-                }
-
-                $outexif->WriteInfo($reduced);
-
+                _copy_png_keywords($rsp, $reduced, $prodlabel, 1);
             }
             else {
               croak "Error running montage";
@@ -350,6 +337,7 @@ sub merge_pngs {
         else {
             # No montage or no _rimg so just copy the _rsp to reduced
             copy($rsp, $reduced);
+            _copy_png_keywords($rsp, $reduced, $prodlabel, 0);
         }
 
         # indicate that we have dealt with the _rsp
@@ -365,6 +353,7 @@ sub merge_pngs {
         my $prodlabel = ($rimg =~ /_hpxrimg/ ? "healpix" : $label);
         (my $reduced = $rimg) =~ s/_(?:hpx)?rimg([-_])/_${prodlabel}$1/;
         copy($rimg, $reduced);
+        _copy_png_keywords($rimg, $reduced, $prodlabel, 0);
         push(@toremove, $rimg);
         push(@reduced, $reduced);
     }
@@ -380,6 +369,34 @@ sub merge_pngs {
     }
 
     return \@reduced;
+}
+
+sub _copy_png_keywords {
+    my $input = shift;   # File from which to read keywords.
+    my $output = shift;  # File into which to write keywords.
+    my $product = shift; # New "product" name to use.
+    my $merged = shift;  # Did we merge rsp+rimg? If so remove RA and Dec.
+
+    my $exif = Image::ExifTool->new();
+    $exif->ExtractInfo($input);
+
+    my @keywords = $exif->GetValue('Keywords');
+    my $outexif = Image::ExifTool->new();
+
+    # Now write out what we have, skipping the RA and Dec keys
+    # since they will be wrong for a merged image
+    foreach my $k (@keywords) {
+        # Skip RA and Dec if this is a merged file.
+        next if ($merged and $k =~ /astro:(RA|Dec)/);
+
+        # Update product and productID.
+        $k =~ s/(?<=jsa:product=)[^-]+$/$product/;
+        $k =~ s/(?<=^jsa:productID=)[^-]+(?=-)/$product/;
+
+        $outexif->SetNewValue(Keywords => $k);
+    }
+
+    $outexif->WriteInfo($output);
 }
 
 =item B<looks_like_rawfile>
