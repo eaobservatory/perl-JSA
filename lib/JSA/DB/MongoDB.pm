@@ -20,10 +20,13 @@ use File::Spec;
 use IO::File;
 use JSA::Headers qw/read_wcs/;
 use MongoDB;
+use Scalar::Util qw/blessed/;
 use Starlink::AST;
 
 our $valid_filename = qr/[a-z0-9]+\.[a-z0-9]+/;
 our $valid_date = qr/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?/;
+
+our %known_backend = map {$_ => 1} qw/ACSIS DAS/;
 
 =head1 CONSTRUCTOR
 
@@ -99,11 +102,33 @@ sub put_raw_file {
 
 Retrieves raw file headers from the database.
 
-Returns a reference to an array of Astro::FITS::Header objects.
+Returns a reference to an array of hashes containing:
+
+=over 4
+
+=item file
+
+File name.
+
+=item header.
+
+Astro::FITS::Header object.
+
+=item wcs
+
+Starlink::AST object.
+
+=back
 
 Options:
 
 =over 4
+
+=item instrument
+
+Instrument name.  As a special case, if the given name is a known
+backend (e.g. "ACSIS") then the search will use the BACKEND header
+instead of the INSTRUME header.
 
 =item file
 
@@ -112,6 +137,10 @@ Options:
 =item obsid
 
 OBSID header value.
+
+=item date
+
+UT date (object, YYYYMMDD string or integer).
 
 =back
 
@@ -122,12 +151,29 @@ sub get_raw_header {
 
     my %query = ();
 
-    if (exists $opt{'obsid'}) {
-        $query{'header.OBSID'} = $opt{'obsid'};
+    if (exists $opt{'instrument'}) {
+        my $inst = $opt{'instrument'};
+        if ($known_backend{$inst}) {
+            $query{'header.BACKEND'} = $inst;
+        }
+        else {
+            $query{'header.INSTRUME'} = $inst;
+        }
     }
 
     if (exists $opt{'file'}) {
         $query{'_id'} = $opt{'file'};
+    }
+
+    if (exists $opt{'obsid'}) {
+        $query{'header.OBSID'} = $opt{'obsid'};
+    }
+
+    if (exists $opt{'date'}) {
+        # Convert date to an integer for comparison with UTDATE header.
+        my $date = $opt{'date'};
+        $date = $date->ymd('') if blessed $date;
+        $query{'header.UTDATE'} = 0 + $date;
     }
 
     my $cursor = $self->{'client'}->ns('jcmt.raw_file')->find(\%query);
@@ -138,7 +184,11 @@ sub get_raw_header {
 
     while (my @batch = $query_result->batch()) {
         foreach my $doc (@batch) {
-            push @result, bson_to_header($doc->{'header'});
+            push @result, {
+                file => $doc->{'_id'}->value(),
+                header => bson_to_header($doc->{'header'}),
+                wcs => bson_to_wcs($doc->{'wcs'}),
+            };
         }
     }
 
@@ -318,13 +368,16 @@ sub bson_to_header {
             # Unfortunately Astro::FITS::Header doeesn't always include
             # a decimal point in the value for this type.
             $type = 'FLOAT';
+            $val = $val->value();
         }
         elsif (UNIVERSAL::isa($val, 'BSON::Int32')
                 or UNIVERSAL::isa($val, 'BSON::Int64')) {
             $type = 'INT';
+            $val = $val->value();
         }
         elsif (UNIVERSAL::isa($val, 'BSON::String')) {
             $type = 'STRING';
+            $val = $val->value();
         }
         elsif (UNIVERSAL::isa($val, 'boolean')) {
             $type = 'LOGICAL';
