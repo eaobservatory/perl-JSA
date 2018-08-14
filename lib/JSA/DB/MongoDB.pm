@@ -18,7 +18,9 @@ use DateTime::Format::ISO8601;
 use Digest::MD5;
 use File::Spec;
 use IO::File;
+use JSA::Headers qw/read_wcs/;
 use MongoDB;
+use Starlink::AST;
 
 our $valid_filename = qr/[a-z0-9]+\.[a-z0-9]+/;
 our $valid_date = qr/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?/;
@@ -165,6 +167,7 @@ sub prepare_file_record_local {
     my (undef, undef, $basename) = File::Spec->splitpath($file);
 
     my $hdr = new Astro::FITS::Header::NDF(File => $file);
+    my $wcs = read_wcs($file);
 
     my $ctx = new Digest::MD5();
     my $fh = new IO::File($file, 'r');
@@ -172,11 +175,11 @@ sub prepare_file_record_local {
     $fh->close();
     my $md5sum = $ctx->hexdigest();
 
-    return prepare_file_record($basename, $hdr, $md5sum);
+    return prepare_file_record($basename, $hdr, $wcs, $md5sum);
 }
 
 
-=item prepare_file_record($basename, $header, $md5sum)
+=item prepare_file_record($basename, $header, $wcs, $md5sum)
 
 Prepares information for the database record about a file.
 
@@ -191,6 +194,7 @@ be used in the "query" and "update" parts of an update operation.
 sub prepare_file_record {
     my $basename = shift;
     my $hdr = shift;
+    my $wcs = shift;
     my $md5sum = shift;
 
     die "File base name $basename is not valid"
@@ -203,6 +207,7 @@ sub prepare_file_record {
         bson_doc(
             md5sum => $md5sum,
             header => header_to_bson($hdr),
+            wcs => wcs_to_bson($wcs),
         );
 }
 
@@ -348,6 +353,41 @@ sub bson_to_header {
     }
 
     return new Astro::FITS::Header(Cards => \@cards);
+}
+
+=item wcs_to_bson($wcs)
+
+Convert an Starlink::AST object to a list suitable for inclusion in a BSON
+document.
+
+=cut
+
+sub wcs_to_bson {
+    my $wcs = shift;
+
+    my @doc = ();
+
+    my $chan = new Starlink::AST::Channel(sink => sub {push @doc, shift});
+    $chan->Write($wcs);
+
+    return \@doc;
+}
+
+=item bson_to_wcs($document)
+
+Convert a BSON list back to a Starlink::AST object.
+
+=cut
+
+sub bson_to_wcs {
+    my $doc = shift;
+
+    my @lines = @$doc;
+
+    my $chan = new Starlink::AST::Channel(source => sub {
+        return (shift @lines)->value()});
+
+    return $chan->Read();
 }
 
 1;
