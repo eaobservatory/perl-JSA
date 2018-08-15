@@ -27,6 +27,7 @@ our $valid_filename = qr/[a-z0-9]+\.[a-z0-9]+/;
 our $valid_date = qr/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?/;
 
 our %known_backend = map {$_ => 1} qw/ACSIS DAS/;
+our %need_wcs = map {$_ => 1} qw/ACSIS/;
 
 =head1 CONSTRUCTOR
 
@@ -217,7 +218,10 @@ sub prepare_file_record_local {
     my (undef, undef, $basename) = File::Spec->splitpath($file);
 
     my $hdr = new Astro::FITS::Header::NDF(File => $file);
-    my $wcs = read_wcs($file);
+
+    my $instrument = $hdr->value('BACKEND') // $hdr->value('INSTRUME');
+
+    my $wcs = $need_wcs{$instrument} ? read_wcs($file) : undef;
 
     my $ctx = new Digest::MD5();
     my $fh = new IO::File($file, 'r');
@@ -418,6 +422,8 @@ document.
 sub wcs_to_bson {
     my $wcs = shift;
 
+    return undef unless defined $wcs;
+
     my @doc = ();
 
     my $chan = new Starlink::AST::Channel(sink => sub {push @doc, shift});
@@ -434,6 +440,8 @@ Convert a BSON list back to a Starlink::AST object.
 
 sub bson_to_wcs {
     my $doc = shift;
+
+    return undef unless defined $doc;
 
     my @lines = @$doc;
 
