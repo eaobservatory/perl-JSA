@@ -229,6 +229,10 @@ Update only the C<INBEAM> header value.
 
 Update only the times for an observation.
 
+=item from_mongodb
+
+Read file information from MongoDB.
+
 =back
 
 =cut
@@ -240,6 +244,12 @@ sub prepare_and_insert {
 
     my $dry_run = $arg{'dry_run'};
     my $skip_state = $arg{'skip_state'};
+
+    my $mdb = undef;
+    if ($arg{'from_mongodb'}) {
+        require JSA::DB::MongoDB;
+        $mdb = new JSA::DB::MongoDB();
+    }
 
     my %update_args = map {$_ => $arg{$_}} qw/
         calc_radec
@@ -276,10 +286,14 @@ sub prepare_and_insert {
     # for each subscan in the observation.  No need to retrieve associated
     # obslog comments. That's <no. of subsystems used> *
     # <no. of subscans objects returned per observation>.
-    my $group = $self->_get_obs_group(
+    my ($group, $wcs) = $self->_get_obs_group(
         dry_run => $dry_run,
         skip_state => $skip_state,
+        mongodb => $mdb,
         %obs_args);
+
+    # For now _get_obs_group does not return WCS information unless using MongoDB.
+    $wcs = undef unless defined $mdb;
 
     return unless $group && ref $group;
 
@@ -332,6 +346,8 @@ sub prepare_and_insert {
             run_obs => \@sub_obs,
             dry_run => $dry_run,
             skip_state => $skip_state,
+            do_verification => (not defined $mdb),
+            file_wcs => $wcs,
             %update_args);
     }
 }
@@ -347,8 +363,8 @@ sub insert_obs_set {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $run_obs, $columns, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/db run_obs columns dry_run skip_state/;
+    my ($db, $run_obs, $columns, $file_wcs, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/db run_obs columns file_wcs dry_run skip_state/;
 
     my $dbh  = $db->handle();
     my @file = map {$_->simple_filename} @$run_obs;
@@ -404,7 +420,7 @@ sub insert_obs_set {
         return;
     }
 
-    if ($self->_do_verification()) {
+    if ($arg{'do_verification'} and $self->_do_verification()) {
         my $verify = JCMT::DataVerify->new(Obs => $common_obs);
 
         unless (defined $verify) {
@@ -471,6 +487,7 @@ sub insert_obs_set {
                 %pass_arg,
                 db  => $db,
                 obs => $run_obs,
+                file_wcs => $file_wcs,
                 dry_run => $dry_run,
                 skip_state => $skip_state);
         }
@@ -572,21 +589,17 @@ sub _filter_header {
 
 =item B<_get_obs_group>
 
-When no files are provided, returns a L<OMP::Info::ObsGroup> object
-given date as a hash.
+Returns a L<OMP::Info::ObsGroup> object and reference to hash of WCS
+information, if available.
 
-    $obs = $enter->_get_obs_group(date => '20090609',
-                                  dry_run => $dry_run,
-                                  skip_state => $skip_state,
-                                 );
-
-Else, returns a L<OMP::Info::ObsGroup> object created with
-given files.
-
-    $obs = $enter->_get_obs_group;
+    ($obs, $wcs) = $enter->_get_obs_group(
+        date => '20090609',
+        dry_run => $dry_run,
+        skip_state => $skip_state,
+    );
 
 Note: writes the file state in the transfer table unless the
-dry_run argument is given.
+dry_run argument is given, or using data from MongoDB.
 
 =cut
 
@@ -594,120 +607,161 @@ sub _get_obs_group {
     my ($self, %args) = @_;
     my $dry_run = $args{'dry_run'};
     my $skip_state = $args{'skip_state'};
+    my $mdb = $args{'mongodb'};
 
     my $log = Log::Log4perl->get_logger('');
 
-    my $xfer = $self->_get_xfer_unconnected_dbh();
+    my @headers;
+    my %wcs;
 
-    my @file;
+    unless (defined $mdb) {
+        my $xfer = $self->_get_xfer_unconnected_dbh();
 
-    unless (exists $args{'files'}) {
-        throw JSA::Error::FatalError('Neither files nor date given to _get_obs_group')
-            unless exists $args{'date'};
+        my @file;
 
-        # OMP uses Time::Piece (instead of DateTime).
-        my $date = Time::Piece->strptime($args{'date'}, '%Y%m%d');
+        unless (exists $args{'files'}) {
+            throw JSA::Error::FatalError('Neither files nor date given to _get_obs_group')
+                unless exists $args{'date'};
 
-        @file = OMP::FileUtils->files_on_disk(
-            date => $date,
-            instrument => $self->instrument_name());
+            # OMP uses Time::Piece (instead of DateTime).
+            my $date = Time::Piece->strptime($args{'date'}, '%Y%m%d');
+
+            @file = OMP::FileUtils->files_on_disk(
+                date => $date,
+                instrument => $self->instrument_name());
+        }
+        else {
+            @file = @{$args{'files'}};
+        }
+
+        # Flatten 2-D array reference.
+        @file = map {! defined $_ ? () : ref $_ ? @{$_} : $_} @file;
+
+        return unless scalar @file;
+
+        my @obs;
+        foreach my $file (@file) {
+            my $base = _basename($file);
+
+            unless (-r $file && -s _) {
+                my $ignored = 'Unreadable or empty file';
+
+                $xfer->put_state(
+                        state => 'ignored', files => [$base], comment => $ignored,
+                        dry_run => $dry_run)
+                    unless $skip_state;
+
+                $log->warn("$ignored: $file; skipped.\n");
+
+                next;
+            }
+
+            $xfer->add_found(files => [$base], dry_run => $dry_run)
+                unless $skip_state;
+
+            my $text = '';
+            my $err;
+
+            try {
+                push @obs, OMP::Info::Obs->readfile(
+                    $file,
+                    nocomments => 1,
+                    retainhdr  => 1,
+                    ignorebad  => 1,
+                    header_search => 'files');
+            }
+            catch OMP::Error::ObsRead with {
+                ($err) = @_;
+
+                #throw $err
+                #  unless $err->text() =~ m/^Error reading FITS header from file/;
+                $text = 'Error during file reading when making Obs:';
+            }
+            otherwise {
+                ($err) = @_;
+
+                $text = 'Unknown Error';
+            };
+
+            if ($err) {
+                $text .=  ': ' . $err->text();
+
+                $xfer->put_state(
+                        state => 'error', files => [$base], comment => $text,
+                        dry_run => $dry_run)
+                    unless $skip_state;
+
+                $log->error($text);
+            }
+        }
+
+        for my $ob (@obs) {
+            my $header = $ob->hdrhash;
+
+
+            push @headers, {
+                filename => $ob->{'FILENAME'}->[0],
+                header => $header,
+            };
+        }
     }
     else {
-        @file = @{$args{'files'}};
-    }
+        die 'Files specified for _get_obs_group in MonboDB mode'
+            if exists $args{'files'};
+        die 'Date not specified for _get_obs_group in MonboDB mode'
+            unless exists $args{'date'};
 
-    # Flatten 2-D array reference.
-    @file = map {! defined $_ ? () : ref $_ ? @{$_} : $_} @file;
 
-    return unless scalar @file;
+        my $result = $mdb->get_raw_header(
+            date => $args{'date'},
+            instrument => $self->instrument_name(),
+        );
 
-    my @obs;
-    foreach my $file (@file) {
-        my $base = _basename($file);
+        foreach my $entry (@$result) {
+            my $file = $entry->{'file'};
 
-        unless (-r $file && -s _) {
-            my $ignored = 'Unreadable or empty file';
+            $wcs{$file} = $entry->{'wcs'};
 
-            $xfer->put_state(
-                    state => 'ignored', files => [$base], comment => $ignored,
-                    dry_run => $dry_run)
-                unless $skip_state;
+            my $header = $entry->{'header'};
+            $header->tiereturnsref(1);
+            tie my %header, ref($header), $header;
 
-            $log->warn("$ignored: $file; skipped.\n");
-
-            next;
-        }
-
-        $xfer->add_found(files => [$base], dry_run => $dry_run)
-            unless $skip_state;
-
-        my $text = '';
-        my $err;
-
-        try {
-            push @obs, OMP::Info::Obs->readfile(
-                $file,
-                nocomments => 1,
-                retainhdr  => 1,
-                ignorebad  => 1,
-                header_search => 'files');
-        }
-        catch OMP::Error::ObsRead with {
-            ($err) = @_;
-
-            #throw $err
-            #  unless $err->text() =~ m/^Error reading FITS header from file/;
-            $text = 'Error during file reading when making Obs:';
-        }
-        otherwise {
-            ($err) = @_;
-
-            $text = 'Unknown Error';
-        };
-
-        if ($err) {
-            $text .=  ': ' . $err->text();
-
-            $xfer->put_state(
-                    state => 'error', files => [$base], comment => $text,
-                    dry_run => $dry_run)
-                unless $skip_state;
-
-            $log->error($text);
+            push @headers, {
+                filename => $file,
+                header => \%header,
+            };
         }
     }
 
-    return unless scalar @obs;
+    return unless scalar @headers;
 
-    my @headers;
-    for my $ob (@obs) {
-        my $header = $ob->hdrhash;
-
-        # These headers will be passed to OMP::FileUtils->merge_dupes which
-        # in turn passes them to Astro::FITS::Header->new(Hash => ...).
-        # That constructor drops any null or empty string headers.  Since
-        # we need to see the INBEAM header for all files, replace blank
-        # values with a dummy placeholder first.  (See also
-        # munge_header_INBEAM where these placeholders are removed.)
+    # The headers will be passed to OMP::FileUtils->merge_dupes which
+    # in turn passes them to Astro::FITS::Header->new(Hash => ...).
+    # That constructor drops any null or empty string headers.  Since
+    # we need to see the INBEAM header for all files, replace blank
+    # values with a dummy placeholder first.  (See also
+    # munge_header_INBEAM where these placeholders are removed.)
+    foreach my $entry (@headers) {
+        my $header = $entry->{'header'};
         if (exists $header->{'INBEAM'}) {
             unless ((defined $header->{'INBEAM'})
                     and ($header->{'INBEAM'} ne '')) {
                 $header->{'INBEAM'} = 'NOTHING';
             }
         }
-
-        push @headers, {
-            filename => $ob->{'FILENAME'}->[0],
-            header => $header,
-        };
     }
+
 
     my $merged = OMP::FileUtils->merge_dupes(@headers);
 
-    @obs = OMP::Info::Obs->hdrs_to_obs(retainhdr => 1,
-                                       fits      => $merged);
+    my @obs = OMP::Info::Obs->hdrs_to_obs(
+        retainhdr => 1,
+        fits      => $merged);
 
-    return OMP::Info::ObsGroup->new(obs => \@obs);
+    return (
+        OMP::Info::ObsGroup->new(obs => \@obs),
+        \%wcs,
+    );
 }
 
 
@@ -773,6 +827,7 @@ the I<OMP::Info::Objects> in its entirety.
     $ok = $enter->add_subsys_obs(db        => $db,
                                  columns   => \%cols,
                                  obs       => \%obs_per_runnr,
+                                 file_wcs  => \%wcs_by_basename,
                                  dry_run   => $dry_run,
                                  skip_state=> $skip_state);
 
@@ -791,8 +846,8 @@ sub add_subsys_obs {
         throw JSA::Error::BadArgs("No suitable value given for ${k}.");
     }
 
-    my ($db, $obs, $columns, $dry_run, $skip_state) =
-        map {$args{$_}} qw/db obs columns dry_run skip_state/;
+    my ($db, $obs, $columns, $file_wcs, $dry_run, $skip_state) =
+        map {$args{$_}} qw/db obs columns file_wcs dry_run skip_state/;
 
     my $dbh = $db->handle();
 
@@ -807,7 +862,7 @@ sub add_subsys_obs {
         my $subsys_hdrs = {%{$subsys_obs->hdrhash}};
 
         # Need to calculate the frequency information
-        $self->calc_freq($subsys_obs, $subsys_hdrs);
+        $self->calc_freq($subsys_obs, $subsys_hdrs, $file_wcs);
 
         my $grouped;
         if ($self->can('transform_header')) {
@@ -2590,14 +2645,16 @@ sub calcbounds_make_obs {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my $group = $self->_get_obs_group(
+    my ($group, undef) = $self->_get_obs_group(
             dry_run => $dry_run,
             skip_state => $skip_state,
-            %obs_args)
-        or do {
-            $log->warn('Could not make obs group.');
-            return;
-        };
+            monbodb => undef,
+            %obs_args);
+
+    unless ($group) {
+        $log->warn('Could not make obs group.');
+        return;
+    };
 
     my @obs = $group->obs()
         or do {

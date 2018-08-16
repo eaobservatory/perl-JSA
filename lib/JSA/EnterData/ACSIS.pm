@@ -5,6 +5,7 @@ use warnings;
 
 use parent 'JSA::EnterData';
 
+use File::Basename;
 use File::Spec;
 use Log::Log4perl;
 
@@ -208,7 +209,7 @@ sub _fill_headers_obsid_subsys {
 
 Calculate frequency properties, updates given hash reference.
 
-    JSA::EnterData->calc_freq($obs, $headerref);
+    JSA::EnterData->calc_freq($obs, $headerref, \%wcs_by_basename);
 
 It Calculates:
     zsource, restfreq
@@ -218,13 +219,22 @@ It Calculates:
 =cut
 
 sub calc_freq {
-    my ($self, $obs, $headerref) = @_;
+    my ($self, $obs, $headerref, $file_wcs) = @_;
 
     # Filenames for a subsystem
     my @filenames = $obs->filename;
 
     # need the Frameset
-    my $wcs = read_wcs($filenames[0]);
+    my $wcs;
+    unless (defined $file_wcs) {
+        $wcs = read_wcs($filenames[0]);
+    }
+    else {
+        my ($basename) = File::Basename::fileparse($filenames[0]);
+        $wcs = $file_wcs->{$basename};
+        throw JSA::Error::FatalError("WCS information missing for file $basename")
+            unless defined $wcs;
+    }
 
     # Change to BARYCENTRIC, GHz
     $wcs->Set('system(1)' => 'FREQ',
