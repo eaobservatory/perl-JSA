@@ -1222,11 +1222,11 @@ sub prepare_update_hash {
             if (($only_inbeam && $key !~ $inbeam_re)
                     or ($only_obstime && $key !~ $obs_date_re)
                     or ($only_obsradec && $key !~ /^obs(?:ra|dec)/i)) {
-                $log->debug("skipping field: $key (due to field restriction)");
+                $log->trace("skipping field: $key (due to field restriction)");
                 next;
             }
 
-            $log->debug("testing field: $key");
+            $log->trace("testing field: $key");
 
             next if ($key !~ $miss_ok && ! exists $field_values->{$key});
 
@@ -1235,7 +1235,7 @@ sub prepare_update_hash {
 
             next unless (defined $old || defined $new);
 
-            $log->debug("continuing with $key");
+            $log->trace("continuing with $key");
 
             my %test = (
                 start => exists $start{$key},
@@ -1254,14 +1254,14 @@ sub prepare_update_hash {
             if ($key =~ $inbeam_re) {
                 my $combined = $self->_combine_inbeam_values($old, $new);
                 $differ{$key} = $combined;
-                $log->debug($key . ' = ' . ($combined // '<undef>'));
+                $log->trace($key . ' = ' . ($combined // '<undef>'));
                 next;
             }
 
             # Not defined currently - inserting new value.
             if (defined $new && ! defined $old) {
                 $differ{$key} = $new;
-                $log->debug( qq[$key = ] . $new );
+                $log->trace( qq[$key = ] . $new );
                 next;
             }
 
@@ -1269,7 +1269,7 @@ sub prepare_update_hash {
             # this means a null.
             if (! defined $new && defined $old) {
                 $differ{$key} = undef;
-                $log->debug("$key = <undef>");
+                $log->trace("$key = <undef>");
                 next;
             }
 
@@ -1279,12 +1279,12 @@ sub prepare_update_hash {
                 if ($in_range) {
                     $new = _find_extreme_value(%test,
                                                'new>old' => _compare_dates($new, $old));
-                    $log->debug("  possible new value for $key = " . $new );
+                    $log->trace("  possible new value for $key = " . $new );
                 }
 
                 if ($new ne $old) {
                     $differ{$key} = $new;
-                    $log->debug("$key = " . $new);
+                    $log->trace("$key = " . $new);
                 }
 
                 next;
@@ -1295,20 +1295,20 @@ sub prepare_update_hash {
                 # & end values; these are weather dependent.
                 if ($key =~ $tau_val && $new != $old) {
                     $differ{$key} = $new;
-                    $log->debug("$key = " . $new);
+                    $log->trace("$key = " . $new);
                 }
                 elsif ($in_range) {
                     $new = _find_extreme_value(%test, 'new>old' => $new > $old);
 
                     if ($new != $old) {
                         $differ{$key} = $new if $new != $old;
-                        $log->debug("$key = " . $new);
+                        $log->trace("$key = " . $new);
                     }
                 }
                 elsif ($keep_max) {
                     if ($new > $old) {
                         $differ{$key} = $new;
-                        $log->debug("$key = " . $new . " (new maximum)");
+                        $log->trace("$key = " . $new . " (new maximum)");
                     }
                 }
                 else {
@@ -1317,12 +1317,12 @@ sub prepare_update_hash {
                       my $diff = abs($old - $new);
                       if ($diff > 0.000001) {
                           $differ{$key} = $new;
-                          $log->debug("$key = " . $new);
+                          $log->trace("$key = " . $new);
                       }
                     }
                     elsif ( $new != $old ) {
                         $differ{$key} = $new;
-                        $log->debug("$key = " . $new );
+                        $log->trace("$key = " . $new );
                     }
                 }
 
@@ -1332,7 +1332,7 @@ sub prepare_update_hash {
             # String.
             if ($new ne $old) {
                 $differ{$key} = $new;
-                $log->debug("$key = " . $new);
+                $log->trace("$key = " . $new);
             }
         }
 
