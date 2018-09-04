@@ -11,6 +11,7 @@ use strict;
 use Astro::FITS::Header;
 use Astro::FITS::Header::Item;
 use Astro::FITS::Header::NDF;
+use Astro::FITS::Header::CFITSIO;
 use boolean;
 use BSON;
 use BSON::Types ':all';
@@ -185,9 +186,12 @@ sub get_raw_header {
 
     while (my @batch = $query_result->batch()) {
         foreach my $doc (@batch) {
+            my $header = bson_to_header($doc->{'header'});
+            $header->subhdrs(map {bson_to_header($_)} @{$doc->{'subheaders'}});
+
             push @result, {
                 file => $doc->{'_id'}->value(),
-                header => bson_to_header($doc->{'header'}),
+                header => $header,
                 wcs => bson_to_wcs($doc->{'wcs'}),
             };
         }
@@ -217,9 +221,16 @@ sub prepare_file_record_local {
 
     my (undef, undef, $basename) = File::Spec->splitpath($file);
 
-    my $hdr = new Astro::FITS::Header::NDF(File => $file);
+    my $hdr;
 
-    my $instrument = $hdr->value('BACKEND') // $hdr->value('INSTRUME');
+    if ($file =~ /\.fits$/) {
+        $hdr = new Astro::FITS::Header::CFITSIO(File => $file, ReadOnly => 1);
+    }
+    else {
+        $hdr = new Astro::FITS::Header::NDF(File => $file);
+    }
+
+    my $instrument = $hdr->value('BACKEND') // $hdr->value('INSTRUME') // 'UNKNOWN';
 
     my $wcs = $need_wcs{$instrument} ? read_wcs($file) : undef;
 
@@ -261,6 +272,7 @@ sub prepare_file_record {
         bson_doc(
             md5sum => $md5sum,
             header => header_to_bson($hdr),
+            subheaders => [map {header_to_bson($_)} $hdr->subhdrs()],
             wcs => wcs_to_bson($wcs),
         );
 }
@@ -334,6 +346,9 @@ sub header_to_bson {
         }
         elsif ($type eq 'UNDEF') {
             $hdr = undef;
+        }
+        elsif ($type eq 'END') {
+            next;
         }
         else {
             die "Unexpected type $type for FITS keyword $keyword";
