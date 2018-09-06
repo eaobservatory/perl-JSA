@@ -72,6 +72,12 @@ Options:
 
 (Path) name of a local file to be processed.
 
+=item extra
+
+Extra header-style information to be saved.  This is to allow storage of
+information which is not included in the header (or WCS) but has been
+extracted from the file in some other way.
+
 =back
 
 =cut
@@ -82,7 +88,8 @@ sub put_raw_file {
     my ($ident, $info);
 
     if (exists $opt{'file'}) {
-        ($ident, $info) = prepare_file_record_local($opt{'file'});
+        ($ident, $info) = prepare_file_record_local(
+            $opt{'file'}, extra => $opt{'extra'});
     }
     else {
         die 'Unknown put_file operation';
@@ -119,6 +126,10 @@ Astro::FITS::Header object.
 =item wcs
 
 Starlink::AST object.
+
+=item extra
+
+Any extra header-style information recorded about the raw file.
 
 =back
 
@@ -193,6 +204,7 @@ sub get_raw_header {
                 file => $doc->{'_id'}->value(),
                 header => $header,
                 wcs => bson_to_wcs($doc->{'wcs'}),
+                extra => bson_to_header($doc->{'extra'}),
             };
         }
     }
@@ -218,6 +230,7 @@ information.
 
 sub prepare_file_record_local {
     my $file = shift;
+    my %opt = @_;
 
     my (undef, undef, $basename) = File::Spec->splitpath($file);
 
@@ -240,11 +253,11 @@ sub prepare_file_record_local {
     $fh->close();
     my $md5sum = $ctx->hexdigest();
 
-    return prepare_file_record($basename, $hdr, $wcs, $md5sum);
+    return prepare_file_record($basename, $hdr, $wcs, $md5sum, $opt{'extra'});
 }
 
 
-=item prepare_file_record($basename, $header, $wcs, $md5sum)
+=item prepare_file_record($basename, $header, $wcs, $md5sum, $extra)
 
 Prepares information for the database record about a file.
 
@@ -261,6 +274,7 @@ sub prepare_file_record {
     my $hdr = shift;
     my $wcs = shift;
     my $md5sum = shift;
+    my $extra = shift;
 
     die "File base name $basename is not valid"
         unless $basename =~ $valid_filename;
@@ -274,6 +288,7 @@ sub prepare_file_record {
             header => header_to_bson($hdr),
             subheaders => [map {header_to_bson($_)} $hdr->subhdrs()],
             wcs => wcs_to_bson($wcs),
+            extra => header_to_bson($extra),
         );
 }
 
@@ -306,6 +321,8 @@ Numbers and logical fields are wrapped in BSON type wrappers.
 
 sub header_to_bson {
     my $header = shift;
+
+    return undef unless defined $header;
 
     my @doc = ();
 
