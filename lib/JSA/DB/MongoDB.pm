@@ -385,7 +385,10 @@ sub header_to_bson {
 
     return undef unless defined $header;
 
+    my $log = Log::Log4perl->get_logger('');
+
     my @doc = ();
+    my %seen = ();
 
     foreach my $item ($header->allitems()) {
         my $type = $item->type();
@@ -397,6 +400,11 @@ sub header_to_bson {
         my $keyword = $item->keyword();
         my $value = $item->value();
         my $hdr = undef;
+
+        if ($seen{$keyword} ++) {
+            $log->warn("Duplicate header keyword '$keyword', skipping...");
+            next;
+        }
 
         if ($type eq 'STRING') {
             if (($value =~ $valid_date) and not ($keyword eq 'HSTSTART' or $keyword eq 'HSTEND')) {
