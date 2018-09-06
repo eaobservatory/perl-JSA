@@ -15,11 +15,13 @@ use Astro::FITS::Header::CFITSIO;
 use boolean;
 use BSON;
 use BSON::Types ':all';
+use Data::Dumper;
 use DateTime::Format::ISO8601;
 use Digest::MD5;
 use File::Spec;
 use IO::File;
 use JSA::Headers qw/read_wcs/;
+use Log::Log4perl;
 use MongoDB;
 use Scalar::Util qw/blessed/;
 use Starlink::AST;
@@ -78,6 +80,10 @@ Extra header-style information to be saved.  This is to allow storage of
 information which is not included in the header (or WCS) but has been
 extracted from the file in some other way.
 
+=item dry_run
+
+Do not actually write to the database.
+
 =back
 
 =cut
@@ -85,6 +91,7 @@ extracted from the file in some other way.
 sub put_raw_file {
     my ($self, %opt) = @_;
 
+    my $log = Log::Log4perl->get_logger('');
     my ($ident, $info);
 
     if (exists $opt{'file'}) {
@@ -95,16 +102,25 @@ sub put_raw_file {
         die 'Unknown put_file operation';
     }
 
-    $self->{'client'}->ns('jcmt.raw_file')->update_one(
-        $ident,
-        {
-            '$set' => $info,
-            '$currentDate' => {'modified' => true},
-        },
-        {
-            upsert => true,
-        },
-    );
+    unless ($opt{'dry_run'}) {
+        $log->info('Entering/updating MongoDB record for file: ' . $opt{'file'});
+
+        $self->{'client'}->ns('jcmt.raw_file')->update_one(
+            $ident,
+            {
+                '$set' => $info,
+                '$currentDate' => {'modified' => true},
+            },
+            {
+                upsert => true,
+            },
+        );
+    }
+    else {
+        $log->info('Dry-run: not storing record for file: ' . $opt{'file'});
+    }
+
+    $log->trace(Data::Dumper->Dump([$ident, $info], [qw/ident info/]));
 }
 
 =item get_raw_header
