@@ -80,6 +80,12 @@ Extra header-style information to be saved.  This is to allow storage of
 information which is not included in the header (or WCS) but has been
 extracted from the file in some other way.
 
+=item construct_missing
+
+Reference to a subroutine to call to construct missing headers.  If this
+is not required for the instrument, this can be undef or the subroutine
+can return undef.
+
 =item dry_run
 
 Do not actually write to the database.
@@ -96,7 +102,9 @@ sub put_raw_file {
 
     if (exists $opt{'file'}) {
         ($ident, $info) = prepare_file_record_local(
-            $opt{'file'}, extra => $opt{'extra'});
+            $opt{'file'},
+            extra => $opt{'extra'},
+            construct_missing => $opt{'construct_missing'});
     }
     else {
         die 'Unknown put_file operation';
@@ -167,6 +175,10 @@ instead of the INSTRUME header.
 
 OBSID header value.
 
+=item obsnum
+
+Observation number.
+
 =item date
 
 UT date (object, YYYYMMDD string or integer).
@@ -181,12 +193,12 @@ sub get_raw_header {
     my %query = ();
 
     if (exists $opt{'instrument'}) {
-        my $inst = $opt{'instrument'};
+        my $inst = uc($opt{'instrument'});
         if ($known_backend{$inst}) {
-            $query{'header.BACKEND'} = $inst;
+            $query{'backend'} = $inst;
         }
         else {
-            $query{'header.INSTRUME'} = $inst;
+            $query{'instrument'} = $inst;
         }
     }
 
@@ -195,14 +207,18 @@ sub get_raw_header {
     }
 
     if (exists $opt{'obsid'}) {
-        $query{'header.OBSID'} = $opt{'obsid'};
+        $query{'obsid'} = $opt{'obsid'};
+    }
+
+    if (exists $opt{'obsnum'}) {
+        $query{'obsnum'} = $opt{'obsnum'};
     }
 
     if (exists $opt{'date'}) {
         # Convert date to an integer for comparison with UTDATE header.
         my $date = $opt{'date'};
         $date = $date->ymd('') if blessed $date;
-        $query{'header.UTDATE'} = 0 + $date;
+        $query{'utdate'} = 0 + $date;
     }
 
     my $cursor = $self->{'client'}->ns('jcmt.raw_file')->find(\%query);
@@ -259,7 +275,16 @@ sub prepare_file_record_local {
         $hdr = new Astro::FITS::Header::NDF(File => $file);
     }
 
-    my $instrument = $hdr->value('BACKEND') // $hdr->value('INSTRUME') // 'UNKNOWN';
+    my $extra = $opt{'extra'};
+    my $missing = undef;
+    $missing = $opt{'construct_missing'}->($file, $hdr, $extra)
+        if defined $opt{'construct_missing'};
+    $missing = new Astro::FITS::Header() unless defined $missing;
+
+    my $instrument =
+        $hdr->value('BACKEND') // $missing->value('BACKEND') //
+        $hdr->value('INSTRUME') // $missing->value('INSTRUME') //
+        'UNKNOWN';
 
     my $wcs = $need_wcs{$instrument} ? read_wcs($file) : undef;
 
@@ -269,11 +294,12 @@ sub prepare_file_record_local {
     $fh->close();
     my $md5sum = $ctx->hexdigest();
 
-    return prepare_file_record($basename, $hdr, $wcs, $md5sum, $opt{'extra'});
+    return prepare_file_record(
+        $basename, $hdr, $wcs, $md5sum, $extra, $missing);
 }
 
 
-=item prepare_file_record($basename, $header, $wcs, $md5sum, $extra)
+=item prepare_file_record($basename, $header, $wcs, $md5sum, $extra, $missing)
 
 Prepares information for the database record about a file.
 
@@ -291,9 +317,23 @@ sub prepare_file_record {
     my $wcs = shift;
     my $md5sum = shift;
     my $extra = shift;
+    my $missing = shift;
 
     die "File base name $basename is not valid"
         unless $basename =~ $valid_filename;
+
+    my $backend = $hdr->value('BACKEND') // $missing->value('BACKEND');
+    my $instrument = $hdr->value('INSTRUME') // $missing->value('INSTRUME');
+    die "Unknown instrument for $basename" unless defined $instrument;
+
+    my $utdate = $hdr->value('UTDATE') // $missing->value('UTDATE');
+    die "Unknown UT date for $basename" unless defined $utdate;
+
+    my $obsid = $hdr->value('OBSID') // $missing->value('OBSID');
+    die "Unknown OBSID for $basename"  unless defined $obsid;
+
+    my $obsnum = $hdr->value('OBSNUM') // $extra->value('OBSNUM');
+    die "Unknown OBSNUM for $basename" unless defined $obsnum;
 
     return
         bson_doc(
@@ -305,6 +345,11 @@ sub prepare_file_record {
             subheaders => [map {header_to_bson($_)} $hdr->subhdrs()],
             wcs => wcs_to_bson($wcs),
             extra => header_to_bson($extra),
+            backend => (defined $backend ? bson_string(uc($backend)) : undef),
+            instrument => bson_string(uc($instrument)),
+            utdate => bson_int32($utdate),
+            obsnum => bson_int32($obsnum),
+            obsid => bson_string($obsid),
         );
 }
 
