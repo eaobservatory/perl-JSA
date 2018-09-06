@@ -57,18 +57,6 @@ sub new {
     return bless $obj, $class;
 }
 
-=item B<calc_freq>
-
-Does nothing currently.
-
-=cut
-
-sub calc_freq {
-  my ($self) = @_;
-
-  return;
-}
-
 =item B<get_bound_check_command>
 
 Returns a list of command and its argument to be executed to

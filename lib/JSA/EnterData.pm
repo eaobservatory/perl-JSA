@@ -110,6 +110,48 @@ sub new {
     return $obj;
 }
 
+=item B<read_file_extra>
+
+Returns undef -- subclasses should overrride this if extra information needs
+to be read from raw files.
+
+=cut
+
+sub read_file_extra {
+    my $self = shift;
+    my $filename = shift;
+
+    return undef;
+}
+
+=item construct_missing_headers($filename, $header, $extra)
+
+Returns undef -- subclasses should overrride this if there are raw files
+which lack important headers.
+
+=cut
+
+sub construct_missing_headers {
+    my $self = shift;
+    my $filename = shift;
+    my $header = shift;
+    my $extra = shift;
+
+    return undef;
+}
+
+=item B<calc_freq>
+
+Does nothing currently.
+
+=cut
+
+sub calc_freq {
+  my ($self) = @_;
+
+  return;
+}
+
 =item B<force_db>
 
 Returns the truth value, when called without arguments, to indicate
@@ -1385,6 +1427,7 @@ sub _get_primary_key {
         ACSIS     => 'obsid_subsysnr',
         COMMON    => 'obsid',
         FILES     => [qw/obsid_subsysnr file_id/],
+        RXH3      => 'obsid_subsysnr',
         SCUBA2    => 'obsid_subsysnr',
         transfer  => 'file_id',
     );

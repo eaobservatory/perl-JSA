@@ -406,8 +406,6 @@ a raw data file.
 
     $israw = looks_like_rawfile($filename);
 
-The file suffix must be ".sdf".
-
 =cut
 
 sub looks_like_rawfile {
@@ -424,6 +422,10 @@ sub looks_like_rawfile {
     }
     elsif ($filename =~ /^\d{8}_dem_\d{4}(_\d)?\.sdf$/) {
         # SCUBA
+        return 1;
+    }
+    elsif ($filename =~/^rxh3-\d{8}-\d{6}\.fits$/) {
+        # RxH3
         return 1;
     }
 
