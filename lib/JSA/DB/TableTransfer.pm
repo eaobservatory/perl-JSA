@@ -419,6 +419,9 @@ sub _check_filename_part {
   sub _fix_file_name {
       my ($file) = @_;
 
+      # Don't try to append .sdf if it already ends in .fits.
+      return $file if $file =~ /\.fits/;
+
       my $suffix   = '.sdf';
       $suffix_re ||= qr/$_$/ for quotemeta $suffix;
 
