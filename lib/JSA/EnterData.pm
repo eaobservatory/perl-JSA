@@ -152,6 +152,39 @@ sub calc_freq {
   return;
 }
 
+=item preprocess_header($filename, $header, $extra)
+
+Perform any necessary header pre-processing.
+
+This operates on Astro::FITS::Header objects.  Items are copied from
+C<$extra> into the C<$header> object unless they already exist.
+Items returned by C<construct_missing_headers> are also added.
+
+Subclasses should any extra pre-processing required.
+
+=cut
+
+sub preprocess_header {
+    my $self = shift;
+    my $filename = shift;
+    my $header = shift;
+    my $extra = shift;
+
+    foreach my $additional (
+            $extra,
+            $self->construct_missing_headers($filename, $header, $extra)) {
+        if (defined $additional) {
+            foreach my $item ($additional->allitems()) {
+                my $keyword = $item->keyword();
+
+                unless (defined $header->index($keyword)) {
+                    $header->insert((scalar $header->allitems()), $item);
+                }
+            }
+        }
+    }
+}
+
 =item B<force_db>
 
 Returns the truth value, when called without arguments, to indicate
@@ -704,13 +737,33 @@ sub _get_obs_group {
             my $text = '';
             my $err;
 
+            my %info_obs_opt = (
+                nocomments => 1,
+                retainhdr  => 1,
+                ignorebad  => 1,
+                header_search => 'files'
+            );
+
             try {
-                push @obs, OMP::Info::Obs->readfile(
-                    $file,
-                    nocomments => 1,
-                    retainhdr  => 1,
-                    ignorebad  => 1,
-                    header_search => 'files');
+                my $obs;
+                if ($file =~ /\.fits/) {
+                    # Since the OMP can't read headers from FITS files,
+                    # do it here.  This also allows us to deal with
+                    # RxH3 data, since only it uses FITS format and the
+                    # code to deal with its lack of metadata has been
+                    # located in this package for now.
+                    require Astro::FITS::Header::CFITSIO;
+                    my $header = new Astro::FITS::Header::CFITSIO(File => $file, ReadOnly => 1);
+                    my $extra = $self->read_file_extra($file);
+                    $self->preprocess_header($file, $header, $extra);
+                    $obs = new OMP::Info::Obs(
+                        fits => $header, wcs => undef, %info_obs_opt);
+                    $obs->filename($file);
+                }
+                else {
+                    $obs = OMP::Info::Obs->readfile($file, %info_obs_opt);
+                }
+                push @obs, $obs;
             }
             catch OMP::Error::ObsRead with {
                 ($err) = @_;
@@ -765,6 +818,9 @@ sub _get_obs_group {
             $wcs{$file} = $entry->{'wcs'};
 
             my $header = $entry->{'header'};
+
+            $self->preprocess_header($file, $header, $entry->{'extra'});
+
             $header->tiereturnsref(1);
             tie my %header, ref($header), $header;
 

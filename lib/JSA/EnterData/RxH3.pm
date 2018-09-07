@@ -56,6 +56,42 @@ sub instrument_table {
     return 'RXH3';
 }
 
+=item preprocess_header
+
+Copies entries from the first extension's header (since this is
+where the data are for a FITS binary table) and then applies the
+superclass method.
+
+=cut
+
+sub preprocess_header {
+    my $self = shift;
+    my $filename = shift;
+    my $header = shift;
+    my $extra = shift;
+
+    # Copy all entries from the single subheader to the primary header,
+    # overwriting those already there.
+    my @subhdrs = $header->subhdrs();
+    if (1 == scalar @subhdrs) {
+        my $subhdr = $subhdrs[0];
+
+        foreach my $item ($subhdr->allitems()) {
+            my $keyword = $item->keyword();
+
+            my $index = $header->index($keyword);
+            if (defined $index) {
+                $header->replace($index, $item);
+            }
+            else {
+                $header->insert((scalar $header->allitems()), $item);
+            }
+        }
+    }
+
+    $self->SUPER::preprocess_header($filename, $header, $extra);
+}
+
 =item construct_missing_headers($filename, $header)
 
 Make a set if header of additional information which should be included
