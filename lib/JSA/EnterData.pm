@@ -2231,10 +2231,10 @@ sub _change_FILES {
         $error = shift @_;
     };
 
+    $log->debug($error) if defined $error;
+
     if ( $dbh->err() ) {
         $db->rollback_trans() if not $dry_run;
-
-        $log->debug($error) if defined $error;
 
         return;
     }
