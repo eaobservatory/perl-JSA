@@ -9,8 +9,10 @@ use Astro::FITS::CFITSIO qw/:longnames :constants/;
 use Astro::FITS::Header;
 use Astro::FITS::Header::Item;
 use DateTime;
+use DateTime::Duration;
 use DateTime::Format::ISO8601;
 use File::Spec;
+use IO::Dir;
 use List::MoreUtils qw/first_index/;
 use OMP::DateTools;
 use Starlink::AST;
@@ -205,11 +207,7 @@ sub read_file_extra {
     my ($date_obs, $date_end) = $self->_get_date_range($filename);
 
     # See which number file this is for the night.
-    my ($undef, $dir, $basename) = File::Spec->splitpath($filename);
-    my @files = sort <"${dir}rxh3-*.fits">;
-    my $index = first_index {$_ eq $filename} @files;
-    die "Could not find file '$basename' in its directory '$dir'"
-        if $index < 0;
+    my $index = $self->_get_file_index_number($filename);
 
     return new Astro::FITS::Header(Cards => [
         new Astro::FITS::Header::Item(
@@ -287,6 +285,53 @@ sub _mjd_to_datetime {
     my $utc = $frame->GetD('TimeOrigin');
 
     return DateTime->from_epoch(epoch => 86400 * ($utc - 40587));
+}
+
+sub _get_file_index_number {
+    my $self = shift;
+    my $filename = shift;
+
+    my (undef, $dir, $basename) = File::Spec->splitpath($filename);
+
+    my $ut = $self->_filename_ut_date($basename);
+    my $ut_str = $ut->ymd('');
+
+    # Some RxH3 files are stored in the directory of the HST at the start
+    # of the night, others in the directory of the UT date, so check both,
+    # but only include files which match the UT date of interest.
+    my @files = ();
+    foreach my $date ($ut, $ut - new DateTime::Duration(days => 1)) {
+        my $dir = new IO::Dir(File::Spec->catdir(
+            $dir, File::Spec->updir(), $date->ymd('')));
+        next unless defined $dir;
+        while (defined (my $entry = $dir->read())) {
+            next unless $entry =~ /rxh3-.*\.fits$/;
+            my $entry_ut = $self->_filename_ut_date($entry)->ymd('');
+            push @files, $entry if $entry_ut eq $ut_str;
+        }
+    }
+
+    my $index = first_index {$_ eq $basename} sort @files;
+    die "Could not find file '$basename' in its expected raw directories"
+        if $index < 0;
+
+    return $index;
+}
+
+sub _filename_ut_date {
+    my $self = shift;
+    my $filename = shift;
+
+    # Parse the filename to get the approximate date and time.  Provided
+    # holography is not done close to 2pm HST, this should be good enough
+    # to determine the UT date.
+    die 'Did not understand RxH3 filename'
+        unless $filename =~ /rxh3-(\d{8})-(\d{6})\.fits$/;
+    my $dt = DateTime::Format::ISO8601->parse_datetime($1 . 'T' . $2);
+    $dt->set_time_zone('Pacific/Honolulu');
+    $dt->set_time_zone('UTC');
+
+    return $dt;
 }
 
 =item B<_do_verification>
