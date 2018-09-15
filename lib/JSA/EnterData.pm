@@ -41,7 +41,7 @@ use Scalar::Util qw/blessed looks_like_number/;
 use Astro::Coords::Angle::Hour;
 
 use JSA::DB;
-use JSA::Headers qw/read_jcmtstate read_wcs/;
+use JSA::Headers qw/read_jcmtstate/;
 use JSA::Datetime qw/make_datetime/;
 use JSA::DB::TableCOMMON;
 use JSA::Starlink qw/try_star_command/;
@@ -150,6 +150,16 @@ sub calc_freq {
   my ($self) = @_;
 
   return;
+}
+
+=item B<need_wcs>
+
+Indicates whether we need WCS information.
+
+=cut
+
+sub need_wcs {
+    return 0;
 }
 
 =item preprocess_header($filename, $header, $extra)
@@ -366,9 +376,6 @@ sub prepare_and_insert {
         skip_state => $skip_state,
         mongodb => $mdb,
         %obs_args);
-
-    # For now _get_obs_group does not return WCS information unless using MongoDB.
-    $wcs = undef unless defined $mdb;
 
     return unless $group && ref $group;
 
@@ -793,9 +800,12 @@ sub _get_obs_group {
         for my $ob (@obs) {
             my $header = $ob->hdrhash;
 
+            my $filename = $ob->filename();
+
+            $wcs{_basename($filename)} = $ob->wcs() if $self->need_wcs();
 
             push @headers, {
-                filename => $ob->{'FILENAME'}->[0],
+                filename => $filename,
                 header => $header,
             };
         }

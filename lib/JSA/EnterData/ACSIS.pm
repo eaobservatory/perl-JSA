@@ -9,8 +9,6 @@ use File::Basename;
 use File::Spec;
 use Log::Log4perl;
 
-use JSA::Headers qw/read_wcs/;
-
 =head1 NAME
 
 JSA::EnterData::ACSIS - ACSIS specific methods.
@@ -56,6 +54,16 @@ sub new {
 
     my $obj = $class->SUPER::new(%args);
     return bless $obj, $class;
+}
+
+=item B<need_wcs>
+
+Indicates whether we need WCS information.
+
+=cut
+
+sub need_wcs {
+    return 1;
 }
 
 =item B<get_bound_check_command>
@@ -225,16 +233,10 @@ sub calc_freq {
     my @filenames = $obs->filename;
 
     # need the Frameset
-    my $wcs;
-    unless (defined $file_wcs) {
-        $wcs = read_wcs($filenames[0]);
-    }
-    else {
-        my ($basename) = File::Basename::fileparse($filenames[0]);
-        $wcs = $file_wcs->{$basename};
-        throw JSA::Error::FatalError("WCS information missing for file $basename")
-            unless defined $wcs;
-    }
+    my ($basename) = File::Basename::fileparse($filenames[0]);
+    my $wcs = $file_wcs->{$basename};
+    throw JSA::Error::FatalError("WCS information missing for file $basename")
+        unless defined $wcs;
 
     # Change to BARYCENTRIC, GHz
     $wcs->Set('system(1)' => 'FREQ',
