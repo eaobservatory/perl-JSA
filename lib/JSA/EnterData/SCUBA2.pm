@@ -772,10 +772,11 @@ This first calls the superclass method L<fill_headers_FILES/JSA::EnterData>.
 =cut
 
 sub fill_headers_FILES {
-    my ($self, $header, $obs) = @_;
+    my $self = shift;
+    my ($header, undef, undef) = @_;
 
     # Call the superclass version of this method.
-    $self->SUPER::fill_headers_FILES($header, $obs);
+    $self->SUPER::fill_headers_FILES(@_);
 
     my @file = @{$header->{'file_id'}};
 

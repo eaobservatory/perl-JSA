@@ -366,9 +366,10 @@ values from the last component of the OBSIDSS.
 =cut
 
 sub fill_headers_FILES {
-    my ($self, $header, $obs) = @_;
+    my $self = shift;
+    my ($header, undef, undef) = @_;
 
-    $self->SUPER::fill_headers_FILES($header, $obs);
+    $self->SUPER::fill_headers_FILES(@_);
 
     if ($header->{'OBSIDSS'} =~ /_(\d+)$/) {
         $header->{'subsysnr'} = $1;

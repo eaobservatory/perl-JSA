@@ -41,7 +41,7 @@ use Scalar::Util qw/blessed looks_like_number/;
 use Astro::Coords::Angle::Hour;
 
 use JSA::DB;
-use JSA::Headers qw/read_jcmtstate/;
+use JSA::Headers qw/read_jcmtstate file_md5sum/;
 use JSA::Datetime qw/make_datetime/;
 use JSA::DB::TableCOMMON;
 use JSA::Starlink qw/try_star_command/;
@@ -371,7 +371,7 @@ sub prepare_and_insert {
     # for each subscan in the observation.  No need to retrieve associated
     # obslog comments. That's <no. of subsystems used> *
     # <no. of subscans objects returned per observation>.
-    my ($group, $wcs) = $self->_get_obs_group(
+    my ($group, $wcs, $md5) = $self->_get_obs_group(
         dry_run => $dry_run,
         skip_state => $skip_state,
         mongodb => $mdb,
@@ -430,6 +430,7 @@ sub prepare_and_insert {
             skip_state => $skip_state,
             do_verification => (not defined $mdb),
             file_wcs => $wcs,
+            file_md5 => $md5,
             %update_args);
     }
 }
@@ -445,8 +446,8 @@ sub insert_obs_set {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $run_obs, $columns, $file_wcs, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/db run_obs columns file_wcs dry_run skip_state/;
+    my ($db, $run_obs, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/db run_obs columns file_wcs file_md5 dry_run skip_state/;
 
     my $dbh  = $db->handle();
     my @file = map {$_->simple_filename} @$run_obs;
@@ -570,6 +571,7 @@ sub insert_obs_set {
                 db  => $db,
                 obs => $run_obs,
                 file_wcs => $file_wcs,
+                file_md5 => $file_md5,
                 dry_run => $dry_run,
                 skip_state => $skip_state);
         }
@@ -671,10 +673,10 @@ sub _filter_header {
 
 =item B<_get_obs_group>
 
-Returns a L<OMP::Info::ObsGroup> object and reference to hash of WCS
-information, if available.
+Returns a L<OMP::Info::ObsGroup> object and reference to hashes of WCS
+information, if available, and MD5 sums.
 
-    ($obs, $wcs) = $enter->_get_obs_group(
+    ($obs, $wcs, $md5sum) = $enter->_get_obs_group(
         date => '20090609',
         dry_run => $dry_run,
         skip_state => $skip_state,
@@ -695,6 +697,7 @@ sub _get_obs_group {
 
     my @headers;
     my %wcs;
+    my %md5;
 
     unless (defined $mdb) {
         my $xfer = $self->_get_xfer_unconnected_dbh();
@@ -802,7 +805,9 @@ sub _get_obs_group {
 
             my $filename = $ob->filename();
 
-            $wcs{_basename($filename)} = $ob->wcs() if $self->need_wcs();
+            my $basename = _basename($filename);
+            $wcs{$basename} = $ob->wcs() if $self->need_wcs();
+            $md5{$basename} = file_md5sum($filename);
 
             push @headers, {
                 filename => $filename,
@@ -826,6 +831,7 @@ sub _get_obs_group {
             my $file = $entry->{'file'};
 
             $wcs{$file} = $entry->{'wcs'};
+            $md5{$file} = $entry->{'md5sum'};
 
             my $header = $entry->{'header'};
 
@@ -868,7 +874,7 @@ sub _get_obs_group {
 
     return (
         OMP::Info::ObsGroup->new(obs => \@obs),
-        \%wcs,
+        \%wcs, \%md5,
     );
 }
 
@@ -936,6 +942,7 @@ the I<OMP::Info::Objects> in its entirety.
                                  columns   => \%cols,
                                  obs       => \%obs_per_runnr,
                                  file_wcs  => \%wcs_by_basename,
+                                 file_md5  => \%md5_by_basename,
                                  dry_run   => $dry_run,
                                  skip_state=> $skip_state);
 
@@ -954,8 +961,8 @@ sub add_subsys_obs {
         throw JSA::Error::BadArgs("No suitable value given for ${k}.");
     }
 
-    my ($db, $obs, $columns, $file_wcs, $dry_run, $skip_state) =
-        map {$args{$_}} qw/db obs columns file_wcs dry_run skip_state/;
+    my ($db, $obs, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
+        map {$args{$_}} qw/db obs columns file_wcs file_md5 dry_run skip_state/;
 
     my $dbh = $db->handle();
 
@@ -993,6 +1000,7 @@ sub add_subsys_obs {
                                      db             => $db,
                                      table          => $table,
                                      table_columns  => $columns->{$table},
+                                     file_md5       => $file_md5,
                                      dry_run        => $dry_run,
                                      skip_state     => $skip_state);
             }
@@ -1688,12 +1696,12 @@ sub _fix_dates {
 Fills in the headers for C<FILES> database table, given a
 headers hash reference and an L<OMP::Info::Obs> object.
 
-    $enter->fill_headers_FILES(\%header, $obs);
+    $enter->fill_headers_FILES(\%header, $obs, $file_md5);
 
 =cut
 
 sub fill_headers_FILES {
-    my ($self, $header, $obs) = @_;
+    my ($self, $header, $obs, $file_md5) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1701,6 +1709,9 @@ sub fill_headers_FILES {
     # than one file. (although simply using a 1-based index would be sufficient)
     my @files = $obs->simple_filename;
     $header->{'file_id'} = \@files;
+
+    # Create "md5sum" header by extracting values from the given hash.
+    $header->{'md5sum'} = [map {$file_md5->{$_}} @files];
 
     # We need to know whether a nsubscan header is even required so %columns really
     # needs to be accessed. For now we kluge it.
@@ -2203,8 +2214,8 @@ sub _change_FILES {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($headers, $obs, $db, $table, $table_columns, $dry_run, $skip_state) =
-        @arg{qw/headers obs db table table_columns dry_run skip_state/};
+    my ($headers, $obs, $db, $table, $table_columns, $file_md5, $dry_run, $skip_state) =
+        @arg{qw/headers obs db table table_columns file_md5 dry_run skip_state/};
 
     throw JSA::Error('_change_FILES: columns not defined')
         unless defined $table_columns;
@@ -2214,7 +2225,7 @@ sub _change_FILES {
     my $dbh = $db->handle();
 
     # Create headers that don't exist
-    $self->fill_headers_FILES($headers, $obs);
+    $self->fill_headers_FILES($headers, $obs, $file_md5);
 
     my $insert_ref = $self->get_insert_values($table_columns, $headers);
 
@@ -2754,7 +2765,7 @@ sub calcbounds_make_obs {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($group, undef) = $self->_get_obs_group(
+    my ($group, undef, undef) = $self->_get_obs_group(
             dry_run => $dry_run,
             skip_state => $skip_state,
             monbodb => undef,

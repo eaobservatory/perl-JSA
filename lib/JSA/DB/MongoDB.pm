@@ -235,6 +235,7 @@ sub get_raw_header {
                 header => $header,
                 wcs => bson_to_wcs($doc->{'wcs'}),
                 extra => bson_to_header($doc->{'extra'}),
+                md5sum => $doc->{'md5sum'}->value(),
             };
         }
     }
