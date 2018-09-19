@@ -26,7 +26,9 @@ use Astro::FITS::HdrTrans;
 use Astro::FITS::Header::NDF;
 use Astro::FITS::Header::CFITSIO;
 use Carp;
+use Digest::MD5;
 use Image::ExifTool qw/:Public/;
+use IO::File;
 use NDF 1.47;
 use Starlink::Config qw/:override/;
 
@@ -35,7 +37,7 @@ use JSA::Files qw/drfilename_to_cadc/;
 use Exporter 'import';
 our @EXPORT_OK = qw/read_headers read_header read_wcs get_header_value
                     get_orac_instrument update_fits_product
-                    cadc_ack read_jcmtstate/;
+                    cadc_ack read_jcmtstate file_md5sum/;
 
 =head1 FUNCTIONS
 
@@ -429,6 +431,23 @@ sub read_jcmtstate {
     }
 
     return %results;
+}
+
+=item B<file_md5sum>
+
+Calculate the MD5 sum of a file.
+
+=cut
+
+sub file_md5sum {
+    my $file = shift;
+
+    my $ctx = new Digest::MD5();
+    my $fh = new IO::File($file, 'r');
+    $ctx->addfile($fh);
+    $fh->close();
+
+    return $ctx->hexdigest();
 }
 
 =item B<update_fits_product>

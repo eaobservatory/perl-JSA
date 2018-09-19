@@ -17,10 +17,8 @@ use BSON;
 use BSON::Types ':all';
 use Data::Dumper;
 use DateTime::Format::ISO8601;
-use Digest::MD5;
 use File::Spec;
-use IO::File;
-use JSA::Headers qw/read_wcs/;
+use JSA::Headers qw/read_wcs file_md5sum/;
 use Log::Log4perl;
 use MongoDB;
 use Scalar::Util qw/blessed/;
@@ -288,11 +286,7 @@ sub prepare_file_record_local {
 
     my $wcs = $need_wcs{$instrument} ? read_wcs($file) : undef;
 
-    my $ctx = new Digest::MD5();
-    my $fh = new IO::File($file, 'r');
-    $ctx->addfile($fh);
-    $fh->close();
-    my $md5sum = $ctx->hexdigest();
+    my $md5sum = file_md5sum($file);
 
     return prepare_file_record(
         $basename, $hdr, $wcs, $md5sum, $extra, $missing);
