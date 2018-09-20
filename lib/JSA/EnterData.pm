@@ -2567,6 +2567,8 @@ sub calcbounds_update_bound_cols {
     my $skip_state_found = $arg{'skip_state_found'};
     my $obs_types = $arg{'obs_types'};
 
+    my $log = Log::Log4perl->get_logger('');
+
     my %obs_args = ();
     $obs_args{'date'} = _reformat_datetime($arg{'date'}) if exists $arg{'date'};
     $obs_args{'files'} = _unique_files($arg{'files'}) if exists $arg{'files'};
@@ -2576,13 +2578,16 @@ sub calcbounds_update_bound_cols {
     my $process_obs_re = join '|', @$obs_types;
        $process_obs_re = qr{\b( $process_obs_re )}xi;
 
-    my $obs_list = $self->calcbounds_make_obs(
+    my ($obs_list, undef, undef) = $self->_get_observations(
             dry_run => $dry_run,
             skip_state => ($skip_state or $skip_state_found),
-            %obs_args)
-        or return;
+            monbodb => undef,
+            %obs_args);
 
-    my $log = Log::Log4perl->get_logger('');
+    unless ($obs_list and (ref $obs_list) and (scalar @$obs_list)) {
+        $log->warn('Could not make obs list.');
+        return;
+    }
 
     my @bound =
         # ";" is to indicate to Perl that "{" starts a BLOCK not an EXPR.
@@ -2672,32 +2677,6 @@ sub calcbounds_update_bound_cols {
     }
 
     return $n_err;
-}
-
-sub calcbounds_make_obs {
-    my ($self, %opt) = @_;
-    my $dry_run = $opt{'dry_run'};
-    my $skip_state = $opt{'skip_state'};
-
-    my %obs_args = ();
-    $obs_args{'date'} = $opt{'date'} if exists $opt{'date'};
-    $obs_args{'files'} = $opt{'files'} if exists $opt{'files'};
-
-    my $log = Log::Log4perl->get_logger('');
-
-    my ($obs, undef, undef) = $self->_get_observations(
-            dry_run => $dry_run,
-            skip_state => $skip_state,
-            monbodb => undef,
-            %obs_args);
-
-    unless ($obs) {
-        $log->warn('Could not make obs list.');
-        return;
-    };
-
-    return unless scalar @$obs;
-    return $obs;
 }
 
 sub calcbounds_find_dark {
