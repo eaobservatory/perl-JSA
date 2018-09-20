@@ -53,7 +53,6 @@ use JCMT::DataVerify;
 
 use OMP::ArchiveDB;
 use OMP::DBbackend::Archive;
-use OMP::Info::ObsGroup;
 use OMP::DateTools;
 use OMP::General;
 use OMP::FileUtils;
@@ -371,7 +370,7 @@ sub prepare_and_insert {
     # for each subscan in the observation.  No need to retrieve associated
     # obslog comments. That's <no. of subsystems used> *
     # <no. of subscans objects returned per observation>.
-    my ($group, $wcs, $md5) = $self->_get_obs_group(
+    my ($group, $wcs, $md5) = $self->_get_observations(
         dry_run => $dry_run,
         skip_state => $skip_state,
         mongodb => $mdb,
@@ -382,7 +381,7 @@ sub prepare_and_insert {
     # Note: this was previously SCUBA-2 specific, but can probably
     # be called harmlessly for ACSIS since it doesn't have flatfields.
     my @obs = $self->_filter_header(
-        [$group->obs],
+        $group,
         'OBS_TYPE' => [qw/FLATFIELD/],
     );
 
@@ -671,12 +670,12 @@ sub _filter_header {
     return @new;
 }
 
-=item B<_get_obs_group>
+=item B<_get_observations>
 
-Returns a L<OMP::Info::ObsGroup> object and reference to hashes of WCS
+Returns by reference an array of L<OMP::Info::Obs> objects and hashes of WCS
 information, if available, and MD5 sums.
 
-    ($obs, $wcs, $md5sum) = $enter->_get_obs_group(
+    ($obs, $wcs, $md5sum) = $enter->_get_observations(
         date => '20090609',
         dry_run => $dry_run,
         skip_state => $skip_state,
@@ -687,7 +686,7 @@ dry_run argument is given, or using data from MongoDB.
 
 =cut
 
-sub _get_obs_group {
+sub _get_observations {
     my ($self, %args) = @_;
     my $dry_run = $args{'dry_run'};
     my $skip_state = $args{'skip_state'};
@@ -705,7 +704,7 @@ sub _get_obs_group {
         my @file;
 
         unless (exists $args{'files'}) {
-            throw JSA::Error::FatalError('Neither files nor date given to _get_obs_group')
+            throw JSA::Error::FatalError('Neither files nor date given to _get_observations')
                 unless exists $args{'date'};
 
             # OMP uses Time::Piece (instead of DateTime).
@@ -816,9 +815,9 @@ sub _get_obs_group {
         }
     }
     else {
-        die 'Files specified for _get_obs_group in MonboDB mode'
+        die 'Files specified for _get_observations in MonboDB mode'
             if exists $args{'files'};
-        die 'Date not specified for _get_obs_group in MonboDB mode'
+        die 'Date not specified for _get_observations in MonboDB mode'
             unless exists $args{'date'};
 
 
@@ -872,10 +871,7 @@ sub _get_obs_group {
         retainhdr => 1,
         fits      => $merged);
 
-    return (
-        OMP::Info::ObsGroup->new(obs => \@obs),
-        \%wcs, \%md5,
-    );
+    return (\@obs, \%wcs, \%md5);
 }
 
 
@@ -1762,7 +1758,7 @@ sub munge_header_INBEAM {
     my $name = 'INBEAM';
 
     # Find INBEAM values, but remove dummy placeholder values.
-    # (See also _get_obs_group where these are inserted.)
+    # (See also _get_observations where these are inserted.)
     my @val = map {($_ eq 'NOTHING') ? undef : $_} $self->_find_header(
         headers => $headers,
         name   => $name,
@@ -2765,26 +2761,20 @@ sub calcbounds_make_obs {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($group, undef, undef) = $self->_get_obs_group(
+    my ($obs, undef, undef) = $self->_get_observations(
             dry_run => $dry_run,
             skip_state => $skip_state,
             monbodb => undef,
             %obs_args);
 
-    unless ($group) {
-        $log->warn('Could not make obs group.');
+    unless ($obs) {
+        $log->warn('Could not make obs list.');
         return;
     };
 
-    my @obs = $group->obs()
-        or do {
-            $log->warn( 'Could not find any observations.' );
-            return;
-        };
-
     # Note: this was previously SCUBA-2 specific, but can probably
     # be called harmlessly for ACSIS since it doesn't have flatfields.
-    @obs = $self->_filter_header(\@obs, 'OBS_TYPE' => [qw/FLATFIELD/]);
+    my @obs = $self->_filter_header($obs, 'OBS_TYPE' => [qw/FLATFIELD/]);
 
     return unless scalar @obs;
     return \@obs;
