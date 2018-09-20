@@ -376,25 +376,16 @@ sub prepare_and_insert {
         mongodb => $mdb,
         %obs_args);
 
-    return unless $group && ref $group;
-
-    # Note: this was previously SCUBA-2 specific, but can probably
-    # be called harmlessly for ACSIS since it doesn't have flatfields.
-    my @obs = $self->_filter_header(
-        $group,
-        'OBS_TYPE' => [qw/FLATFIELD/],
-    );
+    unless ($group and (ref $group) and (scalar @$group)) {
+        $log->debug("No observations found for instrument $name");
+        return;
+    }
 
     $log->debug(
         (exists $obs_args{'date'})
         ? sprintf("Inserting data for %s. Date [%s]",
                   $name, $obs_args{'date'})
         : "Inserting given files");
-
-    unless ($obs[0]) {
-        $log->debug("No observations found for instrument $name");
-        return;
-    }
 
     # Need to create a hash with keys corresponding to the observation number
     # (an array won't be very efficient since observations can be missing and
@@ -404,7 +395,7 @@ sub prepare_and_insert {
     # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
 
     my %observations;
-    foreach my $obs (@obs) {
+    foreach my $obs (@$group) {
         my @subhdrs = $obs->subsystems;
         $observations{$obs->runnr} = \@subhdrs;
     }
@@ -601,73 +592,6 @@ Should we use JCMT::DataVerify?
 sub _do_verification {
     my $self = shift;
     return 1;
-}
-
-sub _filter_header {
-    my ($self, $obs, %ignore) = @_;
-
-    my $log = Log::Log4perl->get_logger('');
-
-    return unless scalar @{$obs};
-
-    my $remove_ok = sub {
-        my ($href, $key) = @_;
-
-        return unless exists $href->{$key}
-                   && defined $ignore{$key};
-
-        my $present = $href->{$key};
-
-        return
-            defined $present
-            && any {
-                    looks_like_number($_)
-                        ? $present == $_
-                        : $present eq $_
-            } (ref $ignore{$key}
-                    ? @{$ignore{$key}}
-                    : $ignore{$key});
-
-        };
-
-    my @new;
-
-    OBS: foreach my $cur (@{$obs}) {
-        my $header = $cur->hdrhash;
-
-        IGNORE: foreach my $key (keys %ignore) {
-            if ($remove_ok->($header, $key)) {
-                $log->debug(sprintf
-                    'Ignoring observation with %s = %s',
-                    $key, $header->{$key});
-
-                next OBS;
-            }
-
-            push @new, $cur;
-            my @subhead = $header->{'SUBHEADERS'} ? @{$header->{'SUBHEADERS'}} : ();
-
-            next OBS unless scalar @subhead;
-
-            my @new_sub;
-
-            SUBHEAD: foreach my $sub (@subhead) {
-                if ($remove_ok->($sub, $key)) {
-                    $log->debug(sprintf
-                        'Ignoring subheader with %s = %s',
-                        $key, $sub->{$key});
-
-                    next SUBHEAD;
-                }
-
-                push @new_sub, $sub;
-            }
-
-            $new[-1]->{'SUBHEADERS'} = [@new_sub];
-        }
-    }
-
-    return @new;
 }
 
 =item B<_get_observations>
@@ -2772,12 +2696,8 @@ sub calcbounds_make_obs {
         return;
     };
 
-    # Note: this was previously SCUBA-2 specific, but can probably
-    # be called harmlessly for ACSIS since it doesn't have flatfields.
-    my @obs = $self->_filter_header($obs, 'OBS_TYPE' => [qw/FLATFIELD/]);
-
-    return unless scalar @obs;
-    return \@obs;
+    return unless scalar @$obs;
+    return $obs;
 }
 
 sub calcbounds_find_dark {
