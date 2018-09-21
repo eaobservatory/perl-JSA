@@ -368,13 +368,13 @@ sub prepare_and_insert {
 
     # Retrieve observations from disk.  An Info::Obs object will be returned
     # for each observation.
-    my ($group, $wcs, $md5) = $self->_get_observations(
+    my ($obs_list, $wcs, $md5) = $self->_get_observations(
         dry_run => $dry_run,
         skip_state => $skip_state,
         mongodb => $mdb,
         %obs_args);
 
-    unless ($group and (ref $group) and (scalar @$group)) {
+    unless ($obs_list and (ref $obs_list) and (scalar @$obs_list)) {
         $log->debug("No observations found for instrument $name");
         return;
     }
@@ -385,19 +385,6 @@ sub prepare_and_insert {
                   $name, $obs_args{'date'})
         : "Inserting given files");
 
-    # Need to create a hash with keys corresponding to the observation number
-    # (an array won't be very efficient since observations can be missing and
-    # run numbers can be large). The values in this hash have to be a reference
-    # to an array of Info::Obs objects representing each subsystem. We need to
-    # construct new Obs objects based on the subsystem number.
-    # $observations{$runnr}->[$subsys_number] should be an Info::Obs object.
-
-    my %observations;
-    foreach my $obs (@$group) {
-        my @subhdrs = $obs->subsystems;
-        $observations{$obs->runnr} = \@subhdrs;
-    }
-
     # The %columns hash will contain a key for each table, each key's value
     # being an anonymous hash containing the column information.
 
@@ -407,13 +394,11 @@ sub prepare_and_insert {
     my %columns = map {$_ => $self->get_columns($_, $dbh)}
         qw/COMMON FILES/, $self->instrument_table();
 
-    foreach my $runnr (sort {$a <=> $b} keys %observations) {
-        my @sub_obs =  grep {$_} @{$observations{$runnr}};
-
+    foreach my $obs (@$obs_list) {
         $self->insert_observation(
             db => $db,
             columns => \%columns,
-            run_obs => \@sub_obs,
+            observation => $obs,
             dry_run => $dry_run,
             skip_state => $skip_state,
             do_verification => (not defined $mdb),
@@ -444,11 +429,13 @@ sub insert_observation {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $run_obs, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/db run_obs columns file_wcs file_md5 dry_run skip_state/;
+    my ($db, $observation, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/db observation columns file_wcs file_md5 dry_run skip_state/;
+
+    my @subsystems = $observation->subsystems();
 
     my $dbh  = $db->handle();
-    my @file = map {$_->simple_filename} @$run_obs;
+    my @file = map {$_->simple_filename} @subsystems;
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
 
     foreach (@file) {
@@ -461,7 +448,7 @@ sub insert_observation {
 
     $self->{'_cache_touched'}->{$_} = 1 foreach @file;
 
-    for my $obs (@$run_obs) {
+    for my $obs (@subsystems) {
         my $headers = $obs->hdrhash();
 
         $self->munge_header_INBEAM($headers);
@@ -474,7 +461,7 @@ sub insert_observation {
         }
     }
 
-    my $common_obs = $run_obs->[0]
+    my $common_obs = $subsystems[0]
         or do {
             $log->debug('XXX First run obs is undefined|false; nothing to do.');
             return;
@@ -565,7 +552,7 @@ sub insert_observation {
             $self->insert_subsystems(
                 db  => $db,
                 columns => $columns,
-                obs => $run_obs,
+                subsystems => \@subsystems,
                 file_wcs => $file_wcs,
                 file_md5 => $file_md5,
                 dry_run => $dry_run,
@@ -864,7 +851,7 @@ The observations array reference is for a given run number.
     $enter->insert_subsystems(
         db         => $db,
         columns    => \%cols,
-        obs        => \@obs_per_subsystem,
+        subsystems => \@obs_per_subsystem,
         file_wcs   => \%wcs_by_basename,
         file_md5   => \%md5_by_basename,
         dry_run    => $dry_run,
@@ -879,15 +866,15 @@ sub insert_subsystems {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $obs, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
-        map {$args{$_}} qw/db obs columns file_wcs file_md5 dry_run skip_state/;
+    my ($db, $subsystems, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
+        map {$args{$_}} qw/db subsystems columns file_wcs file_md5 dry_run skip_state/;
 
     my $dbh = $db->handle();
 
     my $subsysnr = 0;
-    my $totsub = scalar @{$obs};
+    my $totsub = scalar @$subsystems;
 
-    foreach my $subsys_obs (@{$obs}) {
+    foreach my $subsys_obs (@$subsystems) {
         $subsysnr++;
         $log->debug("Processing subsysnr $subsysnr of $totsub");
 
