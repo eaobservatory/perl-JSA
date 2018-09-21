@@ -1403,20 +1403,17 @@ sub _get_primary_key {
 =item B<update_hash>
 
 Given a table name, a DBI database handle and a hash reference,
-retrieve the current data values based on OBSID or OBSID_SUBSYSNR,
-decide what has changed and update the values.
+update the values specified.
 
-    $enter->update_hash($table, $dbh, \%to_update, dry_run => $dry_run);
+    $enter->update_hash($table, $dbh, \@to_update, dry_run => $dry_run);
 
-No-op for files table at the present time.
+The changes to be performed should be passed as a list of hashes
+of the form returned by C<prepare_update_hash>.
 
 =cut
 
 sub update_hash {
     my ($self, $table, $dbh, $change, %args) = @_;
-
-    return if $table eq 'FILES'
-           || ! $change;
 
     my $dry_run = $args{'dry_run'};
 
