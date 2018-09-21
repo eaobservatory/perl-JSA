@@ -1038,13 +1038,9 @@ sub insert_hash {
 
     my @insert_hashes = @{$insert};
 
-    my (@prim_key);
-    do {
-        my $prim_key = _get_primary_key($table);
-        @prim_key = ref $prim_key ? @{$prim_key} : $prim_key;
-    };
+    my $prim_key =_get_primary_key($table);
     $log->logdie('Primary key not defined for table: ', $table)
-        unless scalar @prim_key;
+        unless defined $prim_key;
 
     my ($sql, $sth);
 
@@ -1055,9 +1051,8 @@ sub insert_hash {
         my @insert_hashes_filtered = ();
 
         $sql = sprintf
-            'SELECT COUNT(*) FROM %s WHERE %s ',
-            $table,
-            join(' AND ', map {" $_ = ? "} @prim_key);
+            'SELECT COUNT(*) FROM %s WHERE %s = ?',
+            $table, $prim_key;
 
         unless ($dry_run) {
             $sth = $dbh->prepare($sql)
@@ -1067,14 +1062,14 @@ sub insert_hash {
         }
 
         for my $row (@insert_hashes) {
-            my @prim_val = map {$row->{$_}} @prim_key;
+            my $prim_val = $row->{$prim_key};
 
             $log->trace('-----> SQL: ' . $sql);
-            $log->trace(Dumper(\@prim_val));
+            $log->trace(Dumper([$prim_val]));
 
             next if $dry_run;
 
-            $sth->execute(@prim_val)
+            $sth->execute($prim_val)
                 or $log->logdie('SQL query for insert check failed: ', $dbh->errstr);
 
             my $result = $sth->fetchall_arrayref();
@@ -1179,11 +1174,8 @@ sub prepare_update_hash {
     # work out which key uniquely identifies the row
     my $unique_key = _get_primary_key($table);
 
-    unless ($unique_key) {
-        $log->logdie("No unique keys found for table name: '$table'\n");
-    }
-
-    my @unique_key = ref $unique_key ? @{$unique_key} : $unique_key ;
+    $log->logdie("No unique keys found for table name: '$table'\n")
+        unless defined $unique_key;
 
     my $rows = $self->_handle_multiple_changes($field_values);
 
@@ -1199,18 +1191,16 @@ sub prepare_update_hash {
         $sql = 'select ' . join ', ', JSA::DB::TableCOMMON::column_names();
     }
 
-    $sql .= " from $table where "
-          . join ' AND ', map {" $_ = ? "} @unique_key;
+    $sql .= " from $table where $unique_key = ?";
 
     my @update_hash;
     my @insert_hash;
     foreach my $row (@{$rows}) {
-        my @unique_val = map $row->{$_}, @unique_key;
+        my $unique_val = $row->{$unique_key};
 
-        $log->trace(Dumper(\@unique_key));
-        $log->trace(Dumper(\@unique_val));
+        $log->trace(Dumper([$unique_key, $unique_val]));
 
-        my $ref = $dbh->selectall_arrayref($sql, {Columns=>{}}, @unique_val)
+        my $ref = $dbh->selectall_arrayref($sql, {Columns=>{}}, $unique_val)
             or $log->logdie("Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n");
 
         $log->logdie("Only retrieved partial dataset: ", $dbh->errstr, "\n")
@@ -1221,7 +1211,7 @@ sub prepare_update_hash {
 
         if (0 == $count) {
             # Row does not already exist: add to the insert list.
-            $log->debug("new data to insert: " . (join ' ', @unique_val));
+            $log->debug("new data to insert: " . $unique_val);
 
             push @insert_hash, $row;
 
@@ -1376,8 +1366,8 @@ sub prepare_update_hash {
 
         push @update_hash, {
             differ        => \%differ,
-            unique_val    => [@unique_val],
-            unique_key    => [@unique_key],
+            unique_val    => $unique_val,
+            unique_key    => $unique_key,
         };
 
     }
@@ -1420,7 +1410,7 @@ sub _get_primary_key {
     my %keys = (
         ACSIS     => 'obsid_subsysnr',
         COMMON    => 'obsid',
-        FILES     => [qw/obsid_subsysnr file_id/],
+        FILES     => 'file_id',
         RXH3      => 'obsid_subsysnr',
         SCUBA2    => 'obsid_subsysnr',
         transfer  => 'file_id',
@@ -1457,15 +1447,15 @@ sub update_hash {
 
     return 1 unless scalar @sorted;
 
-    my @unique_key = @{$change[0]->{'unique_key'}};
+    my $unique_key = $change[0]->{'unique_key'};
 
     # Now have to do an UPDATE
     my $changes = join ', ', map {" $_ = ? "} @sorted;
 
-    my $sql = sprintf "UPDATE %s SET %s WHERE %s",
+    my $sql = sprintf "UPDATE %s SET %s WHERE %s = ?",
                       $table,
                       $changes,
-                      join ' AND ', map {" $_ = ? "} @unique_key;
+                      $unique_key;
 
     $log->trace($sql);
 
@@ -1475,7 +1465,7 @@ sub update_hash {
 
         foreach my $row (@change) {
             my @bind = map {$row->{'differ'}{$_}} @sorted;
-            push @bind, @{$row->{'unique_val'}};
+            push @bind, $row->{'unique_val'};
 
             my $status = $sth->execute(@bind);
             throw JSA::Error::DBError 'UPDATE error: ' . $dbh->errstr() . "\n... with { $sql, @bind }"
