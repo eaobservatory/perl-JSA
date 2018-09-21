@@ -270,7 +270,7 @@ sub get_dictionary {
 =item B<prepare_and_insert>
 
 Inserts observation in database retrieved from disk (see also
-I<insert_observations> method) for a date or given list of files.
+I<insert_observation> method) for a date or given list of files.
 
 The current date is used if no date has been explicitly set.
 
@@ -367,9 +367,7 @@ sub prepare_and_insert {
     my $name = $self->instrument_name();
 
     # Retrieve observations from disk.  An Info::Obs object will be returned
-    # for each subscan in the observation.  No need to retrieve associated
-    # obslog comments. That's <no. of subsystems used> *
-    # <no. of subscans objects returned per observation>.
+    # for each observation.
     my ($group, $wcs, $md5) = $self->_get_observations(
         dry_run => $dry_run,
         skip_state => $skip_state,
@@ -412,7 +410,7 @@ sub prepare_and_insert {
     foreach my $runnr (sort {$a <=> $b} keys %observations) {
         my @sub_obs =  grep {$_} @{$observations{$runnr}};
 
-        $self->insert_obs_set(
+        $self->insert_observation(
             db => $db,
             columns => \%columns,
             run_obs => \@sub_obs,
@@ -425,13 +423,23 @@ sub prepare_and_insert {
     }
 }
 
-# For each observation:
-# 1. Insert a row in the COMMON table.
-# 2. Insert a row in the [INSTRUMENT] table for each subsystem used.
-# 3. Insert a row in the FILES table for each subscan
-#
-# fails, the entire observation fails to go in to the DB.
-sub insert_obs_set {
+=item B<insert_observation>
+
+For each observation:
+
+=over 4
+
+=item Insert a row in the COMMON table.
+
+=item Insert a row in the [INSTRUMENT] table for each subsystem used.
+
+=item Insert a row in the FILES table for each file.
+
+=back
+
+=cut
+
+sub insert_observation {
     my ($self, %arg) = @_;
 
     my $log = Log::Log4perl->get_logger('');
@@ -441,8 +449,6 @@ sub insert_obs_set {
 
     my $dbh  = $db->handle();
     my @file = map {$_->simple_filename} @$run_obs;
-
-    my %pass_arg = map {$_ => $arg{$_}} qw/columns/;
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
 
     foreach (@file) {
@@ -556,9 +562,9 @@ sub insert_obs_set {
 
         # FILES, ACSIS, SCUBA2 tables.
         unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
-            $self->add_subsys_obs(
-                %pass_arg,
+            $self->insert_subsystems(
                 db  => $db,
+                columns => $columns,
                 obs => $run_obs,
                 file_wcs => $file_wcs,
                 file_md5 => $file_md5,
@@ -849,37 +855,29 @@ sub is_simulation {
 }
 
 
-=item B<add_subsys_obs>
+=item B<insert_subsystems>
 
-Adds subsystem observations, given a hash of OMP database object; hash
-reference of observations (run number as keys, array reference of sub
-headers as values); a hash reference of columns (see I<get_columns>).
+Adds observation subsystems into the instrument and FILES tables.
 
-The observations hash reference is for a given run number, not the
-the I<OMP::Info::Objects> in its entirety.
+The observations array reference is for a given run number.
 
-    $ok = $enter->add_subsys_obs(db        => $db,
-                                 columns   => \%cols,
-                                 obs       => \%obs_per_runnr,
-                                 file_wcs  => \%wcs_by_basename,
-                                 file_md5  => \%md5_by_basename,
-                                 dry_run   => $dry_run,
-                                 skip_state=> $skip_state);
+    $enter->insert_subsystems(
+        db         => $db,
+        columns    => \%cols,
+        obs        => \@obs_per_subsystem,
+        file_wcs   => \%wcs_by_basename,
+        file_md5   => \%md5_by_basename,
+        dry_run    => $dry_run,
+        skip_state => $skip_state);
 
-It is called by I<insert_observations> method.
+It is called by the I<insert_observation> method.
 
 =cut
 
-sub add_subsys_obs {
+sub insert_subsystems {
     my ($self, %args) = @_;
 
     my $log = Log::Log4perl->get_logger('');
-
-    foreach my $k (qw/db columns obs/) {
-        next if exists $args{$k} && $args{$k} && ref $args{$k};
-
-        throw JSA::Error::BadArgs("No suitable value given for ${k}.");
-    }
 
     my ($db, $obs, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
         map {$args{$_}} qw/db obs columns file_wcs file_md5 dry_run skip_state/;
@@ -1012,15 +1010,15 @@ sub _handle_multiple_changes {
 =item B<insert_hash>
 
 Given a table name, a DBI database handle and a hash reference, insert
-the hash contents into the table.  Basically a named insert.  Returns
-the executed statement output.  (Copied from example in L<DBI>.)
+the hash contents into the table.
 
-In case of error, returns the value as returned by C<DBI->execute>.
+    $keys_inserted = $enter->insert_hash(
+        table      => $table,
+        dbhandle   => $dbh,
+        insert     => \%to_insert
+        dry_run    => $dry_run);
 
-    $status = $enter->insert_hash(table      => $table,
-                                  dbhandle   => $dbh,
-                                  insert     => \%to_insert
-                                  dry_run    => $dry_run);
+Returns (by reference) an array of the primary key values inserted.
 
 =cut
 
@@ -1042,32 +1040,26 @@ sub insert_hash {
     $log->logdie('Primary key not defined for table: ', $table)
         unless defined $prim_key;
 
-    my ($sql, $sth);
-
     # Conditional insert mode: for now pre-filter the list of hashes to
     # be inserted.  Could probably replace this for MySQL with a
     # INSERT ... ON DUPLICATE KEY statement at some point.
     if ($conditional) {
         my @insert_hashes_filtered = ();
 
-        $sql = sprintf
+        my $sql = sprintf
             'SELECT COUNT(*) FROM %s WHERE %s = ?',
             $table, $prim_key;
 
-        unless ($dry_run) {
-            $sth = $dbh->prepare($sql)
-                or $log->logdie(
-                    "Could not prepare SQL statement for insert check\n",
-                    $dbh->errstr);
-        }
+        my $sth = $dbh->prepare($sql)
+            or $log->logdie(
+                "Could not prepare SQL statement for insert check\n",
+                $dbh->errstr);
 
         for my $row (@insert_hashes) {
             my $prim_val = $row->{$prim_key};
 
             $log->trace('-----> SQL: ' . $sql);
             $log->trace(Dumper([$prim_val]));
-
-            next if $dry_run;
 
             $sth->execute($prim_val)
                 or $log->logdie('SQL query for insert check failed: ', $dbh->errstr);
@@ -1089,12 +1081,13 @@ sub insert_hash {
 
     my @fields = sort keys %{$insert_hashes[0]}; # sort required
 
-    $sql = sprintf
+    my $sql = sprintf
         "INSERT INTO %s (%s) VALUES (%s)",
         $table,
         join(', ', @fields),
         join(', ', ('?') x scalar @fields);
 
+    my $sth;
     unless ($dry_run) {
         $sth = $dbh->prepare($sql)
             or $log->logdie(
@@ -1102,29 +1095,29 @@ sub insert_hash {
                 $dbh->errstr);
     }
 
-    my ($sum, @file);
     # and insert all the rows
+    my @keys_inserted;
     for my $row (@insert_hashes) {
         my @values = @{$row}{@fields}; # hash slice
 
         $log->trace('-----> SQL: ' . $sql);
         $log->trace(Dumper(\@values));
 
-        next if $dry_run;
-
-        my $affected = $sth->execute(@values);
-
-        if ($table eq 'FILES' && defined $affected && $affected > 0) {
-            push @file, $row->{'file_id'};
+        my $affected;
+        unless ($dry_run) {
+            $affected = $sth->execute(@values);
+        }
+        else {
+            # In dry run mode, assume the one entry was inserted.
+            $affected = 1;
         }
 
-       return ($sum, scalar @file ? [@file] : ())
-           unless $affected;
-
-        $sum += $affected;
+        if (defined $affected && $affected > 0) {
+            push @keys_inserted, $row->{$prim_key};
+        }
     }
 
-    return ($sum, scalar @file ? [@file] : ());
+    return \@keys_inserted;
 }
 
 =item B<prepare_update_hash>
@@ -2139,7 +2132,7 @@ sub _change_FILES {
 
     my $insert_ref = $self->get_insert_values($table_columns, $headers);
 
-    my ($files , $error);
+    my ($files, $error);
     try {
         throw JSA::Error "Empty hash reference in _change_FILES."
             unless scalar keys %$insert_ref;
@@ -2148,7 +2141,7 @@ sub _change_FILES {
 
         my $hash = $self->_handle_multiple_changes($insert_ref);
 
-        ($error, $files) = $self->insert_hash(
+        $files = $self->insert_hash(
             table     => $table,
             dbhandle  => $dbh,
             insert    => $hash,
@@ -2173,7 +2166,7 @@ sub _change_FILES {
     if ((not $skip_state) and $files and scalar @{$files}) {
         my $xfer = $self->_get_xfer_unconnected_dbh();
         $xfer->put_state(
-            state => 'ingested', files => [map _basename($_), @{$files}],
+            state => 'ingested', files => $files,
             dry_run => $dry_run);
     }
 
