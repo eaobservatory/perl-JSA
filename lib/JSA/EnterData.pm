@@ -2628,11 +2628,6 @@ sub calcbounds_update_bound_cols {
             }
         }
 
-        if ($self->calcbounds_find_dark(\%header)) {
-            $log->debug('  skipped dark.');
-            next;
-        }
-
         _fix_dates(\%header);
 
         $log->debug('  calculating bounds');
@@ -2667,22 +2662,6 @@ sub calcbounds_update_bound_cols {
     }
 
     return $n_err;
-}
-
-sub calcbounds_find_dark {
-    my ($self, $header) = @_;
-
-    return unless $self->can('_is_dark');
-
-    my $dark = $self->_is_dark($header);
-    foreach my $sh (exists $header->{'SUBHEADERS'}
-                         ? @{$header->{'SUBHEADERS'}}
-                         : ()) {
-        $dark =  $self->_is_dark($sh)
-          or last;
-    }
-
-    return $dark;
 }
 
 =back
