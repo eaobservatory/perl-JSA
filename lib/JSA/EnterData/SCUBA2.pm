@@ -251,7 +251,7 @@ with subarray appended, "obsid_subsysnr" field filled in.
         # Special handling for /date.(obs|end)/ & /ms(start|end)/.
         $self->push_extreme_start_end(\%new, $subh);
 
-        $self->push_date_obs_end(\%new, $subh, $skip);
+        $self->push_date_obs_end(\%new, $subh);
 
         $self->push_range_headers_to_main(\%new, $subh, $skip);
 
@@ -527,7 +527,7 @@ I<_is_dark>.
 =cut
 
 sub push_date_obs_end {
-    my ($self, $header, $subheaders, $skip_dark) = @_;
+    my ($self, $header, $subheaders) = @_;
 
     return unless $subheaders
                && scalar @{$subheaders};
