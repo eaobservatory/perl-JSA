@@ -1413,46 +1413,37 @@ of the form returned by C<prepare_update_hash>.
 =cut
 
 sub update_hash {
-    my ($self, $table, $dbh, $change, %args) = @_;
+    my ($self, $table, $dbh, $changes, %args) = @_;
 
     my $dry_run = $args{'dry_run'};
 
     my $log = Log::Log4perl->get_logger('');
 
-    my @change = @{$change};
-    my @sorted = sort keys %{$change[0]->{'differ'}};
+    foreach my $row (@$changes) {
+        my @sorted = sort keys %{$row->{'differ'}};
+        next unless scalar @sorted;
 
-    return 1 unless scalar @sorted;
+        my $sql = sprintf(
+            "UPDATE %s SET %s WHERE %s = ?",
+            $table,
+            (join ', ', map {" $_ = ? "} @sorted),
+            $row->{'unique_key'});
 
-    my $unique_key = $change[0]->{'unique_key'};
+        my @bind = map {$row->{'differ'}{$_}} @sorted;
+        push @bind, $row->{'unique_val'};
 
-    # Now have to do an UPDATE
-    my $changes = join ', ', map {" $_ = ? "} @sorted;
+        $log->trace($sql);
+        $log->trace(Dumper(\@bind));
 
-    my $sql = sprintf "UPDATE %s SET %s WHERE %s = ?",
-                      $table,
-                      $changes,
-                      $unique_key;
+        next if $dry_run;
 
-    $log->trace($sql);
-
-    unless ($dry_run) {
         my $sth = $dbh->prepare($sql)
             or $log->logdie("Could not prepare sql statement for UPDATE\n", $dbh->errstr, "\n");
 
-        foreach my $row (@change) {
-            my @bind = map {$row->{'differ'}{$_}} @sorted;
-            push @bind, $row->{'unique_val'};
-
-            my $status = $sth->execute(@bind);
-            throw JSA::Error::DBError 'UPDATE error: ' . $dbh->errstr() . "\n... with { $sql, @bind }"
-                if $dbh->err();
-
-            return $status;
-        }
+        $sth->execute(@bind);
+        throw JSA::Error::DBError 'UPDATE error: ' . $dbh->errstr() . "\n... with { $sql, @bind }"
+            if $dbh->err();
     }
-
-    return 1;
 }
 
 =item B<transform_value>
