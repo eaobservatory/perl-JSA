@@ -2256,6 +2256,8 @@ any value).
                                      'name'  => 'OBSEND',
                                      'value' => undef));
 
+Undefined values are not included.
+
 =item I<value_regex> regex
 
 To actually match header value, specify I<value_regex> key with value
@@ -2272,56 +2274,64 @@ of a regular expression, in which case I<C<value> is ignored>.
 
 sub _find_header {
     my ($self, %args) = @_;
-    my ($head, $name, $val_re) =
-      @args{qw/headers name value_regex/};
+    my ($head, $name, $val_re, $test) =
+        @args{qw/headers name value_regex test/};
+    my $return_value = (exists $args{'value'});
 
-    defined $val_re && ! ref $val_re
-        and $val_re = qr/\b${val_re}\b/x;
+    $val_re = qr/\b${val_re}\b/x if defined $val_re && ! ref $val_re;
 
-    my $test = sub {
-        my ($head, $key) = @_;
+    my @ans = ();
+    my $subhead = undef;
 
-        return unless exists $head->{$key};
-        foreach ($args{'test'}) {
-            last unless defined $args{'test'};
-
-            return !! $head->{$key} if $_ eq 'true';
-
-            return defined $head->{ $key } if $_ eq 'defined';
+    # Do we have a single header, or an array of header hashes?
+    unless ('ARRAY' eq ref $head) {
+        my $subh = 'SUBHEADERS';
+        if (exists $head->{$subh}) {
+            $subhead = $head->{$subh};
         }
 
-        return 1;
-    };
+        $head = [$head];
+    }
 
-    my $array = ref $head eq 'ARRAY';
+    # Check each given header hash.
+    foreach my $h (@$head) {
+        next unless exists $h->{$name};
+        my $val = $h->{$name};
 
-    foreach my $h ($array ? @{$head} : $head) {
-        my $val = $test->($h, $name) ? $h->{$name} : undef;
+        # Note: will continue searching subheader values if test fails.
+        if (defined $test) {
+            next if $test eq 'true' && ! $val;
+            next if $test eq 'defined' && ! defined $val;
+        }
 
-        if (defined $val) {
-            return $val =~ $val_re if defined $val_re;
+        # Note: returns answer based on whether first found header matches.
+        if (defined $val_re) {
+            next unless defined $val;
+            return $val =~ $val_re;
+        }
 
-            return 1 unless exists $args{'value'};
-
-            return $val unless wantarray;
-
-            $args{'store'}->{$val} = undef;
+        if ($return_value) {
+            next unless defined $val;
+            push @ans, $val;
+        }
+        else {
+            push @ans, 1;
         }
     }
 
-    if (wantarray and defined $args{'store'}) {
-        my %seen;
-        return grep ! $seen{$_} ++,
-               keys %{$args{'store'}};
+    # If an answer was found, return it, otherwise recurse to subheaders.
+    if (scalar @ans) {
+        if (wantarray) {
+            my %seen;
+            return grep {! $seen{$_} ++} @ans;
+        }
+        else {
+            return $ans[0];
+        }
     }
-
-    # Only one level of indirection is checked, i.e. header inside "SUBHEADER"
-    # pseudo header with array reference of hash references as value.
-    return if $array;
-
-    my $subh = 'SUBHEADERS';
-    return $self->_find_header(%args, 'headers' => $head->{$subh})
-        if exists $head->{$subh};
+    elsif (defined $subhead) {
+        return $self->_find_header(%args, 'headers' => $subhead)
+    }
 
     return;
 }
