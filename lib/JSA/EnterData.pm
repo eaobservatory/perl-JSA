@@ -956,52 +956,39 @@ sub _expand_header_arrays {
 
     my $log = Log::Log4perl->get_logger('');
 
-    # Go through the hash and work out whether we have multiple inserts
-    my @have_ref;
+    # Go through the hash and check which entries have array references.
+    my @array_keys;
     my $nrows = undef;
-    foreach my $key (keys %$vals) {
-        my $ref = ref $vals->{$key}
+    while (my ($key, $val) = each %$vals) {
+        my $ref = ref $val
             or next;
 
         $log->logdie("Unsupported reference type in insert hash!\n")
             unless $ref eq 'ARRAY';
 
-        my $row_count = scalar @{$vals->{$key}};
-        if (defined $nrows) {
-            # count rows
-            $log->logdie("Uneven row count in insert hash ARRAY ref for key '$key'",
-                         " ($row_count != $nrows) compared to first key '$have_ref[0]'\n")
-            unless $row_count == $nrows;
-        }
-        else {
+        my $row_count = scalar @$val;
+        unless (defined $nrows) {
             $nrows = $row_count;
         }
-
-        push @have_ref, $key;
-    }
-
-    # Now create an array of insert hashes with array references unrolled
-    my @change;
-    if (! @have_ref) {
-        @change = ($vals);
-    }
-    else {
-        # take local copy of the array content so that we do not damage caller hash
-        my %local = map {$_ => [@{$vals->{$_}}]} @have_ref;
-
-        # loop over the known number of rows
-        foreach my $i (0 .. ($nrows-1)) {
-            my %row = %$vals;
-
-            foreach my $refkey (@have_ref) {
-                $row{$refkey} = shift @{$local{$refkey}};
-            }
-
-            push @change, \%row;
+        elsif ($row_count != $nrows) {
+            $log->logdie("Uneven row count in header hash ARRAY ref for key '$key'",
+                         " ($row_count != $nrows) compared to first key '$array_keys[0]'\n")
         }
+
+        push @array_keys, $key;
     }
 
-    return \@change;
+    return [$vals] unless scalar @array_keys;
+
+    # Now create an array of hashes with array references unrolled.
+    my @headers = ();
+
+    # Loop over the known number of rows.
+    for (my $i = 0; $i < $nrows; $i ++) {
+        push @headers, {%$vals, map {$_ => $vals->{$_}->[$i]} @array_keys};
+    }
+
+    return \@headers;
 }
 
 =item B<insert_hash>
