@@ -941,7 +941,17 @@ sub insert_subsystems {
     }
 }
 
-sub _handle_multiple_changes {
+=item B<_expand_header_arrays>
+
+Check whether a header contains array references.  If so, it is expanded
+into a series of headers.  Each new header hash contains copies of the
+single-valued entries and one value for each of the array entries.
+Each array entry must contain the same number of elements as the generated
+headers will contain the corresponding entries from each array.
+
+=cut
+
+sub _expand_header_arrays {
     my ($self, $vals) = @_;
 
     my $log = Log::Log4perl->get_logger('');
@@ -1157,7 +1167,7 @@ sub prepare_update_hash {
     $log->logdie("No unique keys found for table name: '$table'\n")
         unless defined $unique_key;
 
-    my $rows = $self->_handle_multiple_changes($field_values);
+    my $rows = $self->_expand_header_arrays($field_values);
 
     my $sql = 'select * ';
 
@@ -2057,7 +2067,7 @@ sub _change_FILES {
 
         _verify_file_name($insert_ref->{'file_id'});
 
-        my $hash = $self->_handle_multiple_changes($insert_ref);
+        my $hash = $self->_expand_header_arrays($insert_ref);
 
         $files = $self->insert_hash(
             table     => $table,
