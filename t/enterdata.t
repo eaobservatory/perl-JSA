@@ -1,6 +1,6 @@
 use strict;
 
-my $n_test; BEGIN {$n_test = 1 + 30;}
+my $n_test; BEGIN {$n_test = 1 + 30 + 3;}
 use Test::More tests => $n_test;
 
 SKIP: {
@@ -95,4 +95,9 @@ SKIP: {
     ok($enter->_find_header(headers => \%header, name => 'HEADER2', test => 'defined'));
     is(scalar $enter->_find_header(headers => \%header, name => 'HEADER1', value => 1),
        10);
+
+    # Test the "skip_calc_radec" method.
+    ok(! $enter->skip_calc_radec(headers => {}));
+    ok(! $enter->skip_calc_radec(headers => {OBS_TYPE => 'pointing'}));
+    ok($enter->skip_calc_radec(headers => {OBS_TYPE => 'skydip'}));
 }

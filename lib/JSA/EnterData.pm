@@ -1883,87 +1883,30 @@ sub create_dictionary {
     return \%dict;
 }
 
-=item B<skip_obs_calc>
-
-Given a hash of headers and C<test> as key & hash
-reference of header name and related values as regular expression, returns a
-truth value if observation should be skipped.
-
-Throws L<JSA::Error::BadArgs> exception when headers are
-missing or C<test> hash reference value is missing.
-
-    print "skipped obs"
-        if $enter->skip_obs_calc(
-            headers => $obs->hdrhash(),
-            test => {
-                'OBS_TYPE' => qr/\b(?: skydip | FLAT_?FIELD  )\b/xi
-            });
-
-=cut
-
-sub skip_obs_calc {
-    my ($self, %arg) = @_;
-
-    my $log = Log::Log4perl->get_logger('');
-
-    # Skip list.
-    my %test =
-        exists $arg{'test'} && defined $arg{'test'} ? %{$arg{'test'}} : ();
-
-    scalar keys %test
-        or throw JSA::Error::BadArgs('No "test" hash reference given.');
-
-    throw JSA::Error::BadArgs('No "headers" value given to check if to find bounding box.')
-        unless defined $arg{'headers'};
-
-    my $header = $arg{'headers'};
-
-    foreach my $name (sort keys %test) {
-        $self->_find_header(headers => $header,
-                            name    => $name,
-                            value_regex => $test{$name})
-            or next;
-
-        $log->debug("Matched \"$name\" with $test{$name}; obs may be skipped.");
-
-        return 1;
-    }
-
-    return;
-}
-
 =item B<skip_calc_radec>
 
-Given a C<OMP::Info::Obs> object header hash reference -- or an
-C<OMP::Info::Obs> object -- as a hash, returns a truth value if
+Given a object header hash reference, returns a true value if
 bounding box calculation should be skipped.
 
     print "skipped calc_radec()"
         if $enter->skip_calc_radec(headers => $obs->hdrhash());
 
-Default skip list is ...
+The skip test is:
 
     'OBS_TYPE' => qr/\b skydips? \b/ix
-
-Optionally accepts a skip list with I<skip> as key name, and a hash
-reference as value of header names as keys and header values as
-regular expressions ...
-
-    print "skipped calc_radec()"
-        if $enter->skip_calc_radec(
-            headers => $obs->hdrhash(),
-            test => {
-                'OBS_TYPE' => qr/\b(?: skydip | FLAT_?FIELD  )\b/xi
-            });
 
 =cut
 
 sub skip_calc_radec {
     my ($self, %arg) = @_;
 
-    my $skip = qr/\b skydips? \b/xi;
+    throw JSA::Error::BadArgs('No "headers" value given to check if to find bounding box.')
+        unless defined $arg{'headers'};
 
-    return $self->skip_obs_calc(test => {OBS_TYPE => $skip}, %arg);
+    return $self->_find_header(
+        headers => $arg{'headers'},
+        name    => 'OBS_TYPE',
+        value_regex => qr/\b skydips? \b/xi)
 }
 
 =item B<calc_radec>
