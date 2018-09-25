@@ -1837,9 +1837,9 @@ sub extract_column_headers {
 
             $log->trace("  MAPPED header [$header] to column [$alias]");
         }
-
-        $log->trace("  Could not find alias for header [$header].  Skipped.")
-            unless exists $values{$alt_head};
+        else {
+            $log->trace("  Could not find alias for header [$header].  Skipped.");
+        }
     }
 
     return \%values;
