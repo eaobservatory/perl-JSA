@@ -2148,8 +2148,8 @@ sub _update_or_insert {
 sub _apply_kludge_for_COMMON {
     my ($self, $vals) = @_;
 
-    return unless ref $vals eq 'ARRAY'
-               || 1 < scalar @{$vals};
+    return $vals unless ref $vals eq 'ARRAY'
+                     && 1 < scalar @{$vals};
 
     my %val;
     for my $v (@{$vals}) {
