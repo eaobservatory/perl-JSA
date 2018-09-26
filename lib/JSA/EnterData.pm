@@ -2119,12 +2119,14 @@ sub _update_or_insert {
 
     my $vals = $self->get_insert_values($table_columns, $headers);
 
+    # Do any "update_only_XXX" arguments have a true value?
     my $update_args = $args{'update_args'} // {};
+    my $update_only = grep {/^update_only/ and $update_args->{$_}} keys %$update_args;
 
     my ($change_update, $change_insert) = $self->prepare_update_hash(
         @args{qw/table dbhandle/}, $vals, %$update_args);
 
-    if (scalar @$change_insert) {
+    if ((not $update_only) and scalar @$change_insert) {
         $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
             if 'COMMON' eq $table ;
 
