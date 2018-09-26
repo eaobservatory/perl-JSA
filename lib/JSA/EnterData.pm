@@ -881,6 +881,20 @@ sub insert_subsystems {
         # Obtain instrument table values from this Obs object.  Break hash tie.
         my $subsys_hdrs = {%{$subsys_obs->hdrhash}};
 
+        do {
+            my $table = 'FILES';
+
+            $self->_change_FILES(
+                obs            => $subsys_obs,
+                headers        => $subsys_hdrs,
+                db             => $db,
+                table          => $table,
+                table_columns  => $columns->{$table},
+                file_md5       => $file_md5,
+                dry_run        => $dry_run,
+                skip_state     => $skip_state);
+        };
+
         # Need to calculate the frequency information
         $self->calc_freq($subsys_obs, $subsys_hdrs, $file_wcs);
 
@@ -889,26 +903,8 @@ sub insert_subsystems {
             (undef, $grouped) = $self->transform_header($subsys_hdrs);
         }
 
-        my $added_files;
         foreach my $subh ($grouped ? @{$grouped} : $subsys_hdrs) {
             $self->_fill_headers_obsid_subsys($subh, $subsys_obs->obsid);
-
-            my $error;
-
-            unless ($added_files) {
-                $added_files++;
-
-                my $table = 'FILES';
-
-                $self->_change_FILES(obs            => $subsys_obs,
-                                     headers        => $subsys_hdrs,
-                                     db             => $db,
-                                     table          => $table,
-                                     table_columns  => $columns->{$table},
-                                     file_md5       => $file_md5,
-                                     dry_run        => $dry_run,
-                                     skip_state     => $skip_state);
-            }
 
             if ($self->can('merge_by_obsidss')
                     && exists $subsys_hdrs->{'SUBHEADERS'}) {
