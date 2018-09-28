@@ -193,80 +193,57 @@ sub make_raw_paths {
 }
 
 
-BEGIN {
-    my $obsidss_re = qr/^ obsidss $/xi;
-    my $subarray_re = qr/^ subarray (?:_[a-d])? $/xi;
-
 =item B<transform_header>
 
-Given a header hash reference, returns an array of hash references of
-headers grouped by subarray.  The returned headers have subheaders
-with subarray appended, "obsid_subsysnr" field filled in.
+Given a header hash reference, returns a hash reference of
+headers.  The returned headers have subheaders
+with subarray appended.
 
-    @grouped = $scuba2->transform_header(\%header);
+    $header = $scuba2->transform_header(\%header);
 
 =cut
 
-    sub transform_header {
-        my ($self, $header) = @_;
+sub transform_header {
+    my ($self, $header) = @_;
 
-        $self->append_array_column($header);
-
-        my @fields = keys %{$header};
-
-        my $header_val = sub {
-            my ($filter) = @_;
-            return (map {/$filter/ ? $header->{$_} : ()} @fields)[0];
-        };
-
-        my $header_obsidss = $header_val->($obsidss_re);
-
-        my $subh = exists $header->{'SUBHEADERS'}
-                 ? $header->{'SUBHEADERS'}
-                 : ();
-
-        for my $s (@{$subh}) {
-            $self->append_array_column($s);
-
-            $s->{'obsid_subsysnr'} ||= $s->{'OBSIDSS'} || $header_obsidss;
-        }
-
-        my %new;
-        for my $k (@fields) {
-            next if lc $k eq 'subheaders';
-            $new{$k} = $header->{$k};
-        }
-
-        my $skip;
-        # Don't skip darks if it is a noise or a flat field, as shutter remains
-        # closed for those.
-        for my $key (qw/OBS-TYPE OBS_TYPE/) {
-            next unless exists $header->{$key};
-
-            $skip = $header->{$key} !~ /\b(?: noise | flat.?field )/xi;
-
-            last;
-        }
-
-        # Special handling for /date.(obs|end)/ & /ms(start|end)/.
-        $self->push_extreme_start_end(\%new, $subh);
-
-        $self->push_date_obs_end(\%new, $subh);
-
-        $self->push_range_headers_to_main(\%new, $subh, $skip);
-
-        #@{$subh} = $self->merge_by_obsidss($subh);
-
-        my $grouped = $self->group_by_subarray(
-            $subh, $header_val->($subarray_re));
-
-        my @new;
-        for my $sa (keys %{$grouped}) {
-            push @new, {%{$grouped->{$sa}} , %new};
-        }
-
-        return (\%new , \@new);
+    my %new;
+    for my $k (keys %$header) {
+        next if lc $k eq 'subheaders';
+        $new{$k} = $header->{$k};
     }
+
+    $self->append_array_column(\%new, $header);
+
+    my $subh = exists $header->{'SUBHEADERS'}
+             ? $header->{'SUBHEADERS'}
+             : [];
+
+    for my $s (@{$subh}) {
+        $self->append_array_column(\%new, $s);
+
+        # Copy last value of BASETEMP, BBHEAT to main header.
+        $self->push_header(\%new, $s, qr/^(?:BASETEMP|BBHEAT)$/);
+    }
+
+    my $skip;
+    # Don't skip darks if it is a noise or a flat field, as shutter remains
+    # closed for those.
+    for my $key (qw/OBS-TYPE OBS_TYPE/) {
+        next unless exists $header->{$key};
+
+        $skip = $header->{$key} !~ /\b(?: noise | flat.?field )/xi;
+
+        last;
+    }
+
+    # Special handling for /date.(obs|end)/ & /ms(start|end)/.
+    $self->push_extreme_start_end(\%new, $subh);
+
+    $self->push_date_obs_end(\%new, $subh);
+
+    $self->push_range_headers_to_main(\%new, $subh, $skip);
+
+    return \%new;
 }
 
 BEGIN {
@@ -604,131 +581,35 @@ sub _is_dark {
     return ! ($subhead->{'SHUTTER'} + 0);
 }
 
-=item B<group_by_subarray>
-
-Returns a hash reference of hash references, where the sole key is the
-subarray type matching C</^s[48].?$/>, given an array reference of
-subheaders & optional subarray type.
-
-Throws L<JSA::Error> exception if a subarray type cannot be determined.
-
-    $grouped = $scuba2->group_by_subarray($header->{'SUBHEADERS'}, 's4');
-
-=cut
-
-sub group_by_subarray {
-    my ($self, $subheaders, $header_arr) = @_;
-
-    return unless $subheaders
-               && scalar @{$subheaders};
-
-    my $group = {};
-
-    my $array_re = qr/^( s[48] .? )$/ix;
-
-    my $array = $header_arr;
-
-    my $int_key = 'INT_TIME';
-
-    foreach my $sub (@{$subheaders}) {
-        my @keys = keys %{$sub};
-
-        unless ($header_arr) {
-            for (@keys) {
-                next if -1 == index lc $_, 'subarray';
-
-                ($array) = ($sub->{$_} =~ $array_re)
-                    and last;
-            }
-        }
-
-        unless ($array) {
-            throw JSA::Error
-              sprintf "Failed to find subarray type. (Subheaders:\n%s)",
-                      _dump($subheaders);
-        }
-
-
-        foreach (@keys) {
-            # Collect fields unless already exist (except for integration time) ...
-            unless ($_ eq $int_key) {
-                $group->{$array}{$_} ||= $sub->{$_};
-            }
-
-            # ... for integration time, sum all of them.
-            else {
-                $group->{$array}{$_} += $sub->{$_};
-            }
-        }
-    }
-
-    return $group;
-}
-
-=item B<merge_by_obsidss>
-
-Returns an array reference of hash references grouped by
-C<obsid_subsysnr>, given an array reference of subheaders.
-
-Throws L<JSA::Error> exception if a hash reference is missing
-C<obsid_subsys>.
-
-   @grouped = $scuba2->merge_by_obsidss($header->{'SUBHEADERS'});
-
-=cut
-
-sub merge_by_obsidss {
-    my ($self, $subh) = @_;
-
-    return $subh unless $subh
-                     && scalar @{$subh};
-
-    my (%obsidss, @order);
-    my $key_re = qr/^ OBSID (?:_SUBSYS(?:NR)? | SS ) $/xi;
-
-    for my $href (@{$subh}) {
-        my $key = (grep {$_ =~ $key_re ? $_ : ()} keys %{$href})[0]
-            or next;
-
-        my $id = $href->{$key};
-        my $old = $obsidss{$id};
-
-        push @order, $id
-            unless exists $obsidss{$id};
-
-        %{$obsidss{$id}} = ((defined $old ? %{$old} : ()),
-                            %{$href});
-    }
-
-    return [@obsidss{@order}];
-}
-
 =item B<_fill_headers_obsid_subsys>
 
-Does nothing. Field "obsid_subsysnr" is taken care by
-I<transform_header> method.
+Fills "obsid_subsysnr" value.
 
 =cut
 
-#  transform_header() takes care of the obsid_subsysnr value.
-sub _fill_headers_obsid_subsys { }
+sub _fill_headers_obsid_subsys {
+    my ($self, $header, $obsid) = @_;
+
+    $header->{'obsid_subsysnr'} = $self->_find_header(
+        headers => $header, name => 'OBSIDSS', value => 1);
+}
 
 =item B<append_array_column>
 
 Returns nothing.  Given a (sub)header hash reference, appends some of
-the fields with C<_[a-d]> as appropriate.
+the fields with C<_[a-d]> as appropriate to the given new header hash.
 
 Throws L<JSA::Error> exception if a matching C<SUBARRAY> field value
 not found.
 
-   $scuba2->append_array_column($subheader);
+   $scuba2->append_array_column(\%new, $subheader);
 
 =cut
 
 sub append_array_column {
-    my ($self, $header) = @_;
+    my ($self, $header, $sub) = @_;
 
-    return unless $header->{'SUBARRAY'} ;
+    return unless $sub->{'SUBARRAY'} ;
 
     # Table column names suffixed by with [a-d].
     my @variation = qw/
@@ -740,19 +621,20 @@ sub append_array_column {
     /;
 
     my $subarray_col = qr/([a-d])/i;
-    my ($col) = $header->{'SUBARRAY'} =~ $subarray_col
+    my ($col) = $sub->{'SUBARRAY'} =~ $subarray_col
         or throw JSA::Error "No match found for subarray";
 
     foreach my $field (@variation) {
-        next unless exists $header->{$field};
+        next unless exists $sub->{$field};
 
         my $alt = join '_', $field, $col;
 
-        $header->{$alt} = $header->{$field};
-
         # Need to change subarray_[a-d] to a bit value.
         if ($field eq 'SUBARRAY') {
-            $header->{$alt} = $header->{$alt} ? 1 : 0;
+            $header->{$alt} = 1;
+        }
+        else {
+            $header->{$alt} = $sub->{$field};
         }
     }
 
@@ -804,16 +686,6 @@ sub fill_headers_FILES {
     }
 
     return;
-}
-
-sub _dump {
-    my (@thing) = @_;
-
-    local $Data::Dumper::Sortkeys = 1;
-    local $Data::Dumper::Indent = 1;
-    local $Data::Dumper::Deepcopy = 1;
-
-    return Data::Dumper::Dumper(\@thing);
 }
 
 1;

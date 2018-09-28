@@ -432,11 +432,10 @@ sub insert_observation {
     my ($db, $observation, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
        map {$arg{$_}} qw/db observation columns file_wcs file_md5 dry_run skip_state/;
 
-    my @subsystems = $observation->subsystems();
-
     my $dbh  = $db->handle();
-    my @file = map {$_->simple_filename} @subsystems;
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
+
+    my @file = $observation->simple_filename();
 
     foreach (@file) {
         if (exists $self->{'_cache_touched'}->{$_}) {
@@ -448,30 +447,74 @@ sub insert_observation {
 
     $self->{'_cache_touched'}->{$_} = 1 foreach @file;
 
-    for my $obs (@subsystems) {
-        my $headers = $obs->hdrhash();
+    # Extract information from the OMP::Info::Obs object.
+    my @subsystems;
+    my ($common_hdrs, $common_files);
+    foreach my $subsystem ($observation->subsystems()) {
+        # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
+        # does not untie).  This is so that a single element array reference when
+        # assigned to one of the keys is assigned as reference (not as the element
+        # contained with in).
+        my $headers = {%{$subsystem->hdrhash}};
+
+        $self->_fill_headers_obsid_subsys($headers, $subsystem->obsid);
 
         $self->munge_header_INBEAM($headers);
 
-        $self->fill_max_subscan($headers, $obs);
+        $self->fill_max_subscan($headers);
+
+        $self->fill_headers_FILES($headers, $subsystem, $file_md5);
+
+        $self->calc_freq($subsystem, $headers, $file_wcs);
 
         if ($self->can('transform_header')) {
-            my ($hash , $array) = $self->transform_header($headers);
-            $obs->hdrhash($hash);
+            $headers = $self->transform_header($headers);
+        }
+
+        if ($arg{'do_verification'} and $self->_do_verification()) {
+            my $verify = JCMT::DataVerify->new(Obs => $subsystem);
+
+            unless (defined $verify) {
+                $log->logdie(join "\n",
+                    'Could not make JCMT::DataVerify object:',
+                    $subsystem->summary('text'),
+                    Dumper([sort $subsystem->filename()]),
+                );
+            }
+
+            my %invalid = $verify->verify_headers();
+
+            foreach (keys %invalid) {
+                my $val = $invalid{$_}->[0];
+
+                if ($val =~ /does not match/i) {
+                    $log->debug("$_ : $val");
+                    undef $headers->{$_};
+                }
+                elsif ($val =~ /should not/i) {
+                    $log->debug("$_ : $val");
+                    undef $headers->{$_} if $headers->{$_} =~ /^UNDEF/ ;
+                }
+            }
+        }
+
+        push @subsystems, $headers;
+
+        # If this was the first subsystem, use it to provide information for
+        # the COMMON table.  Record the file names so that we can supply them
+        # to "calc_radec" in the "try" block below.
+        unless (defined $common_hdrs) {
+            $common_hdrs = $headers;
+            $common_files = [$subsystem->filename()];
+
+            $self->fill_headers_COMMON($headers, $subsystem);
         }
     }
 
-    my $common_obs = $subsystems[0]
-        or do {
-            $log->debug('XXX First run obs is undefined|false; nothing to do.');
-            return;
-        };
-
-    # Break hash tie by copying & have an explicit anonymous hash ( "\%{ ... }"
-    # does not untie).  This is so that a single element array reference when
-    # assigned to one of the keys is assigned as reference (not as the element
-    # contained with in).
-    my $common_hdrs = {%{$common_obs->hdrhash}};
+    unless (defined $common_hdrs) {
+        $log->debug('First subsystem is undefined; nothing to do.');
+        return;
+    }
 
     $log->debug(sprintf "[%s]...", join ', ', @file);
 
@@ -486,38 +529,11 @@ sub insert_observation {
         return;
     }
 
-    if ($arg{'do_verification'} and $self->_do_verification()) {
-        my $verify = JCMT::DataVerify->new(Obs => $common_obs);
-
-        unless (defined $verify) {
-            $log->logdie(join "\n",
-                'Could not make JCMT::DataVerify object:',
-                $common_obs->summary('text'),
-                Dumper([sort $common_obs->filename()]),
-            );
-        }
-
-        my %invalid = $verify->verify_headers();
-
-        foreach (keys %invalid) {
-            my $val = $invalid{$_}->[0];
-
-            if ($val =~ /does not match/i) {
-                $log->debug("$_ : $val");
-                undef $common_hdrs->{$_};
-            }
-            elsif ($val =~ /should not/i) {
-                $log->debug("$_ : $val");
-                undef $common_hdrs->{$_} if $common_hdrs->{$_} =~ /^UNDEF/ ;
-            }
-        }
-    }
-
     try {
         if ($arg{'calc_radec'}
                 && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
 
-            unless ($self->calc_radec($common_obs, $common_hdrs)) {
+            unless ($self->calc_radec($common_hdrs, $common_files)) {
                 $log->debug("problem while finding bounds; skipping");
 
                 throw JSA::Error('could not find bounds');
@@ -527,14 +543,12 @@ sub insert_observation {
         # COMMON table.
         $db->begin_trans() if not $dry_run;
 
-        $self->fill_headers_COMMON($common_hdrs, $common_obs);
-
         my $table = 'COMMON';
 
         $self->_update_or_insert(
             update_args => \%common_arg,
             dbhandle   => $dbh,
-            table      => 'COMMON',
+            table      => $table,
             table_columns => $columns->{$table},
             headers    => $common_hdrs,
             dry_run    => $dry_run);
@@ -547,14 +561,12 @@ sub insert_observation {
             throw JSA::Error($text);
         }
 
-        # FILES, ACSIS, SCUBA2 tables.
+        # FILES and instrument-specific tables.
         unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
             $self->insert_subsystems(
                 db  => $db,
                 columns => $columns,
                 subsystems => \@subsystems,
-                file_wcs => $file_wcs,
-                file_md5 => $file_md5,
                 dry_run => $dry_run,
                 skip_state => $skip_state);
         }
@@ -566,7 +578,7 @@ sub insert_observation {
     catch Error::Simple with {
         my $e = shift;
         my $text = $e->text();
-        $log->debug('error inserting obs set: ' . $text) if $text;
+        $log->error('error inserting obs set: ' . $text) if $text;
         $text = 'unknown error' unless $text;
 
         $self->_get_xfer_unconnected_dbh()->put_state(
@@ -851,9 +863,7 @@ The observations array reference is for a given run number.
     $enter->insert_subsystems(
         db         => $db,
         columns    => \%cols,
-        subsystems => \@obs_per_subsystem,
-        file_wcs   => \%wcs_by_basename,
-        file_md5   => \%md5_by_basename,
+        subsystems => \@headers_per_subsystem,
         dry_run    => $dry_run,
         skip_state => $skip_state);
 
@@ -866,63 +876,38 @@ sub insert_subsystems {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $subsystems, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
-        map {$args{$_}} qw/db subsystems columns file_wcs file_md5 dry_run skip_state/;
+    my ($db, $subsystems, $columns, $dry_run, $skip_state) =
+        map {$args{$_}} qw/db subsystems columns dry_run skip_state/;
 
     my $dbh = $db->handle();
 
     my $subsysnr = 0;
     my $totsub = scalar @$subsystems;
 
-    foreach my $subsys_obs (@$subsystems) {
-        $subsysnr++;
+    foreach my $subsys_hdrs (@$subsystems) {
+        $subsysnr ++;
         $log->debug("Processing subsysnr $subsysnr of $totsub");
-
-        # Obtain instrument table values from this Obs object.  Break hash tie.
-        my $subsys_hdrs = {%{$subsys_obs->hdrhash}};
 
         do {
             my $table = 'FILES';
 
             $self->_change_FILES(
-                obs            => $subsys_obs,
                 headers        => $subsys_hdrs,
                 db             => $db,
                 table          => $table,
                 table_columns  => $columns->{$table},
-                file_md5       => $file_md5,
                 dry_run        => $dry_run,
                 skip_state     => $skip_state);
         };
 
-        # Need to calculate the frequency information
-        $self->calc_freq($subsys_obs, $subsys_hdrs, $file_wcs);
-
-        my $grouped;
-        if ($self->can('transform_header')) {
-            (undef, $grouped) = $self->transform_header($subsys_hdrs);
-        }
-
-        foreach my $subh ($grouped ? @{$grouped} : $subsys_hdrs) {
-            $self->_fill_headers_obsid_subsys($subh, $subsys_obs->obsid);
-
-            if ($self->can('merge_by_obsidss')
-                    && exists $subsys_hdrs->{'SUBHEADERS'}) {
-
-                my $sys_sub = $subsys_hdrs->{'SUBHEADERS'};
-                my @temp = $self->merge_by_obsidss($sys_sub);
-
-                @{$sys_sub} = @{$temp[0]}
-                    if scalar @temp;
-            }
-
+        do {
             my $table = $self->instrument_table();
 
             $self->_update_or_insert(
                 dbhandle  => $dbh,
                 table     => $table,
                 table_columns => $columns->{$table},
-                headers   => $subh,
+                headers   => $subsys_hdrs,
                 dry_run   => $dry_run);
 
             if ($dbh->err()) {
@@ -933,7 +918,7 @@ sub insert_subsystems {
 
                 throw JSA::Error($text);
             }
-        }
+        };
     }
 }
 
@@ -1611,8 +1596,6 @@ sub fill_headers_FILES {
         "Created header [file_id] with value [%s]",
         join ',', @{$header->{'file_id'}});
 
-    $self->_fill_headers_obsid_subsys($header, $obs->obsid);
-
     return;
 }
 
@@ -1743,14 +1726,14 @@ sub _combine_inbeam_values {
 =item B<fill_max_subscan>
 
 Fills in the I<max_subscan> value, given a
-headers hash reference and an L<OMP::Info::Obs> object.
+headers hash reference.
 
-    $inst->fill_max_subscan(\%header, $obs);
+    $inst->fill_max_subscan(\%header);
 
 =cut
 
 sub fill_max_subscan {
-    my ($self, $header, $obs) = @_;
+    my ($self, $header) = @_;
 
     $header->{'max_subscan'} = max $self->_find_header(
         headers => $header,
@@ -1908,22 +1891,19 @@ Calculate RA/Dec extent (ICRS) of the observation and the base
 position.  It populates header with corners of grid (in decimal
 degrees).  Status is perl status: 1 is good, 0 bad.
 
-    $status = JSA::EnterData->calc_radec($obs, $header);
+    $status = JSA::EnterData->calc_radec($header, \@filenames);
 
 =cut
 
 sub calc_radec {
-    my ($self, $obs, $headerref) = @_;
+    my ($self, $headerref, $filenames) = @_;
 
     my $log = Log::Log4perl->get_logger('');
-
-    # File names for a subsystem
-    my @filenames = $obs->filename;
 
     # Now need to write these files to a temp file
     my $temp = File::Temp->new(template => '/tmp/radec-XXXXXXXXXX');
     $temp->unlink_on_destroy(1);
-    write_list($temp->filename(), [@filenames]);
+    write_list($temp->filename(), $filenames);
 
     # PA (may not be present)
     my $pa = $headerref->{'MAP_PA'};
@@ -1932,7 +1912,7 @@ sub calc_radec {
     my @command  = $self->get_bound_check_command($temp->filename(), $pa);
 
     $log->info(sprintf(
-        "Performing bound calculation for files starting %s", $filenames[0]));
+        "Performing bound calculation for files starting %s", $filenames->[0]));
 
     # Get the bounds
     my @corner     = qw/TL BR TR BL/;
@@ -1988,8 +1968,8 @@ sub calc_radec {
 
     my %state;
     unless ($tracksys) {
-        %state = read_jcmtstate($filenames[0], 'start', qw/TCS_TR_SYS/);
-        $log->logdie("Error reading state information from file $filenames[0]\n")
+        %state = read_jcmtstate($filenames->[0], 'start', qw/TCS_TR_SYS/);
+        $log->logdie(sprintf("Error reading state information from file %s", $filenames->[0]))
             unless keys %state;
     }
 
@@ -2028,8 +2008,8 @@ sub _change_FILES {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($headers, $obs, $db, $table, $table_columns, $file_md5, $dry_run, $skip_state) =
-        @arg{qw/headers obs db table table_columns file_md5 dry_run skip_state/};
+    my ($headers, $db, $table, $table_columns, $dry_run, $skip_state) =
+        @arg{qw/headers db table table_columns dry_run skip_state/};
 
     throw JSA::Error('_change_FILES: columns not defined')
         unless defined $table_columns;
@@ -2037,9 +2017,6 @@ sub _change_FILES {
     $log->trace(">Processing table: $table");
 
     my $dbh = $db->handle();
-
-    # Create headers that don't exist
-    $self->fill_headers_FILES($headers, $obs, $file_md5);
 
     my $insert_ref = $self->get_insert_values($table_columns, $headers);
 
@@ -2548,7 +2525,7 @@ sub calcbounds_update_bound_cols {
 
         $log->debug('  calculating bounds');
 
-        unless ($self->calc_radec($common, \%header)) {
+        unless ($self->calc_radec(\%header, [$common->filename()])) {
             $log->error('  ERROR  while finding bounds');
 
             unless ($skip_state) {
