@@ -267,29 +267,26 @@ takes a truth value to indicate if to skip darks.
     sub get_end_subheaders {
         my ($self, $subheaders, $skip_dark) = @_;
 
-        my ($init, %start, %end);
-        foreach my $h (@{$subheaders}) {
-            next if $skip_dark
-                 && $self->_is_dark( $h );
+        my ($init, $start, $end);
+        foreach my $h (@$subheaders) {
+            next if $skip_dark && $self->_is_dark($h);
 
-            my %h = %{$h};
-
-            next unless exists $h{$seq[0]}
-                     && exists $h{$seq[1]};
-
-            my ($k_start, $k_end) = map {$h{$_}} @seq;
+            next unless exists $h->{$seq[0]}
+                     && exists $h->{$seq[1]};
 
             unless ($init) {
-                %end = %start = %h;
+                $end = $start = $h;
                 $init ++;
                 next;
             }
 
-            %start = %h if defined $k_start && $start{$seq[0]} >  $k_start;
-            %end   = %h if defined $k_end   &&   $end{$seq[1]} <= $k_end;
+            my ($k_start, $k_end) = map {$h->{$_}} @seq;
+
+            $start = $h if defined $k_start && $start->{$seq[0]} >  $k_start;
+            $end   = $h if defined $k_end   &&   $end->{$seq[1]} <= $k_end;
         }
 
-        return ({%start}, {%end});
+        return ($start, $end);
     }
 
 =item B<push_extreme_start_end>
@@ -319,11 +316,8 @@ end.  For the list of fields see I<_find_first_field>.
 
         my @end = sort {$b->{$seq[1]} <=> $a->{$seq[1]}} @subh;
 
-        my %new;
-        $self->_find_first_field($head, \@start, \%new);
-        $self->_find_first_field($head, \@end, \%new, my $end = 1);
-
-        return $self->push_header($head, {%new});
+        $self->_find_first_field($head, \@start);
+        $self->_find_first_field($head, \@end, my $end = 1);
     }
 
 =item B<push_range_headers_to_main>
@@ -390,8 +384,6 @@ Currently, the fields being moved are ...
 
         $self->push_header($header, $start, $start_re) if $start;
         $self->push_header($header, $end, $end_re) if $end;
-
-        return;
     }
 
 =item B<_find_first_field>
@@ -412,11 +404,11 @@ If the optional value is true, then list consists of ...
     ELEND
 
 
-    # For all the fields in default list, copy to C<%save>.
-    $scuba2->_find_first_field(\@subheader_a, \%save,);
+    # For all the fields in default list, copy to C<%$head>.
+    $scuba2->_find_first_field($head, \@subheader_a);
 
     # Select alternative list.
-    $scuba2->_find_first_field(\@subheader_b, \%save, 1);
+    $scuba2->_find_first_field($head, \@subheader_b, 1);
 
 =cut
 
@@ -433,7 +425,7 @@ If the optional value is true, then list consists of ...
     /;
 
     sub _find_first_field {
-        my ($self, $head, $subheaders, $save, $choose_end) = @_;
+        my ($self, $head, $subheaders, $choose_end) = @_;
 
         return unless $subheaders
                    && scalar @{$subheaders};
@@ -442,64 +434,26 @@ If the optional value is true, then list consists of ...
 
         my $saved;
 
-        SUBHEADER: foreach my $sub (@{$subheaders}) {
-            FIELD: foreach my $f (@field) {
-                next FIELD unless exists $sub->{$f}
-                               && defined $sub->{$f};
+        foreach my $sub (@{$subheaders}) {
+            foreach my $f (@field) {
+                next unless exists $sub->{$f}
+                         && defined $sub->{$f};
 
-                $save->{$f} =  $sub->{$f};
+                $head->{$f} = $sub->{$f};
                 $saved ++;
             }
             last if $saved;
         }
-
-        return $self->_find_in_main_header($head, $save, \@field);
     }
-}
-
-=item B<_find_in_main_header>
-
-Purpose is to save the headers/fields found in main header after
-failing to find headers/fields in C<SUBHEADERS> hash reference.  Only
-plain vlaues or C<ARRAY> types (as defined by L<ref>) are handled.
-
-    $self->_find_in_main_header(\%header, \%save, \@field_names);
-
-=cut
-
-sub _find_in_main_header {
-    my ($self, $head, $save, $fields) = @_;
-
-    # Search in main header now if not found in sub headers.
-    for my $f (@{$fields}) {
-        next if exists $save->{$f}
-             || ! exists $head->{$f};
-
-        my $val = $head->{$f};
-
-        if (ref $val && ref $val ne 'ARRAY') {
-            carp(sprintf
-                'Do not know how to handle %s value of type %s in header.',
-                $f, ref $val);
-            next;
-        }
-
-        $save->{$f} = first {$_} ref $val ? @{$val} : ($val);
-    }
-
-    return;
 }
 
 =item B<push_date_obs_end>
 
 Given a main header hash reference and an array reference of
-subheaders, copies C<DATE-OBS> & C<DATE-END> fields from "darks"
-(subheaders) to the main header.
+subheaders, copies C<DATE-OBS> & C<DATE-END> fields from
+subheaders to the main header.
 
     $scuba2->push_date_obs_end(\%header, \@subheader);
-
-At least two darks are expected.  For definition of dark, see
-I<_is_dark>.
 
 =cut
 
@@ -521,12 +475,9 @@ sub push_date_obs_end {
 
     my (%new, $alt_end);
     ($new{$start}, $alt_end) = (sort @start)[0, -1];
-    $new{$end}   = (sort @end)[-1];
-    for ($new{ $end}) {
-        $_ = $alt_end unless defined $_;
-    }
+    $new{$end} = (sort @end)[-1] // $alt_end;
 
-    return $self->push_header($header, {%new});
+    return $self->push_header($header, \%new);
 }
 
 =item B<push_header>
@@ -543,7 +494,7 @@ regular expression to filter out the keys in of subheader.
 
     # Copy only DATE* fields.
     $scuba2->push_header(\%header,
-                         { 'DATE-OBS' => '20091003T00:00:00',
+                         {'DATE-OBS' => '20091003T00:00:00',
                           'DATE-END' => '20091003T11:11:11',
                           'AMSTART'  => '20091003T01:00:00'
                          },
@@ -557,15 +508,11 @@ sub push_header {
     foreach my $key (keys %{$sub}) {
         next if $re && $key !~ /$re/;
 
-        if (exists $header->{$key}
+        unless (exists $header->{$key}
                 && defined $header->{$key}
                 && ! defined $sub->{$key}) {
-            delete $sub->{ $key };
-            next;
+            $header->{$key} = $sub->{$key};
         }
-
-        $header->{$key} = $sub->{$key};
-        delete $sub->{$key};
     }
 
     return;
