@@ -1101,7 +1101,7 @@ sub prepare_update_hash {
 
     my $rows = $self->_expand_header_arrays($field_values);
 
-    my $sql = 'select * ';
+    my $sql = "select * from $table where $unique_key = ?";
 
     my (%start, %end);
 
@@ -1109,11 +1109,7 @@ sub prepare_update_hash {
         my %range = JSA::DB::TableCOMMON::range_columns();
         @start{keys %range} = ();
         @end{values %range} = ();
-
-        $sql = 'select ' . join ', ', JSA::DB::TableCOMMON::column_names();
     }
-
-    $sql .= " from $table where $unique_key = ?";
 
     my @update_hash;
     my @insert_hash;
