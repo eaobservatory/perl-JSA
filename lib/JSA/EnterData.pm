@@ -990,8 +990,8 @@ Returns (by reference) an array of the primary key values inserted.
 sub insert_hash {
     my ($self, %args) = @_;
 
-    my ($table, $dbh, $insert, $dry_run, $conditional) =
-        @args{qw/table dbhandle insert dry_run conditional/};
+    my ($table, $dbh, $insert, $dry_run, $on_duplicate) =
+        @args{qw/table dbhandle insert dry_run on_duplicate/};
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1005,45 +1005,6 @@ sub insert_hash {
     $log->logdie('Primary key not defined for table: ', $table)
         unless defined $prim_key;
 
-    # Conditional insert mode: for now pre-filter the list of hashes to
-    # be inserted.  Could probably replace this for MySQL with a
-    # INSERT ... ON DUPLICATE KEY statement at some point.
-    if ($conditional) {
-        my @insert_hashes_filtered = ();
-
-        my $sql = sprintf
-            'SELECT COUNT(*) FROM %s WHERE %s = ?',
-            $table, $prim_key;
-
-        my $sth = $dbh->prepare($sql)
-            or $log->logdie(
-                "Could not prepare SQL statement for insert check\n",
-                $dbh->errstr);
-
-        for my $row (@insert_hashes) {
-            my $prim_val = $row->{$prim_key};
-
-            $log->trace('-----> SQL: ' . $sql);
-            $log->trace(Dumper([$prim_val]));
-
-            $sth->execute($prim_val)
-                or $log->logdie('SQL query for insert check failed: ', $dbh->errstr);
-
-            my $result = $sth->fetchall_arrayref();
-
-            $log->logdie('SQL query for insert check did not return 1 row')
-                unless 1 == scalar @$result;
-
-            # If there was no match (i.e. COUNT(*) = 0) then include this in
-            # the filtered list of hashes.
-            push @insert_hashes_filtered, $row unless $result->[0][0];
-        }
-
-        return undef unless scalar @insert_hashes_filtered;
-
-        @insert_hashes = @insert_hashes_filtered;
-    }
-
     my @fields = sort keys %{$insert_hashes[0]}; # sort required
 
     my $sql = sprintf
@@ -1051,6 +1012,9 @@ sub insert_hash {
         $table,
         join(', ', @fields),
         join(', ', ('?') x scalar @fields);
+
+    $sql .= ' ON DUPLICATE KEY UPDATE ' . $on_duplicate
+        if defined $on_duplicate;
 
     my $sth;
     unless ($dry_run) {
@@ -2034,7 +1998,7 @@ sub _change_FILES {
             dbhandle  => $dbh,
             insert    => $hash,
             dry_run   => $dry_run,
-            conditional => 1);
+            on_duplicate => 'md5sum=md5sum');  # Should do nothing
 
         $error = $dbh->errstr
             if $dbh->err();
