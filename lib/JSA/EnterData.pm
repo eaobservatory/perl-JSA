@@ -434,6 +434,7 @@ sub insert_observation {
 
     my $dbh  = $db->handle();
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
+    my $update_only = grep {$_} values %common_arg;
 
     my @file = $observation->simple_filename();
 
@@ -562,7 +563,7 @@ sub insert_observation {
         }
 
         # FILES and instrument-specific tables.
-        unless ($arg{'update_only_obstime'} || $arg{'update_only_inbeam'}) {
+        unless ($update_only) {
             $self->insert_subsystems(
                 db  => $db,
                 columns => $columns,
@@ -1065,28 +1066,10 @@ and one corresponding to insert operations which should be performed:
     Insert operations:
         insert
 
-Additional arguments may be given in hash form:
-
-=over 4
-
-=item update_only_inbeam
-
-Update only the C<INBEAM> header value.
-
-=item update_only_obstime
-
-Update only the times for an observation.
-
-=item update_only_obsradec
-
-Only update obsra, obsdec and their associated tl, tr, bl, br values.
-
-=back
-
 =cut
 
 sub prepare_update_hash {
-    my ($self, $table, $dbh, $field_values, %args) = @_;
+    my ($self, $table, $dbh, $field_values) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1145,8 +1128,6 @@ sub prepare_update_hash {
         my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
         my $am_pm_end = qr/\d\d[APM]$/;
 
-        my $obs_date_re = qr/\bDATE.(?:OBS|END)\b/i;
-
         my $inbeam_re = qr/\b INBEAM \b/xi;
 
         # Allowed to be set undef if key from $field_values is missing, say as a
@@ -1156,20 +1137,7 @@ sub prepare_update_hash {
 
         my $tau_val = qr/\b(?:WVMTAU|TAU225)(?:ST|EN)\b/i;
 
-        my $only_obstime = $table eq 'COMMON' && $args{'update_only_obstime'};
-
-        my $only_inbeam = $table eq 'COMMON' && $args{'update_only_inbeam'};
-
-        my $only_obsradec = $args{'update_only_obsradec'};
-
         foreach my $key (sort keys %{$indb}) {
-            if (($only_inbeam && $key !~ $inbeam_re)
-                    or ($only_obstime && $key !~ $obs_date_re)
-                    or ($only_obsradec && $key !~ /^obs(?:ra|dec)/i)) {
-                $log->trace("skipping field: $key (due to field restriction)");
-                next;
-            }
-
             $log->trace("testing field: $key");
 
             next if ($key !~ $miss_ok && ! exists $field_values->{$key});
@@ -1736,50 +1704,81 @@ Given a hash of a table columns and a hash reference containing observation
 headers, return a hash reference with the table's columns as the keys,
 and the insertion values as the values.
 
-    $vals = $enter->get_insert_values(\%table_columns, \%headers);
+    $vals = $enter->get_insert_values($table, \%table_columns, \%headers, %args);
+
+Additional arguments may be given in hash form:
+
+=over 4
+
+=item update_only_inbeam
+
+Only include the C<INBEAM> header value.
+
+=item update_only_obstime
+
+Only include the times for an observation.
+
+=item update_only_obsradec
+
+Only include obsra, obsdec and their associated tl, tr, bl, br values.
+
+=back
 
 =cut
 
 sub get_insert_values {
-    my ($self, $table_columns, $headers) = @_;
+    my ($self, $table, $table_columns, $headers, %args) = @_;
 
-    # Map headers to columns, translating from the dictionary as
-    # necessary.
-    my $main = $self->extract_column_headers($table_columns, $headers);
+    my $only_obstime = $args{'update_only_obstime'};
+    my $only_inbeam = $args{'update_only_inbeam'};
+    my $only_obsradec = $args{'update_only_obsradec'};
 
-    # Do value transformation
-    $self->transform_value($table_columns, $main);
-
-    return $main;
-}
-
-sub extract_column_headers {
-    my ($self, $table_columns, $hdrhash) = @_;
+    my $obs_date_re = qr/^date.(?:obs|end)$/i;
+    my $inbeam_re = qr/^inbeam$/i;
+    my $obsradec_re = qr/^obs(?:ra|dec)/i;
 
     my $log = Log::Log4perl->get_logger('');
 
     my $dict = $self->get_dictionary();
+    my $unique_key = _get_primary_key($table);
 
+    # Map headers to columns, translating from the dictionary as
+    # necessary.
     my %values;
 
-    foreach my $header (sort {lc $a cmp lc $b} keys %$hdrhash) {
-        my $alt_head = lc $header;
+    foreach my $header (sort {lc $a cmp lc $b} keys %$headers) {
+        my $key = lc $header;
 
-        if (exists $table_columns->{$alt_head}) {
-            $values{ $alt_head } = $hdrhash->{$header};
+        if (exists $table_columns->{$key}) {
+            # Use key name directly.
         }
-        elsif (exists $dict->{$alt_head}
-                && exists $table_columns->{$dict->{$alt_head}}) {
+        elsif (exists $dict->{$key}
+                && exists $table_columns->{$dict->{$key}}) {
             # Found header alias in dictionary and column exists in table
-            my $alias = $dict->{$alt_head};
-            $values{$alias} = $hdrhash->{$header};
+            $key = $dict->{$key};
 
-            $log->trace("  MAPPED header [$header] to column [$alias]");
+            $log->trace("  MAPPED header [$header] to column [$key]");
         }
         else {
             $log->trace("  Could not find alias for header [$header].  Skipped.");
+            next;
         }
+
+        if ($key eq $unique_key) {
+            # Always include primary key to identify record.
+        }
+        elsif (($only_inbeam && $key !~ $inbeam_re)
+                or ($only_obstime && $key !~ $obs_date_re)
+                or ($only_obsradec && $key !~ $obsradec_re)) {
+            $log->trace("  Skipping field: $key (due to field restriction)");
+            next;
+        }
+
+        $values{$key} = $headers->{$header};
     }
+
+    # Do value transformation
+    $self->transform_value($table_columns, \%values);
 
     return \%values;
 }
@@ -1978,7 +1977,7 @@ sub _change_FILES {
 
     my $dbh = $db->handle();
 
-    my $insert_ref = $self->get_insert_values($table_columns, $headers);
+    my $insert_ref = $self->get_insert_values($table, $table_columns, $headers);
 
     my ($files, $error);
     try {
@@ -2050,14 +2049,14 @@ sub _update_or_insert {
 
     $log->trace(">Processing table: $table");
 
-    my $vals = $self->get_insert_values($table_columns, $headers);
-
     # Do any "update_only_XXX" arguments have a true value?
     my $update_args = $args{'update_args'} // {};
     my $update_only = grep {/^update_only/ and $update_args->{$_}} keys %$update_args;
 
+    my $vals = $self->get_insert_values($table, $table_columns, $headers, %$update_args);
+
     my ($change_update, $change_insert) = $self->prepare_update_hash(
-        @args{qw/table dbhandle/}, $vals, %$update_args);
+        @args{qw/table dbhandle/}, $vals);
 
     if ((not $update_only) and scalar @$change_insert) {
         $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
