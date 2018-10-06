@@ -8,6 +8,8 @@ use Data::Dumper;
 use File::Spec;
 use List::Util qw/first/;
 
+use JSA::DB::TableCOMMON;
+
 use parent 'JSA::EnterData';
 
 =head1 NAME
@@ -329,50 +331,14 @@ value to indicate if to skip darks.
     $scuba2->push_range_headers_to_main($header, $_)
         for @{$header->{'SUBHEADERS'}};
 
-Currently, the fields being moved are ...
-
-    ATSTART
-    BKLEGTST BPSTART
-    FRLEGTST
-    HSTSTART HUMSTART
-    SEEDATST SEEINGST SEQSTART
-    TAU225ST TAUDATST
-    WNDDIRST WNDSPDST WVMDATST WVMTAUST
-
-    ATEND
-    BKLEGTEN BPEND
-    FRLEGTEN
-    HSTEND HUMEND
-    SEEDATEN SEEINGEN SEQEND
-    TAU225EN TAUDATEN
-    WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
+Currently, the fields being moved are those defined in JSA::DB::TableCOMMON.
 
 =cut
 
-    my @start_rest = qw[
-        ATSTART
-        BKLEGTST BPSTART
-        FRLEGTST
-        HSTSTART HUMSTART
-        MSSTART
-        SEEDATST SEEINGST SEQSTART
-        TAU225ST TAUDATST
-        WNDDIRST WNDSPDST WVMDATST WVMTAUST
-    ];
-
-    my @end_rest = qw[
-        ATEND
-        BKLEGTEN BPEND
-        FRLEGTEN
-        HSTEND HUMEND
-        MSEND
-        SEEDATEN SEEINGEN SEQEND
-        TAU225EN TAUDATEN
-        WNDDIREN WNDSPDEN WVMDATEN WVMTAUEN
-    ];
-
-    my $start_re = join '|' , @start_rest;
-    my $end_re = join '|', @end_rest;
+    # Note: this doesn't include DATE-OBS and DATE-END because the
+    # column names are date_obs and date_end -- those are handled separately.
+    my $start_re = join '|', JSA::DB::TableCOMMON::range_start_columns();
+    my $end_re = join '|', JSA::DB::TableCOMMON::range_end_columns();
     $_ = qr/(?:$_)/ix for $start_re, $end_re;
 
     sub push_range_headers_to_main {
