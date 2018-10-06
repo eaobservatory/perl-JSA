@@ -11,8 +11,6 @@ sub range_start_columns {
         elstart
         frlegtst
         hststart humstart
-        msstart
-        req_mintau
         seedatst seeingst seqstart
         tau225st taudatst
         wnddirst wndspdst wvmdatst wvmtaust
@@ -27,8 +25,6 @@ sub range_end_columns {
         elend
         frlegten
         hstend humend
-        msend
-        req_maxtau
         seedaten seeingen seqend
         tau225en taudaten
         wnddiren wndspden wvmdaten wvmtauen
