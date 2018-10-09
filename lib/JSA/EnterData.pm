@@ -1089,9 +1089,8 @@ sub prepare_update_hash {
     my (%start, %end);
 
     if ($table eq 'COMMON') {
-        my %range = JSA::DB::TableCOMMON::range_columns();
-        @start{keys %range} = ();
-        @end{values %range} = ();
+        %start = map {$_ => undef} JSA::DB::TableCOMMON::range_start_columns();
+        %end = map {$_ => undef} JSA::DB::TableCOMMON::range_end_columns();
     }
 
     my @update_hash;

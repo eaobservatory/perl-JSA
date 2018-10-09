@@ -31,10 +31,4 @@ sub range_end_columns {
       /;
 }
 
-sub range_columns {
-    my %range;
-    @range{range_start_columns()} = range_end_columns();
-    return %range;
-}
-
 1;
