@@ -34,7 +34,7 @@ use Data::Dumper;
 use File::Basename;
 use File::Temp;
 use List::MoreUtils qw/any all/;
-use List::Util qw/min max/;
+use List::Util qw/min max minstr maxstr/;
 use Log::Log4perl;
 use Scalar::Util qw/blessed looks_like_number/;
 
@@ -1069,7 +1069,7 @@ and one corresponding to insert operations which should be performed:
 =cut
 
 sub prepare_update_hash {
-    my ($self, $table, $dbh, $field_values) = @_;
+    my ($self, $table, $dbh, $field_values, %arg) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1095,7 +1095,7 @@ sub prepare_update_hash {
 
     my @update_hash;
     my @insert_hash;
-    foreach my $row (@{$rows}) {
+    foreach my $row (@$rows) {
         my $unique_val = $row->{$unique_key};
 
         $log->trace(Dumper([$unique_key, $unique_val]));
@@ -1107,7 +1107,7 @@ sub prepare_update_hash {
             if $dbh->err;
 
         # how many rows
-        my $count = scalar @{$ref};
+        my $count = scalar @$ref;
 
         if (0 == $count) {
             # Row does not already exist: add to the insert list.
@@ -1123,56 +1123,58 @@ sub prepare_update_hash {
 
         my $indb = $ref->[0];
 
+        # Determine whether we are handling data pertaining to the start and/or
+        # end of the observation.  Note that we can only do this for the COMMON
+        # table, since only it has date_obs and date_end values, but it is also
+        # the only table which currently has range values.
+        my $is_start = 1;
+        my $is_end = 1;
+        if (defined $arg{'date_start'}
+                and exists $indb->{'date_obs'}
+                and defined $indb->{'date_obs'}) {
+            my $db_date_start = make_datetime($indb->{'date_obs'});
+            $is_start = 0 unless $arg{'date_start'} <= $db_date_start;
+            $log->debug(sprintf 'This data %s the start of the observation',
+                $is_start ? 'covers' : 'does not cover');
+        }
+        if (defined $arg{'date_end'}
+                and exists $indb->{'date_end'}
+                and defined $indb->{'date_end'}) {
+            my $db_date_end = make_datetime($indb->{'date_end'});
+            $is_end = 0 unless $arg{'date_end'} >= $db_date_end;
+            $log->debug(sprintf 'This data %s the end of the observation',
+                $is_end ? 'covers' : 'does not cover');
+        }
+
         my %differ = ();
         my $ymd_start = qr/^\d{4}-\d{2}-\d{2}/;
-        my $am_pm_end = qr/\d\d[APM]$/;
 
-        my $inbeam_re = qr/\b INBEAM \b/xi;
-
-        # Allowed to be set undef if key from $field_values is missing, say as a
-        # result of external header munging.
-        my $miss_ok = _or_regex(qw/INBEAM/,
-                                _suffix_start_end_headers(qw/SEEING SEEDAT/));
-
-        my $tau_val = qr/\b(?:WVMTAU|TAU225)(?:ST|EN)\b/i;
-
-        foreach my $key (sort keys %{$indb}) {
+        foreach my $key (sort keys %$row) {
             $log->trace("testing field: $key");
 
-            next if ($key !~ $miss_ok && ! exists $field_values->{$key});
-
-            my $new = $field_values->{$key};
+            my $new = $row->{$key};
             my $old = $indb->{$key};
 
             next unless (defined $old || defined $new);
 
             $log->trace("continuing with $key");
 
-            my %test = (
-                start => exists $start{$key},
-                end   => exists $end{$key},
-                old   => $old,
-                new   => $new,
-            );
-
-            my $in_range = any {$test{$_}} (qw/start end/);
-
             # Temporarily list columns where we always want to keep
             # the maximum value here.
             my $keep_max = grep {$_ eq $key} qw/max_subscan/;
 
             # INBEAM header: special handling.
-            if ($key =~ $inbeam_re) {
+            if ($key eq 'inbeam') {
                 my $combined = $self->_combine_inbeam_values($old, $new);
                 $differ{$key} = $combined;
-                $log->trace($key . ' = ' . ($combined // '<undef>'));
+                $log->trace("$key = " . ($combined // '<undef>') . ' (combined inbeam)');
                 next;
             }
 
             # Not defined currently - inserting new value.
             if (defined $new && ! defined $old) {
                 $differ{$key} = $new;
-                $log->trace( qq[$key = ] . $new );
+                $log->trace("$key = $new");
                 next;
             }
 
@@ -1184,67 +1186,70 @@ sub prepare_update_hash {
                 next;
             }
 
-            # Dates.
-            if ($new =~ $ymd_start
-                    && ($old =~ $ymd_start || $old =~ $am_pm_end)) {
-                if ($in_range) {
-                    $new = _find_extreme_value(%test,
-                                               'new>old' => _compare_dates($new, $old));
-                    $log->trace("  possible new value for $key = " . $new );
+            # Determine if the value has changed: skip this key otherwise.
+            if ($new =~ $ymd_start and $old =~ $ymd_start) {
+                if (make_datetime($new) == make_datetime($old)) {
+                    $log->trace("$key <skipped> (date unchanged)");
+                    next;
                 }
-
-                if ($new ne $old) {
-                    $differ{$key} = $new;
-                    $log->trace("$key = " . $new);
+            }
+            elsif (looks_like_number($new)) {
+                if ($new =~ /\./) {
+                    # floating point
+                    my $diff = abs($old - $new);
+                    unless ($diff > 0.000001) {
+                        $log->trace("$key <skipped> (float unchanged)");
+                        next;
+                    }
                 }
-
+                elsif ($new == $old) {
+                    $log->trace("$key <skipped> (number unchanged)");
+                    next;
+                }
+            }
+            elsif ($new eq $old) {
+                $log->trace("$key <skipped> (string unchanged)");
                 next;
             }
 
-            if (looks_like_number($new)) {
-                # Override range check for tau values as there is no relation between start
-                # & end values; these are weather dependent.
-                if ($key =~ $tau_val && $new != $old) {
+            # Range values.
+            if (exists $start{$key}) {
+                if ($is_start) {
                     $differ{$key} = $new;
-                    $log->trace("$key = " . $new);
-                }
-                elsif ($in_range) {
-                    $new = _find_extreme_value(%test, 'new>old' => $new > $old);
-
-                    if ($new != $old) {
-                        $differ{$key} = $new if $new != $old;
-                        $log->trace("$key = " . $new);
-                    }
-                }
-                elsif ($keep_max) {
-                    if ($new > $old) {
-                        $differ{$key} = $new;
-                        $log->trace("$key = " . $new . " (new maximum)");
-                    }
+                    $log->trace("$key = $new (is start)");
                 }
                 else {
-                    if ($new =~ /\./) {
-                      # floating point
-                      my $diff = abs($old - $new);
-                      if ($diff > 0.000001) {
-                          $differ{$key} = $new;
-                          $log->trace("$key = " . $new);
-                      }
-                    }
-                    elsif ( $new != $old ) {
-                        $differ{$key} = $new;
-                        $log->trace("$key = " . $new );
-                    }
+                    $log->trace("$key <skipped> (not start)");
                 }
-
                 next;
             }
 
-            # String.
-            if ($new ne $old) {
-                $differ{$key} = $new;
-                $log->trace("$key = " . $new);
+            if (exists $end{$key}) {
+                if ($is_end) {
+                    $differ{$key} = $new;
+                    $log->trace("$key = $new (is end)");
+                }
+                else {
+                    $log->trace("$key <skipped> (not end)");
+                }
+                next;
             }
+
+            # Maximum value.
+            if ($keep_max) {
+                if ($new > $old) {
+                    $differ{$key} = $new;
+                    $log->trace("$key = " . $new . " (new maximum)");
+                }
+                else {
+                    $log->trace("$key <skipped> (not larger)");
+                }
+                next;
+            }
+
+            # Any other value (number of string).
+            $differ{$key} = $new;
+            $log->trace("$key = $new (changed)");
         }
 
         $log->debug("differences to update: " . (join ' ', keys %differ));
@@ -1258,27 +1263,6 @@ sub prepare_update_hash {
     }
 
     return (\@update_hash, \@insert_hash);
-}
-
-sub _suffix_start_end_headers {
-    return map {; "${_}ST" , "${_}EN"} @_;
-}
-
-sub _or_regex_string {
-    return join '|',
-        map {quotemeta($_)}
-        sort {length $b <=> length $a}
-        @_;
-}
-
-sub _or_regex {
-    my $re = _or_regex_string(@_);
-    return qr/\b(?:$re)/i;
-}
-
-sub _or_regex_suffix_start_end_headers {
-    my $re = _or_regex_string( @_ );
-    return qr/\b (?: $re )(?: ST|EN )/ix;
 }
 
 =item B<_get_primary_key>
@@ -2048,6 +2032,18 @@ sub _update_or_insert {
 
     $log->trace(">Processing table: $table");
 
+    # This function is currently only used for tables where we should only
+    # have a single set of values to insert, but take the min/max values in
+    # case it is ever used for the FILES table.  Assume that values for each
+    # of the date headers are in the same format so we can just take the min
+    # or max value by string comparison.  Extract now (rather than on the
+    # output of "get_insert_values") in case tables other than COMMON have
+    # range headers added to them in future.
+    my $date_start = minstr $self->_find_header(
+        headers => $headers, name => 'DATE-OBS', value => 1);
+    my $date_end = maxstr $self->_find_header(
+        headers => $headers, name => 'DATE-END', value => 1);
+
     # Do any "update_only_XXX" arguments have a true value?
     my $update_args = $args{'update_args'} // {};
     my $update_only = grep {/^update_only/ and $update_args->{$_}} keys %$update_args;
@@ -2055,7 +2051,9 @@ sub _update_or_insert {
     my $vals = $self->get_insert_values($table, $table_columns, $headers, %$update_args);
 
     my ($change_update, $change_insert) = $self->prepare_update_hash(
-        @args{qw/table dbhandle/}, $vals);
+        @args{qw/table dbhandle/}, $vals,
+        date_start => make_datetime($date_start),
+        date_end => make_datetime($date_end));
 
     if ((not $update_only) and scalar @$change_insert) {
         $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
@@ -2265,38 +2263,6 @@ a cached object is returned.
         return $xfer{$name} = new JSA::DB::TableTransfer(
             db => $db, transactions => 0);
     }
-}
-
-sub _compare_dates {
-    my ($new, $old) = @_;
-
-    # Sometimes a date-time value only has date, in which case time is appended
-    # without a 'T'.
-    $new =~ s/ /T/;
-
-    $new = make_datetime($new);
-    $old = make_datetime($old);
-
-    return $new > $old;
-}
-
-sub _find_extreme_value {
-    my (%arg) = @_;
-
-    my $gt = $arg{'new>old'};
-    my ($old, $new, $start, $end) = @arg{qw/old new start end/};
-
-    # Smaller|earlier value.
-    if ($start) {
-        return ! $gt ? $new : $old;
-    }
-
-    # Larger|later value.
-    if ($end) {
-        return $gt ? $new : $old;
-    }
-
-    throw JSA::Error "Neither 'start' nor 'end' type was specified";
 }
 
 sub _basename {
