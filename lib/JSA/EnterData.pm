@@ -1299,8 +1299,7 @@ sub prepare_update_hash {
             differ        => \%differ,
             unique_val    => $unique_val,
             unique_key    => $unique_key,
-        };
-
+        } if scalar %differ;
     }
 
     return (\@update_hash, \@insert_hash);
