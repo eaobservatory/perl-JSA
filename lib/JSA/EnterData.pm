@@ -293,6 +293,11 @@ Options:
 
 Calculate observation bounds.
 
+=item overwrite
+
+Overwrite mode -- any values to be updated are overwritten rather
+than adjusted allowing for incremental data entry.
+
 =item dry_run
 
 Do not write to the database.
@@ -337,6 +342,7 @@ sub prepare_and_insert {
 
     my %update_args = map {$_ => $arg{$_}} qw/
         calc_radec
+        overwrite
         process_simulation
         update_only_inbeam update_only_obstime/;
 
@@ -429,8 +435,8 @@ sub insert_observation {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $observation, $columns, $file_wcs, $file_md5, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/db observation columns file_wcs file_md5 dry_run skip_state/;
+    my ($db, $observation, $columns, $file_wcs, $file_md5, $overwrite, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/db observation columns file_wcs file_md5 overwrite dry_run skip_state/;
 
     my $dbh  = $db->handle();
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
@@ -552,6 +558,7 @@ sub insert_observation {
             table      => $table,
             table_columns => $columns->{$table},
             headers    => $common_hdrs,
+            overwrite  => $overwrite,
             dry_run    => $dry_run);
 
         if ($dbh->err()) {
@@ -568,6 +575,7 @@ sub insert_observation {
                 db  => $db,
                 columns => $columns,
                 subsystems => \@subsystems,
+                overwrite => $overwrite,
                 dry_run => $dry_run,
                 skip_state => $skip_state);
         }
@@ -877,8 +885,8 @@ sub insert_subsystems {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $subsystems, $columns, $dry_run, $skip_state) =
-        map {$args{$_}} qw/db subsystems columns dry_run skip_state/;
+    my ($db, $subsystems, $columns, $overwrite, $dry_run, $skip_state) =
+        map {$args{$_}} qw/db subsystems columns overwrite dry_run skip_state/;
 
     my $dbh = $db->handle();
 
@@ -909,6 +917,7 @@ sub insert_subsystems {
                 table     => $table,
                 table_columns => $columns->{$table},
                 headers   => $subsys_hdrs,
+                overwrite => $overwrite,
                 dry_run   => $dry_run);
 
             if ($dbh->err()) {
@@ -1066,6 +1075,26 @@ and one corresponding to insert operations which should be performed:
     Insert operations:
         insert
 
+Additional options:
+
+=over 4
+
+=item date_start
+
+Date corresponding to the start of the data provided (DateTime object).
+
+=item date_end
+
+Date corresponding to the end of the data provided (DateTime object).
+
+=item overwrite
+
+If set to a true value, generate update operations which would simply
+overwrite all values which differ from those currently in the database,
+ignoring the usual update rules.
+
+=back
+
 =cut
 
 sub prepare_update_hash {
@@ -1092,6 +1121,8 @@ sub prepare_update_hash {
         %start = map {$_ => undef} JSA::DB::TableCOMMON::range_start_columns();
         %end = map {$_ => undef} JSA::DB::TableCOMMON::range_end_columns();
     }
+
+    my $is_overwrite = $arg{'overwrite'};
 
     my @update_hash;
     my @insert_hash;
@@ -1163,12 +1194,15 @@ sub prepare_update_hash {
             # the maximum value here.
             my $keep_max = grep {$_ eq $key} qw/max_subscan/;
 
-            # INBEAM header: special handling.
-            if ($key eq 'inbeam') {
-                my $combined = $self->_combine_inbeam_values($old, $new);
-                $differ{$key} = $combined;
-                $log->trace("$key = " . ($combined // '<undef>') . ' (combined inbeam)');
-                next;
+            # Skip pre-defined-check tests in overwrite mode.
+            unless ($is_overwrite) {
+                # INBEAM header: special handling.
+                if ($key eq 'inbeam') {
+                    my $combined = $self->_combine_inbeam_values($old, $new);
+                    $differ{$key} = $combined;
+                    $log->trace("$key = " . ($combined // '<undef>') . ' (combined inbeam)');
+                    next;
+                }
             }
 
             # Not defined currently - inserting new value.
@@ -1209,6 +1243,13 @@ sub prepare_update_hash {
             }
             elsif ($new eq $old) {
                 $log->trace("$key <skipped> (string unchanged)");
+                next;
+            }
+
+            # Overwrite mode?  If so update unconditionally.
+            if ($is_overwrite) {
+                $differ{$key} = $new;
+                $log->trace("$key = $new (overwrite mode)");
                 next;
             }
 
@@ -2015,6 +2056,27 @@ methods.
 
     $enter->_update_or_insert(%hash);
 
+Additional options:
+
+=over 4
+
+=item update_args
+
+Hash of field restiction options (passed to L<get_insert_values>).
+
+If any "update_only" arguments are given with true values then
+no insert operations are performed.
+
+=item dry_run
+
+Dry-run mode.
+
+=item overwrite
+
+Overwrite mode (passed to L<prepare_update_hash>).
+
+=back
+
 =cut
 
 sub _update_or_insert {
@@ -2053,7 +2115,8 @@ sub _update_or_insert {
     my ($change_update, $change_insert) = $self->prepare_update_hash(
         @args{qw/table dbhandle/}, $vals,
         date_start => make_datetime($date_start),
-        date_end => make_datetime($date_end));
+        date_end => make_datetime($date_end),
+        overwrite => $args{'overwrite'});
 
     if ((not $update_only) and scalar @$change_insert) {
         $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
@@ -2472,10 +2535,12 @@ sub calcbounds_update_bound_cols {
 
         $log->info('  UPDATING headers with bounds');
 
-        $self->_update_or_insert(%pass,
-                                 headers    => \%header,
-                                 dry_run    => $dry_run,
-                                 update_args => {update_only_obsradec => 1});
+        $self->_update_or_insert(
+            %pass,
+            headers     => \%header,
+            dry_run     => $dry_run,
+            overwrite   => 1,
+            update_args => {update_only_obsradec => 1});
     }
 
     return $n_err;
