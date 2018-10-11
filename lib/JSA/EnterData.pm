@@ -106,6 +106,10 @@ sub new {
         _cache_touched => {},
     }, $class;
 
+    if (exists $args{'debug_fh'} and defined $args{'debug_fh'}) {
+        $obj->{'_debug_fh'} = $args{'debug_fh'};
+    }
+
     return $obj;
 }
 
@@ -2009,6 +2013,10 @@ sub _change_FILES {
 
         my $hash = $self->_expand_header_arrays($insert_ref);
 
+        if (exists $self->{'_debug_fh'}) {
+            $self->{'_debug_fh'}->print(Data::Dumper->Dump([$hash], ['FILES']));
+        }
+
         $files = $self->insert_hash(
             table     => $table,
             dbhandle  => $dbh,
@@ -2111,11 +2119,21 @@ sub _update_or_insert {
 
     my $rows = $self->_expand_header_arrays($vals);
 
+    if (exists $self->{'_debug_fh'}) {
+        $self->{'_debug_fh'}->print(Data::Dumper->Dump([$rows], ["${table}_values"]));
+    }
+
     my ($change_update, $change_insert) = $self->prepare_update_hash(
         @args{qw/table dbhandle/}, $rows,
         date_start => make_datetime($date_start),
         date_end => make_datetime($date_end),
         overwrite => $args{'overwrite'});
+
+    if (exists $self->{'_debug_fh'}) {
+        $self->{'_debug_fh'}->print(Data::Dumper->Dump(
+            [$change_insert, $change_update],
+            ["${table}_insert", "${table}_update"]));
+    }
 
     if ((not $update_only) and scalar @$change_insert) {
         $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
