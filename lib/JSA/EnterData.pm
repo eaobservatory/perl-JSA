@@ -1098,7 +1098,7 @@ ignoring the usual update rules.
 =cut
 
 sub prepare_update_hash {
-    my ($self, $table, $dbh, $field_values, %arg) = @_;
+    my ($self, $table, $dbh, $rows, %arg) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1110,8 +1110,6 @@ sub prepare_update_hash {
 
     $log->logdie("No unique keys found for table name: '$table'\n")
         unless defined $unique_key;
-
-    my $rows = $self->_expand_header_arrays($field_values);
 
     my $sql = "select * from $table where $unique_key = ?";
 
@@ -2111,8 +2109,10 @@ sub _update_or_insert {
 
     my $vals = $self->get_insert_values($table, $table_columns, $headers, %$update_args);
 
+    my $rows = $self->_expand_header_arrays($vals);
+
     my ($change_update, $change_insert) = $self->prepare_update_hash(
-        @args{qw/table dbhandle/}, $vals,
+        @args{qw/table dbhandle/}, $rows,
         date_start => make_datetime($date_start),
         date_end => make_datetime($date_end),
         overwrite => $args{'overwrite'});
