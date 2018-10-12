@@ -1164,8 +1164,18 @@ sub prepare_update_hash {
                 # INBEAM header: special handling.
                 if ($key eq 'inbeam') {
                     my $combined = $self->_combine_inbeam_values($old, $new);
-                    $differ{$key} = $combined;
-                    $log->trace("$key = " . ($combined // '<undef>') . ' (combined inbeam)');
+                    unless (defined $old or defined $combined) {
+                        $log->trace("$key <skipped> (combined inbeam still undefined)");
+                    }
+                    elsif ((defined $combined and not defined $old) or
+                           (defined $old and not defined $combined) or
+                           ($combined ne $old)) {
+                        $differ{$key} = $combined;
+                        $log->trace("$key = " . ($combined // '<undef>') . ' (combined inbeam)');
+                    }
+                    else {
+                        $log->trace("$key <skipped> (combined inbeam unchanged)");
+                    }
                     next;
                 }
             }
