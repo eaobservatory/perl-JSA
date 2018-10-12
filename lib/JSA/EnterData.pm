@@ -551,37 +551,71 @@ sub insert_observation {
             }
         }
 
-        # COMMON table.
         $db->begin_trans() if not $dry_run;
 
-        my $table = 'COMMON';
+        # COMMON table.
+        do {
+            my $table = 'COMMON';
 
-        $self->_update_or_insert(
-            update_args => \%common_arg,
-            dbhandle   => $dbh,
-            table      => $table,
-            table_columns => $columns->{$table},
-            headers    => $common_hdrs,
-            overwrite  => $overwrite,
-            dry_run    => $dry_run);
+            $self->_update_or_insert(
+                update_args => \%common_arg,
+                dbhandle   => $dbh,
+                table      => $table,
+                table_columns => $columns->{$table},
+                headers    => $common_hdrs,
+                overwrite  => $overwrite,
+                dry_run    => $dry_run);
 
-        if ($dbh->err()) {
-            my $text = $dbh->errstr();
+            if ($dbh->err()) {
+                my $text = $dbh->errstr();
 
-            $db->rollback_trans();
+                $db->rollback_trans() if not $dry_run;
 
-            throw JSA::Error($text);
-        }
+                throw JSA::Error($text);
+            }
+        };
 
         # FILES and instrument-specific tables.
         unless ($update_only) {
-            $self->insert_subsystems(
-                db  => $db,
-                columns => $columns,
-                subsystems => \@subsystems,
-                overwrite => $overwrite,
-                dry_run => $dry_run,
-                skip_state => $skip_state);
+            my $subsysnr = 0;
+            my $totsub = scalar @subsystems;
+
+            foreach my $subsys_hdrs (@subsystems) {
+                $subsysnr ++;
+                $log->debug("Processing subsysnr $subsysnr of $totsub");
+
+                do {
+                    my $table = $self->instrument_table();
+
+                    $self->_update_or_insert(
+                        dbhandle  => $dbh,
+                        table     => $table,
+                        table_columns => $columns->{$table},
+                        headers   => $subsys_hdrs,
+                        overwrite => $overwrite,
+                        dry_run   => $dry_run);
+
+                    if ($dbh->err()) {
+                        my $text = $dbh->errstr();
+
+                        $db->rollback_trans() if not $dry_run;
+
+                        throw JSA::Error($text);
+                    }
+                };
+
+                do {
+                    my $table = 'FILES';
+
+                    $self->_change_FILES(
+                        headers        => $subsys_hdrs,
+                        db             => $db,
+                        table          => $table,
+                        table_columns  => $columns->{$table},
+                        dry_run        => $dry_run,
+                        skip_state     => $skip_state);
+                };
+            }
         }
 
         $db->commit_trans() if not $dry_run;
@@ -864,76 +898,6 @@ sub is_simulation {
     }
 
     return;
-}
-
-
-=item B<insert_subsystems>
-
-Adds observation subsystems into the instrument and FILES tables.
-
-The observations array reference is for a given run number.
-
-    $enter->insert_subsystems(
-        db         => $db,
-        columns    => \%cols,
-        subsystems => \@headers_per_subsystem,
-        dry_run    => $dry_run,
-        skip_state => $skip_state);
-
-It is called by the I<insert_observation> method.
-
-=cut
-
-sub insert_subsystems {
-    my ($self, %args) = @_;
-
-    my $log = Log::Log4perl->get_logger('');
-
-    my ($db, $subsystems, $columns, $overwrite, $dry_run, $skip_state) =
-        map {$args{$_}} qw/db subsystems columns overwrite dry_run skip_state/;
-
-    my $dbh = $db->handle();
-
-    my $subsysnr = 0;
-    my $totsub = scalar @$subsystems;
-
-    foreach my $subsys_hdrs (@$subsystems) {
-        $subsysnr ++;
-        $log->debug("Processing subsysnr $subsysnr of $totsub");
-
-        do {
-            my $table = 'FILES';
-
-            $self->_change_FILES(
-                headers        => $subsys_hdrs,
-                db             => $db,
-                table          => $table,
-                table_columns  => $columns->{$table},
-                dry_run        => $dry_run,
-                skip_state     => $skip_state);
-        };
-
-        do {
-            my $table = $self->instrument_table();
-
-            $self->_update_or_insert(
-                dbhandle  => $dbh,
-                table     => $table,
-                table_columns => $columns->{$table},
-                headers   => $subsys_hdrs,
-                overwrite => $overwrite,
-                dry_run   => $dry_run);
-
-            if ($dbh->err()) {
-                my $text = $dbh->errstr();
-
-                $db->rollback_trans() if not $dry_run;
-                $log->debug("$text");
-
-                throw JSA::Error($text);
-            }
-        };
-    }
 }
 
 =item B<_expand_header_arrays>
