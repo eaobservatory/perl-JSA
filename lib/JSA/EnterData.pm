@@ -527,6 +527,10 @@ sub insert_observation {
         return;
     }
 
+    if ($self->can('combine_int_time')) {
+        $common_hdrs->{'INT_TIME'} = $self->combine_int_time(\@subsystems);
+    }
+
     $log->debug(sprintf "[%s]...", join ', ', @file);
 
     if (! $arg{'process_simulation'} && $self->is_simulation($common_hdrs)) {

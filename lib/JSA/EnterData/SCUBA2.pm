@@ -319,6 +319,37 @@ sub get_subarray_count {
     return scalar keys %seen;
 }
 
+=item B<combine_int_time>
+
+Combine INT_TIME values from multiple "transformed" headers.
+
+=cut
+
+sub combine_int_time {
+    my ($self, $headers) = @_;
+
+    my $new_mult = $self->get_subarray_count($headers);
+    return 0.0 unless $new_mult > 0;
+
+    my $total = 0.0;
+
+    foreach my $header (@$headers) {
+        my $int_time = undef;
+
+        while (my ($key, $value) = each %$header) {
+            $int_time = $value if $key =~ /^int_time$/i;
+        }
+
+        next unless $int_time;
+
+        my $mult = $self->get_subarray_count([$header]);
+
+        $total += $int_time * $mult;
+    }
+
+    return $total / $new_mult;
+}
+
 BEGIN {
   my @seq = qw/SEQSTART SEQEND/;
 
