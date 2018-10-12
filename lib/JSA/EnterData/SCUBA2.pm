@@ -216,9 +216,7 @@ sub transform_header {
 
     $self->append_array_column(\%new, $header);
 
-    my $subh = exists $header->{'SUBHEADERS'}
-             ? $header->{'SUBHEADERS'}
-             : [];
+    my $subh = exists $header->{'SUBHEADERS'} ? $header->{'SUBHEADERS'} : [];
 
     for my $s (@{$subh}) {
         $self->append_array_column(\%new, $s);
@@ -245,7 +243,80 @@ sub transform_header {
 
     $self->push_range_headers_to_main(\%new, $subh, $skip);
 
+    # Determine integration time.  This is computed as total (double-counting
+    # by number of subarrays) divided by number of subarrays to allow for
+    # incremental updates which may feature data from different numbers of
+    # subarrays.
+    do {
+        my $total = $self->get_total_int_time($header);
+        my $mult = $self->get_subarray_count([\%new]);
+        $new{'INT_TIME'} = ($mult > 0) ? ($total / $mult) : 0.0;
+    };
+
     return \%new;
+}
+
+=item B<get_total_int_time>
+
+Extract the total of the INT_TIME header values for headers
+corresponding to the main part of the observation.
+
+Note: this double-counts time spent integrating between the various
+sub-arrays.  Use L<get_subarray_count> to determine the corresponding
+factor.
+
+=cut
+
+sub get_total_int_time {
+    my ($self, $header) = @_;
+
+    my $subh = exists $header->{'SUBHEADERS'} ? $header->{'SUBHEADERS'} : [];
+
+    # Re-use the logic from 'calcbounds_update_bound_cols' that the main part
+    # is that where OBS_TYPE = SEQ_TYPE.
+    my $obs_type = $self->_find_header(
+        headers => $header, name => 'OBS_TYPE', value => 1);
+
+    my $total = 0.0;
+
+    foreach my $s ($header, @$subh) {
+        my $seq_type = exists $s->{'SEQ_TYPE'} ? $s->{'SEQ_TYPE'} : $header->{'SEQ_TYPE'};
+        my $int_time = exists $s->{'INT_TIME'} ? $s->{'INT_TIME'} : $header->{'INT_TIME'};
+        $total += $int_time if defined $int_time and $seq_type eq $obs_type;
+    }
+
+    return $total;
+}
+
+=item B<get_subarray_count>
+
+Extract the number of subarrays in use.
+
+This should be applied to an array of "transformed" headers
+(see L<transform_header>) as it uses the SUBARRAY_a/b/c/d headers.
+
+=cut
+
+sub get_subarray_count {
+    my ($self, $headers) = @_;
+
+    my %seen = ();
+
+    foreach my $header (@$headers) {
+        my $filter = undef;
+
+        while (my ($key, $value) = each %$header) {
+            $filter = $value if $key =~ /^filter$/i;
+        }
+
+        next unless defined $filter;
+
+        while (my ($key, $value) = each %$header) {
+            $seen{$filter . uc($key)} = 1 if $key =~ /^subarray_.$/i and $value;
+        }
+    }
+
+    return scalar keys %seen;
 }
 
 BEGIN {
