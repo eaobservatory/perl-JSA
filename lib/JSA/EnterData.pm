@@ -1036,9 +1036,8 @@ Returns two lists of hashes, one corresponding to update operations
 and one corresponding to insert operations which should be performed:
 
     Update operations:
+        key
         differ
-        unique_key
-        unique_val
 
     Insert operations:
         insert
@@ -1262,9 +1261,8 @@ sub prepare_update_hash {
         $log->debug("differences to update: " . (join ' ', keys %differ));
 
         push @update_hash, {
-            differ        => \%differ,
-            unique_val    => $unique_val,
-            unique_key    => $unique_key,
+            key    => $unique_val,
+            differ => \%differ,
         } if scalar %differ;
     }
 
@@ -1314,6 +1312,8 @@ sub update_hash {
 
     my $log = Log::Log4perl->get_logger('');
 
+    my $unique_key = _get_primary_key($table);
+
     foreach my $row (@$changes) {
         my @sorted = sort keys %{$row->{'differ'}};
         next unless scalar @sorted;
@@ -1322,10 +1322,10 @@ sub update_hash {
             "UPDATE %s SET %s WHERE %s = ?",
             $table,
             (join ', ', map {" $_ = ? "} @sorted),
-            $row->{'unique_key'});
+            $unique_key);
 
         my @bind = map {$row->{'differ'}{$_}} @sorted;
-        push @bind, $row->{'unique_val'};
+        push @bind, $row->{'key'};
 
         $log->trace($sql);
         $log->trace(Dumper(\@bind));
