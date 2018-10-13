@@ -562,11 +562,12 @@ sub insert_observation {
         my $vals_common = $self->get_insert_values(
             $table_common, $columns->{$table_common}, $common_hdrs, %common_arg);
 
-        # Should not be necessary here!
-        $vals_common = $self->_expand_header_arrays($vals_common);
+        if (grep {ref $_} values %$vals_common) {
+            throw JSA::Error('Multi-valued data found in COMMON values');
+        }
 
-        my $existing_common = [map {
-            $self->_get_existing_values($dbh, $table_common, $_)} @$vals_common];
+        my $existing_common = $self->_get_existing_values(
+            $dbh, $table_common, $vals_common);
 
         my @vals_inst = ();
         my @existing_inst = ();
@@ -574,13 +575,14 @@ sub insert_observation {
             my $vals = $self->get_insert_values(
                 $table_inst, $columns->{$table_inst}, $subsys_hdrs);
 
-            # Should not be necessary here!
-            $vals = $self->_expand_header_arrays($vals);
+            if (grep {ref $_} values %$vals) {
+                throw JSA::Error('Multi-valued data found in instrument table values');
+            }
 
             push @vals_inst, $vals;
 
-            push @existing_inst, [map {
-                $self->_get_existing_values($dbh, $table_inst, $_)} @$vals];
+            push @existing_inst, $self->_get_existing_values(
+                $dbh, $table_inst, $vals);
         }
 
         if ($arg{'calc_radec'}
@@ -600,8 +602,8 @@ sub insert_observation {
             update_only => $update_only,
             dbhandle    => $dbh,
             table       => $table_common,
-            values      => $vals_common,
-            existing    => $existing_common,
+            values      => [$vals_common],
+            existing    => [$existing_common],
             overwrite   => $overwrite,
             date_start  => $date_start,
             date_end    => $date_end,
@@ -626,8 +628,8 @@ sub insert_observation {
                 $self->_update_or_insert(
                     dbhandle   => $dbh,
                     table      => $table_inst,
-                    values     => $values,
-                    existing   => $existing,
+                    values     => [$values],
+                    existing   => [$existing],
                     overwrite  => $overwrite,
                     date_start => $date_start,
                     date_end   => $date_end,
@@ -2160,10 +2162,6 @@ sub _update_or_insert {
     }
 
     if ((not $update_only) and scalar @$change_insert) {
-        # Should not be necessary!
-        $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
-            if 'COMMON' eq $table ;
-
         $self->insert_hash(
             insert => $change_insert,
             dry_run => $dry_run,
@@ -2175,23 +2173,6 @@ sub _update_or_insert {
                            dry_run => $dry_run);
 
     }
-}
-
-# KLUDGE to avoid duplicate inserts due to same obsid.  First hash reference
-# most likely have undef (AZ|AM|EL)(START|END).
-sub _apply_kludge_for_COMMON {
-    my ($self, $vals) = @_;
-
-    return $vals unless ref $vals eq 'ARRAY'
-                     && 1 < scalar @{$vals};
-
-    my %val;
-    for my $v (@{$vals}) {
-        # Last one "wins".
-        $val{$v->{'obsid'}} = $v;
-    }
-
-    return [map {$val{$_}} keys %val];
 }
 
 =item B<_find_header>
@@ -2575,17 +2556,17 @@ sub calcbounds_update_bound_cols {
             $table, $self->get_columns($table, $dbh), \%header,
             update_only_obsradec => 1);
 
-        # Should not be necessary here!
-        $vals = $self->_expand_header_arrays($vals);
+        if (grep {ref $_} values %$vals) {
+            $log->logdie('Multi-valued data found in COMMON values');
+        }
 
-        my $existing = [map {
-            $self->_get_existing_values($dbh, $table, $_)} @$vals];
+        my $existing = $self->_get_existing_values($dbh, $table, $vals);
 
         $self->_update_or_insert(
             dbhandle    => $dbh,
             table       => $table,
-            values      => $vals,
-            existing    => $existing,
+            values      => [$vals],
+            existing    => [$existing],
             dry_run     => $dry_run,
             overwrite   => 1,
             update_only => 1);
