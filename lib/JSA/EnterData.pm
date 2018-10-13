@@ -544,7 +544,45 @@ sub insert_observation {
         return;
     }
 
+    # Assume that values for each of the date headers are in the same format
+    # so we can just take the min or max value by string comparison.
+    my $date_start = minstr $self->_find_header(
+        headers => $common_hdrs, name => 'DATE-OBS', value => 1);
+    my $date_end = maxstr $self->_find_header(
+        headers => $common_hdrs, name => 'DATE-END', value => 1);
+
+    $date_start = make_datetime($date_start) if defined $date_start;
+    $date_end = make_datetime($date_end) if defined $date_end;
+
     try {
+        my $table_common = 'COMMON';
+        my $table_inst = $self->instrument_table();
+        my $table_files = 'FILES';
+
+        my $vals_common = $self->get_insert_values(
+            $table_common, $columns->{$table_common}, $common_hdrs, %common_arg);
+
+        # Should not be necessary here!
+        $vals_common = $self->_expand_header_arrays($vals_common);
+
+        my $existing_common = [map {
+            $self->_get_existing_values($dbh, $table_common, $_)} @$vals_common];
+
+        my @vals_inst = ();
+        my @existing_inst = ();
+        foreach my $subsys_hdrs (@subsystems) {
+            my $vals = $self->get_insert_values(
+                $table_inst, $columns->{$table_inst}, $subsys_hdrs);
+
+            # Should not be necessary here!
+            $vals = $self->_expand_header_arrays($vals);
+
+            push @vals_inst, $vals;
+
+            push @existing_inst, [map {
+                $self->_get_existing_values($dbh, $table_inst, $_)} @$vals];
+        }
+
         if ($arg{'calc_radec'}
                 && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
 
@@ -558,67 +596,60 @@ sub insert_observation {
         $db->begin_trans() if not $dry_run;
 
         # COMMON table.
-        do {
-            my $table = 'COMMON';
+        $self->_update_or_insert(
+            update_only => $update_only,
+            dbhandle    => $dbh,
+            table       => $table_common,
+            values      => $vals_common,
+            existing    => $existing_common,
+            overwrite   => $overwrite,
+            date_start  => $date_start,
+            date_end    => $date_end,
+            dry_run     => $dry_run);
 
-            $self->_update_or_insert(
-                update_args => \%common_arg,
-                dbhandle   => $dbh,
-                table      => $table,
-                table_columns => $columns->{$table},
-                headers    => $common_hdrs,
-                overwrite  => $overwrite,
-                dry_run    => $dry_run);
+        if ($dbh->err()) {
+            my $text = $dbh->errstr();
 
-            if ($dbh->err()) {
-                my $text = $dbh->errstr();
+            $db->rollback_trans() if not $dry_run;
 
-                $db->rollback_trans() if not $dry_run;
-
-                throw JSA::Error($text);
-            }
-        };
+            throw JSA::Error($text);
+        }
 
         # FILES and instrument-specific tables.
         unless ($update_only) {
-            my $subsysnr = 0;
             my $totsub = scalar @subsystems;
-
-            foreach my $subsys_hdrs (@subsystems) {
-                $subsysnr ++;
+            for (my $subsysnr = 0; $subsysnr < $totsub; $subsysnr ++) {
+                my $values = $vals_inst[$subsysnr];
+                my $existing = $existing_inst[$subsysnr];
                 $log->debug("Processing subsysnr $subsysnr of $totsub");
 
-                do {
-                    my $table = $self->instrument_table();
+                $self->_update_or_insert(
+                    dbhandle   => $dbh,
+                    table      => $table_inst,
+                    values     => $values,
+                    existing   => $existing,
+                    overwrite  => $overwrite,
+                    date_start => $date_start,
+                    date_end   => $date_end,
+                    dry_run    => $dry_run);
 
-                    $self->_update_or_insert(
-                        dbhandle  => $dbh,
-                        table     => $table,
-                        table_columns => $columns->{$table},
-                        headers   => $subsys_hdrs,
-                        overwrite => $overwrite,
-                        dry_run   => $dry_run);
+                if ($dbh->err()) {
+                    my $text = $dbh->errstr();
 
-                    if ($dbh->err()) {
-                        my $text = $dbh->errstr();
+                    $db->rollback_trans() if not $dry_run;
 
-                        $db->rollback_trans() if not $dry_run;
+                    throw JSA::Error($text);
+                }
+            }
 
-                        throw JSA::Error($text);
-                    }
-                };
-
-                do {
-                    my $table = 'FILES';
-
-                    $self->_change_FILES(
-                        headers        => $subsys_hdrs,
-                        db             => $db,
-                        table          => $table,
-                        table_columns  => $columns->{$table},
-                        dry_run        => $dry_run,
-                        skip_state     => $skip_state);
-                };
+            foreach my $subsys_hdrs (@subsystems) {
+                $self->_change_FILES(
+                    headers        => $subsys_hdrs,
+                    db             => $db,
+                    table          => $table_files,
+                    table_columns  => $columns->{$table_files},
+                    dry_run        => $dry_run,
+                    skip_state     => $skip_state);
             }
         }
 
@@ -1069,7 +1100,7 @@ ignoring the usual update rules.
 =cut
 
 sub prepare_update_hash {
-    my ($self, $table, $dbh, $rows, %arg) = @_;
+    my ($self, $table, $dbh, $rows, $existing, %arg) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1082,8 +1113,6 @@ sub prepare_update_hash {
     $log->logdie("No unique keys found for table name: '$table'\n")
         unless defined $unique_key;
 
-    my $sql = "select * from $table where $unique_key = ?";
-
     my (%start, %end);
 
     if ($table eq 'COMMON') {
@@ -1095,21 +1124,18 @@ sub prepare_update_hash {
 
     my @update_hash;
     my @insert_hash;
-    foreach my $row (@$rows) {
+
+    my $nrows = scalar @$rows;
+    $log->logdie("Number of new rows and existing values do not match")
+        unless $nrows == scalar @$existing;
+
+    for (my $irow = 0; $irow < $nrows; $irow ++) {
+        my $row = $rows->[$irow];
+        my $indb = $existing->[$irow];
+
         my $unique_val = $row->{$unique_key};
 
-        $log->trace(Dumper([$unique_key, $unique_val]));
-
-        my $ref = $dbh->selectall_arrayref($sql, {Columns=>{}}, $unique_val)
-            or $log->logdie("Error retrieving existing content using [$sql]: ", $dbh->errstr, "\n");
-
-        $log->logdie("Only retrieved partial dataset: ", $dbh->errstr, "\n")
-            if $dbh->err;
-
-        # how many rows
-        my $count = scalar @$ref;
-
-        if (0 == $count) {
+        unless (defined $indb) {
             # Row does not already exist: add to the insert list.
             $log->debug("new data to insert: " . $unique_val);
 
@@ -1117,11 +1143,6 @@ sub prepare_update_hash {
 
             next;
         }
-
-        $log->logdie("Should not be possible to have more than one row. Got $count\n")
-            if $count > 1;
-
-        my $indb = $ref->[0];
 
         # Determine whether we are handling data pertaining to the start and/or
         # end of the observation.  Note that we can only do this for the COMMON
@@ -1281,6 +1302,46 @@ sub prepare_update_hash {
     }
 
     return (\@update_hash, \@insert_hash);
+}
+
+=item B<_get_existing_values>
+
+Retrieve existing values from the database.
+
+This uses the primary key value for the specified table found in the
+values hash to perform a query.
+
+=cut
+
+sub _get_existing_values {
+    my ($self, $dbh, $table, $values) = @_;
+
+    my $log = Log::Log4perl->get_logger('');
+
+    my $unique_key = _get_primary_key($table);
+    my $unique_val = $values->{$unique_key};
+
+    $log->trace(Dumper([$unique_key, $unique_val]));
+
+    my $sql = "select * from $table where $unique_key = ?";
+
+    my $ref = $dbh->selectall_arrayref($sql, {Columns=>{}}, $unique_val)
+        or $log->logdie("Error retrieving existing content using [$sql]: ", $dbh->errstr);
+
+    $log->logdie("Only retrieved partial dataset: ", $dbh->errstr)
+        if $dbh->err;
+
+    # how many rows
+    my $count = scalar @$ref;
+
+    if (0 == $count) {
+        return undef;
+    }
+
+    $log->logdie("Should not be possible to have more than one row. Got $count")
+        if $count > 1;
+
+    return $ref->[0];
 }
 
 =item B<_get_primary_key>
@@ -2033,7 +2094,7 @@ It is a wrapper around I<update_hash> and I<insert_hash> methods.
 It calls C<prepare_update_hash> to identify the necessary insert and
 update operations, and then calls the above methods as appropriate.
 
-Given a hash with C<table>, C<table_columns>, C<headers> as keys.  For details
+Given a hash with C<table>, C<table_columns>, C<values> as keys.  For details
 about values, see I<insert_hash>, I<update_hash>, and I<get_insert_values>
 methods.
 
@@ -2043,12 +2104,19 @@ Additional options:
 
 =over 4
 
-=item update_args
+=item update_only
 
-Hash of field restiction options (passed to L<get_insert_values>).
+If given with a true value then no insert operations are performed.
 
-If any "update_only" arguments are given with true values then
-no insert operations are performed.
+=item date_start
+
+Date corresponding to the start of the data provided (DateTime object,
+passed to L<prepare_update_hash>).
+
+=item date_end
+
+Date corresponding to the end of the data provided (DateTime object,
+passed to L<prepare_update_hash>).
 
 =item dry_run
 
@@ -2066,45 +2134,23 @@ sub _update_or_insert {
     my ($self, %args) = @_;
 
     my $table = $args{'table'};
-    my $table_columns = $args{'table_columns'};
-    my $headers = $args{'headers'};
+    my $vals = $args{'values'};
+    my $existing = $args{'existing'};
     my $dry_run = $args{'dry_run'};
-
-    throw JSA::Error('_update_or_insert: columns not defined')
-        unless defined $table_columns;
+    my $update_only = $args{'update_only'};
 
     my $log = Log::Log4perl->get_logger('');
 
     $log->trace(">Processing table: $table");
 
-    # This function is currently only used for tables where we should only
-    # have a single set of values to insert, but take the min/max values in
-    # case it is ever used for the FILES table.  Assume that values for each
-    # of the date headers are in the same format so we can just take the min
-    # or max value by string comparison.  Extract now (rather than on the
-    # output of "get_insert_values") in case tables other than COMMON have
-    # range headers added to them in future.
-    my $date_start = minstr $self->_find_header(
-        headers => $headers, name => 'DATE-OBS', value => 1);
-    my $date_end = maxstr $self->_find_header(
-        headers => $headers, name => 'DATE-END', value => 1);
-
-    # Do any "update_only_XXX" arguments have a true value?
-    my $update_args = $args{'update_args'} // {};
-    my $update_only = grep {/^update_only/ and $update_args->{$_}} keys %$update_args;
-
-    my $vals = $self->get_insert_values($table, $table_columns, $headers, %$update_args);
-
-    my $rows = $self->_expand_header_arrays($vals);
-
     if (exists $self->{'_debug_fh'}) {
-        $self->{'_debug_fh'}->print(Data::Dumper->Dump([$rows], ["${table}_values"]));
+        $self->{'_debug_fh'}->print(Data::Dumper->Dump([$vals], ["${table}_values"]));
     }
 
     my ($change_update, $change_insert) = $self->prepare_update_hash(
-        @args{qw/table dbhandle/}, $rows,
-        date_start => make_datetime($date_start),
-        date_end => make_datetime($date_end),
+        @args{qw/table dbhandle/}, $vals, $existing,
+        date_start => $args{'date_start'},
+        date_end => $args{'date_end'},
         overwrite => $args{'overwrite'});
 
     if (exists $self->{'_debug_fh'}) {
@@ -2114,6 +2160,7 @@ sub _update_or_insert {
     }
 
     if ((not $update_only) and scalar @$change_insert) {
+        # Should not be necessary!
         $change_insert = $self->_apply_kludge_for_COMMON($change_insert)
             if 'COMMON' eq $table ;
 
@@ -2461,13 +2508,6 @@ sub calcbounds_update_bound_cols {
     my $db = new OMP::DBbackend::Archive();
     my $dbh = $db->handle_checked();
 
-    my $table = 'COMMON';
-    my %pass = (
-        dbhandle => $dbh,
-        table    => $table,
-        table_columns  => $self->get_columns($table, $dbh),
-    );
-
     for my $obs (@{$obs_list}) {
         my @subsys_obs = $obs->subsystems()
           or next;
@@ -2530,12 +2570,25 @@ sub calcbounds_update_bound_cols {
 
         $log->info('  UPDATING headers with bounds');
 
+        my $table = 'COMMON';
+        my $vals = $self->get_insert_values(
+            $table, $self->get_columns($table, $dbh), \%header,
+            update_only_obsradec => 1);
+
+        # Should not be necessary here!
+        $vals = $self->_expand_header_arrays($vals);
+
+        my $existing = [map {
+            $self->_get_existing_values($dbh, $table, $_)} @$vals];
+
         $self->_update_or_insert(
-            %pass,
-            headers     => \%header,
+            dbhandle    => $dbh,
+            table       => $table,
+            values      => $vals,
+            existing    => $existing,
             dry_run     => $dry_run,
             overwrite   => 1,
-            update_args => {update_only_obsradec => 1});
+            update_only => 1);
     }
 
     return $n_err;
