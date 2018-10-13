@@ -527,10 +527,6 @@ sub insert_observation {
         return;
     }
 
-    if ($self->can('combine_int_time')) {
-        $common_hdrs->{'INT_TIME'} = $self->combine_int_time(\@subsystems);
-    }
-
     $log->debug(sprintf "[%s]...", join ', ', @file);
 
     if (! $arg{'process_simulation'} && $self->is_simulation($common_hdrs)) {
@@ -571,6 +567,7 @@ sub insert_observation {
 
         my @vals_inst = ();
         my @existing_inst = ();
+        my @existing_combined = ();
         foreach my $subsys_hdrs (@subsystems) {
             my $vals = $self->get_insert_values(
                 $table_inst, $columns->{$table_inst}, $subsys_hdrs);
@@ -581,8 +578,21 @@ sub insert_observation {
 
             push @vals_inst, $vals;
 
-            push @existing_inst, $self->_get_existing_values(
+            my $existing = $self->_get_existing_values(
                 $dbh, $table_inst, $vals);
+
+            push @existing_inst, $existing;
+
+            # If not in "overwrite" mode, collect the existing data for multi-table
+            # incremental update calculations.
+            if (defined $existing_common and defined $existing and not $overwrite) {
+                push @existing_combined, {%$existing_common, %$existing};
+            }
+        }
+
+        if ($self->can('combine_int_time')) {
+            $vals_common->{'int_time'} = $self->combine_int_time(
+                [@subsystems, @existing_combined]);
         }
 
         if ($arg{'calc_radec'}
