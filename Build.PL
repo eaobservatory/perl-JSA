@@ -62,6 +62,7 @@ my $build = Module::Build->new(
     build_requires => {
         'Test::More' => 0,
         'Test::Command' => 0,
+        'Test::Number::Delta' => 0,
         'JAC::Setup' => 0.02,
     },
     configure_requires => {
