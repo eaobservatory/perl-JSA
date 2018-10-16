@@ -51,7 +51,6 @@ use JSA::WriteList qw/write_list/;
 use JSA::DB::TableTransfer;
 use JCMT::DataVerify;
 
-use OMP::ArchiveDB;
 use OMP::DBbackend::Archive;
 use OMP::DateTools;
 use OMP::General;
@@ -196,66 +195,6 @@ sub preprocess_header {
             }
         }
     }
-}
-
-=item B<force_db>
-
-Returns the truth value, when called without arguments, to indicate
-whether searching the database for data is forced.
-
-    $db = $enter->force_db;
-
-Else, sets the given truth value; returns nothing.  When the value is
-true, I<force-disk> is marked false (see I<new>).
-
-    $enter->force_db( 0 );
-
-=cut
-
-sub force_db {
-    my $self = shift;
-
-    return
-        ! ($OMP::ArchiveDB::FallbackToFiles && $OMP::ArchiveDB::SkipDBLookup)
-        unless scalar @_;
-
-    my ($force) = @_;
-
-    $OMP::ArchiveDB::FallbackToFiles =
-    $OMP::ArchiveDB::SkipDBLookup = ! $force;
-
-    return;
-}
-
-=item B<force_disk>
-
-Returns the truth value, when called without arguments, to indicate
-whether searching the disk for data is forced.
-
-    $disk = $enter->force_disk;
-
-Else, sets the given truth value; returns nothing.  When the value is
-true, I<force-db> is marked false (see I<new>).
-
-    $enter->force_disk(1);
-
-=cut
-
-sub force_disk {
-
-  my $self = shift;
-
-  return
-      $OMP::ArchiveDB::FallbackToFiles && $OMP::ArchiveDB::SkipDBLookup
-      unless scalar @_;
-
-  my ($force) = @_;
-
-  # Force observation queries to query files on disk rather than the database.
-  $OMP::ArchiveDB::FallbackToFiles =
-  $OMP::ArchiveDB::SkipDBLookup = !! $force;
-
-  return;
 }
 
 =item B<get_dictionary>
