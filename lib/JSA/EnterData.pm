@@ -101,7 +101,6 @@ sub new {
         dictionary => $class->create_dictionary($dict),
 
         # To keep track of already processed files.
-        _cache_old_date => undef,
         _cache_touched => {},
     }, $class;
 
@@ -304,14 +303,6 @@ sub prepare_and_insert {
     if (exists $arg{'files'}) {
         $obs_args{'files'} = _unique_files($arg{'files'});
     }
-
-    if (defined $self->{'_cache_old_date'} && $date ne $self->{'_cache_old_date'}) {
-        $log->debug("clearing file cache");
-
-        $self->{'_cache_touched'} = {};
-    }
-
-    $self->{'_cache_old_date'} = $date;
 
     my $name = $self->instrument_name();
 
