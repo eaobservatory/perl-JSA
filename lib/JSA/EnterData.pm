@@ -485,6 +485,16 @@ sub insert_observation {
         my $table_inst = $self->instrument_table();
         my $table_files = 'FILES';
 
+        if ($arg{'calc_radec'}
+                && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
+
+            unless ($self->calc_radec($common_hdrs, $common_files)) {
+                $log->debug("problem while finding bounds; skipping");
+
+                throw JSA::Error('could not find bounds');
+            }
+        }
+
         my $vals_common = $self->get_insert_values(
             $table_common, $columns->{$table_common}, $common_hdrs, %common_arg);
 
@@ -523,16 +533,6 @@ sub insert_observation {
         if ($self->can('combine_int_time')) {
             $vals_common->{'int_time'} = $self->combine_int_time(
                 [@subsystems, @existing_combined]);
-        }
-
-        if ($arg{'calc_radec'}
-                && ! $self->skip_calc_radec('headers' => $common_hdrs)) {
-
-            unless ($self->calc_radec($common_hdrs, $common_files)) {
-                $log->debug("problem while finding bounds; skipping");
-
-                throw JSA::Error('could not find bounds');
-            }
         }
 
         $db->begin_trans() if not $dry_run;
