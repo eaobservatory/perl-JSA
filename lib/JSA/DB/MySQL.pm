@@ -70,11 +70,12 @@ sub connect_to_db {
     $log->info("Connecting to ${server}..${db} as ${user}\n");
 
     my $dbh = DBI->connect(
-        "dbi:mysql:database=$db;host=$server;mysql_connect_timeout=10;mysql_auto_reconnect=1",
+        "dbi:mysql:database=$db;host=$server;mysql_connect_timeout=10",
         $user, $pass, {
             'RaiseError' => 1,
             'PrintError' => 0,
             'AutoCommit' => 1,
+            mysql_auto_reconnect => 1,
     }) or $log->logcroak( $DBI::errstr );
 
     $dbh->do("use $db") or $log->logdie($_->errstr);
