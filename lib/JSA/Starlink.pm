@@ -419,14 +419,13 @@ sub prov_update_parent_path {
                 $path .= ".sdf" unless $path =~ /\.sdf$/;
 
                 my $newpath = $convert_filename->($path, $basedir, $haspar);
+                $path = $newpath if defined $newpath;
 
-                if (defined $newpath) {
-                    # update the path in the keymap
-                    $provkm->MapPut0C("PATH", $newpath, "");
+                # update the path in the keymap
+                $provkm->MapPut0C("PATH", $path, "");
 
-                    # put it back in the provenance structure
-                    $prov->ModifyProv($i, $provkm, $status);
-                }
+                # put it back in the provenance structure
+                $prov->ModifyProv($i, $provkm, $status);
             }
 
         } # foreach @parind
