@@ -265,6 +265,9 @@ sub get_files_not_end_state {
               WHEN SUBSTRING( file_id, 1, 1 ) = 's'
                 -- SCUBA-2 files.
                 THEN SUBSTRING( file_id, 4, 8 )
+              WHEN SUBSTRING( file_id, 1, 4 ) = 'rxh3'
+                -- RxH3 files.
+                THEN SUBSTRING( file_id, 6, 8 )
              ELSE
                 -- ACSIS files.
                 SUBSTRING( file_id, 2, 8 )
