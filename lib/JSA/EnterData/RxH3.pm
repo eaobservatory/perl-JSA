@@ -367,7 +367,7 @@ values from the last component of the OBSIDSS.
 
 sub fill_headers_FILES {
     my $self = shift;
-    my ($header, undef, undef) = @_;
+    my ($header, undef, undef, undef) = @_;
 
     $self->SUPER::fill_headers_FILES(@_);
 

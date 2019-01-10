@@ -308,7 +308,7 @@ sub prepare_and_insert {
 
     # Retrieve observations from disk.  An Info::Obs object will be returned
     # for each observation.
-    my ($obs_list, $wcs, $md5) = $self->_get_observations(
+    my ($obs_list, $wcs, $md5, $size) = $self->_get_observations(
         dry_run => $dry_run,
         skip_state => $skip_state,
         mongodb => $mdb,
@@ -344,6 +344,7 @@ sub prepare_and_insert {
             do_verification => (not defined $mdb),
             file_wcs => $wcs,
             file_md5 => $md5,
+            file_size => $size,
             %update_args);
     }
 }
@@ -369,8 +370,8 @@ sub insert_observation {
 
     my $log = Log::Log4perl->get_logger('');
 
-    my ($db, $observation, $columns, $file_wcs, $file_md5, $overwrite, $dry_run, $skip_state) =
-       map {$arg{$_}} qw/db observation columns file_wcs file_md5 overwrite dry_run skip_state/;
+    my ($db, $observation, $columns, $file_wcs, $file_md5, $file_size, $overwrite, $dry_run, $skip_state) =
+       map {$arg{$_}} qw/db observation columns file_wcs file_md5 file_size overwrite dry_run skip_state/;
 
     my $dbh  = $db->handle();
     my %common_arg = map {$_ => $arg{$_}} qw/update_only_inbeam update_only_obstime/;
@@ -404,7 +405,7 @@ sub insert_observation {
 
         $self->fill_max_subscan($headers);
 
-        $self->fill_headers_FILES($headers, $subsystem, $file_md5);
+        $self->fill_headers_FILES($headers, $subsystem, $file_md5, $file_size);
 
         $self->calc_freq($subsystem, $headers, $file_wcs);
 
@@ -626,9 +627,9 @@ sub _do_verification {
 =item B<_get_observations>
 
 Returns by reference an array of L<OMP::Info::Obs> objects and hashes of WCS
-information, if available, and MD5 sums.
+information, if available, and MD5 sums and file sizes.
 
-    ($obs, $wcs, $md5sum) = $enter->_get_observations(
+    ($obs, $wcs, $md5sum, $size) = $enter->_get_observations(
         date => '20090609',
         dry_run => $dry_run,
         skip_state => $skip_state,
@@ -650,6 +651,7 @@ sub _get_observations {
     my @headers;
     my %wcs;
     my %md5;
+    my %size;
 
     unless (defined $mdb) {
         my $xfer = $self->_get_xfer_unconnected_dbh();
@@ -760,6 +762,7 @@ sub _get_observations {
             my $basename = _basename($filename);
             $wcs{$basename} = $ob->wcs() if $self->need_wcs();
             $md5{$basename} = file_md5sum($filename);
+            $size{$basename} = [stat $filename]->[7];
 
             push @headers, {
                 filename => $filename,
@@ -784,6 +787,7 @@ sub _get_observations {
 
             $wcs{$file} = $entry->{'wcs'};
             $md5{$file} = $entry->{'md5sum'};
+            $size{$file} = $entry->{'filesize'};
 
             my $header = $entry->{'header'};
 
@@ -824,7 +828,7 @@ sub _get_observations {
         retainhdr => 1,
         fits      => $merged);
 
-    return (\@obs, \%wcs, \%md5);
+    return (\@obs, \%wcs, \%md5, \%size);
 }
 
 
@@ -1486,12 +1490,12 @@ sub _fix_dates {
 Fills in the headers for C<FILES> database table, given a
 headers hash reference and an L<OMP::Info::Obs> object.
 
-    $enter->fill_headers_FILES(\%header, $obs, $file_md5);
+    $enter->fill_headers_FILES(\%header, $obs, $file_md5, $file_size);
 
 =cut
 
 sub fill_headers_FILES {
-    my ($self, $header, $obs, $file_md5) = @_;
+    my ($self, $header, $obs, $file_md5, $file_size) = @_;
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -1500,8 +1504,9 @@ sub fill_headers_FILES {
     my @files = $obs->simple_filename;
     $header->{'file_id'} = \@files;
 
-    # Create "md5sum" header by extracting values from the given hash.
+    # Create "md5sum" and "filesize" headers by extracting values from the given hashes.
     $header->{'md5sum'} = [map {$file_md5->{$_}} @files];
+    $header->{'filesize'} = [map {$file_size->{$_}} @files];
 
     # We need to know whether a nsubscan header is even required so %columns really
     # needs to be accessed. For now we kluge it.
@@ -2411,7 +2416,7 @@ sub calcbounds_update_bound_cols {
     my $process_obs_re = join '|', @$obs_types;
        $process_obs_re = qr{\b( $process_obs_re )}xi;
 
-    my ($obs_list, undef, undef) = $self->_get_observations(
+    my ($obs_list, undef, undef, undef) = $self->_get_observations(
             dry_run => $dry_run,
             skip_state => ($skip_state or $skip_state_found),
             monbodb => undef,

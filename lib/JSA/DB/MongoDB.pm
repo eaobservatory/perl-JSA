@@ -236,6 +236,7 @@ sub get_raw_header {
                 wcs => bson_to_wcs($doc->{'wcs'}),
                 extra => bson_to_header($doc->{'extra'}),
                 md5sum => $doc->{'md5sum'}->value(),
+                filesize => $doc->{'filesize'}->value(),
             };
         }
     }
@@ -288,13 +289,14 @@ sub prepare_file_record_local {
     my $wcs = $need_wcs{$instrument} ? read_wcs($file) : undef;
 
     my $md5sum = file_md5sum($file);
+    my $size = [stat $file]->[7];
 
     return prepare_file_record(
-        $basename, $hdr, $wcs, $md5sum, $extra, $missing);
+        $basename, $hdr, $wcs, $md5sum, $size, $extra, $missing);
 }
 
 
-=item prepare_file_record($basename, $header, $wcs, $md5sum, $extra, $missing)
+=item prepare_file_record($basename, $header, $wcs, $md5sum, $size, $extra, $missing)
 
 Prepares information for the database record about a file.
 
@@ -311,6 +313,7 @@ sub prepare_file_record {
     my $hdr = shift;
     my $wcs = shift;
     my $md5sum = shift;
+    my $size = shift;
     my $extra = shift;
     my $missing = shift;
 
@@ -336,6 +339,7 @@ sub prepare_file_record {
         ),
         bson_doc(
             md5sum => $md5sum,
+            filesize => bson_int32($size),
             header => header_to_bson($hdr),
             subheaders => [map {header_to_bson($_)} $hdr->subhdrs()],
             wcs => wcs_to_bson($wcs),

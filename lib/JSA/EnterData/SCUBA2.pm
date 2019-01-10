@@ -670,7 +670,7 @@ This first calls the superclass method L<fill_headers_FILES/JSA::EnterData>.
 
 sub fill_headers_FILES {
     my $self = shift;
-    my ($header, undef, undef) = @_;
+    my ($header, undef, undef, undef) = @_;
 
     # Call the superclass version of this method.
     $self->SUPER::fill_headers_FILES(@_);
