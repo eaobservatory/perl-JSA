@@ -811,35 +811,10 @@ sub _to_string {
 
     $sep = ', ' unless defined $sep;
 
-    return join $sep, _to_list($in);
-}
+    return '' unless defined $in;
+    return $in unless ref $in;
 
-=item B<_to_list>
-
-Returns a list given a plain scalar or an array reference.
-
-    @expanded = _to_list($list);
-
-=cut
-
-sub _to_list {
-    my ($in) = @_;
-
-    return unless defined $in;
-
-    return (@{$in}) if $in && ref $in;
-
-    return ($in);
-}
-
-sub _simplify_arrayref {
-    my ($self, $in) = @_;
-
-    return
-        unless $in && scalar @{$in};
-
-    return
-        [map {$_->[0]} @{$in}];
+    return join $sep, @$in;
 }
 
 sub _simplify_arrayref_hashrefs {
