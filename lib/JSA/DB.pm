@@ -209,75 +209,7 @@ sub use_transaction {
     return;
 }
 
-=item B<select_t>
-
-Executes SELECT query given a hash of table names, array reference of
-column names to select, where clauses with placeholders, and array
-reference of bind values.
-
-Returns an array reference of hash references of selected columns.
-
-    $result =
-      $jdb->select_t('table'   => 'the_table',
-                     'columns' => [ 'a', 'b' ],
-                     'where'   => [ a = ? AND b = ? ],
-                      'values'  => [ 1, 2 ]
-                    );
-
-Optional hash pairs are "order" & "group" respectively for C<ORDER BY>
-and C<GROUP BY> clauses ...
-
-    $result =
-      $jdb->select_t('table'   => 'the_table',
-                      ...
-                      'order' => [ 'b' , 'a' ]
-                    );
-
-On database error, rollbacks the transaction, errors are passed up.
-
-(Note that I<select> is a built in function; "_t" in name refers to
-database table.)
-
-=cut
-
-sub select_t {
-    my ($self, %arg) = @_;
-
-    _check_input(
-        %arg,
-        '_check_' => {
-            'table'   => 0,
-            'columns' => 1,
-            'where'   => 0,
-            'values'  => 1,
-        },
-    );
-
-    my $sql = sprintf 'SELECT %s FROM %s WHERE %s',
-                      (map {_to_string($_)} @arg{qw/columns table/}),
-                      _where_string($arg{'where'});
-
-    foreach my $opt (qw/order group/) {
-        next unless exists $arg{ $opt };
-
-        $sql .= sprintf ' %s BY %s', uc $opt, _to_string($arg{$opt});
-    }
-
-    return $self->run_select_sql('sql' => $sql,
-                                 'values' => $arg{'values'});
-}
-
 =item B<select_loop>
-
-It is similar to I<select_t> in terms of parameters accepted and
-values returned.  Difference is that instead of selecting everything
-in one go ($dbh->selectall_arrayref()), it collects results row by row
-($dbh->prepare(), $st->execute(), $st->fetchrow_array*()).
-
-Use it instead when "OR" clauses (by virtue of bind parameter array
-references) are in some "large" number (say, 100).  This is mainly to
-avoid running in limit of allowed bind parameters; better performance
-is a side benefit.
 
 Executes SELECT query given a hash of table name, array reference of
 column names to select, where clauses with placeholders, and array
@@ -369,32 +301,6 @@ sub select_loop {
                    && ref $out[0] eq 'ARRAY';
 
     return [@out];
-}
-
-=item B<exist>
-
-A special case of I<select_t>, returns a number to indicate if any
-rows exist in given a hash of table names, "WHERE" clauses with
-placeholders, and array reference of bind values.
-
-    $count =
-      $jdb->exist('table'   => ['transfer t', 'FILES f']
-                   'where'  =>
-                     q[      t.file_id = f.file_id
-                         AND t.file_id like ?
-                         AND t.state   = ?
-                       ],
-                   'values' => ['a20100324%', 't']);
-
-=cut
-
-sub exist {
-    my ($self, %arg) = @_;
-
-    my $result = $self->select_t(%arg, 'columns' => ['count(1) AS size'])
-        or return 0;
-
-    return $result->[0]{'size'};
 }
 
 =item B<run_select_sql>
