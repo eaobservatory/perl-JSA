@@ -285,18 +285,27 @@ sub read_jcmtstate {
     dat_find($mloc, "JCMTSTATE", my $jloc, $status);
     dat_annul($mloc, $status);
 
+    # find out how many extensions we have
+    dat_ncomp($jloc, my $ncomp, $status);
+
     # find out how many time slice there are going to be
-    # Assumes that RTS_NUM is first so won't be compressed.
-    dat_index($jloc, 1, my $iloc, $status);
-    dat_size($iloc, my $size, $status);
-    dat_annul($iloc, $status);
+    # Look for RTS_NUM but no longer assume it will be first.
+    my $size = undef;
+    for (my $i = 1; ($i <= $ncomp) && ($status == &NDF::SAI__OK()) && (! defined $size); $i ++) {
+        dat_index($jloc, $i, my $iloc, $status);
+        dat_name($iloc, my $name, $status);
+        dat_size($iloc, $size, $status) if $name eq 'RTS_NUM';
+        dat_annul($iloc, $status);
+    }
 
     # Error string indicating that we had a problem and should clean up
     my $errstr;
 
+    $errstr = 'RTS_NUM element not found' unless defined $size;
+
     # work out which position to use. Default to first index
     my @posns;
-    if (defined $upos && $status == &NDF::SAI__OK()) {
+    if (defined $upos && $status == &NDF::SAI__OK() && !defined $errstr) {
         my @inpos = ( ref($upos) ? @$upos : ($upos) );
 
         # Loop over all input positions
@@ -334,9 +343,6 @@ sub read_jcmtstate {
 
     # Get a hash indicating which items are requested
     my %items = map {uc($_), undef} @items;
-
-    # find out how many extensions we have
-    dat_ncomp($jloc, my $ncomp, $status);
 
     # Somewhere to store the results
     my %results;
