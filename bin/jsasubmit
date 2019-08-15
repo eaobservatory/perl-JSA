@@ -219,21 +219,21 @@ else {
             }
         }
 
-        # Set up recipe parameters and recipe overrides.
-        # We only do this for non-calibrator science observations
-        if ($obstype eq 'SCIENCE' && ! $hdr->{STANDARD}) {
-            my $pid = $obs->projectid;
-            if (defined $pid) {
-                # Override the recipe?
-                if ( exists $DR_RECIPES{$pid} ) {
-                    $current{drparams} = $DR_RECIPES{$pid};
-                }
+        # Set up recipe parameters and recipe overrides.  UPDATED: we
+        # now want to do this for all observations, including JCTMCAL
+        # pointings and observations of standards.
+        my $pid = $obs->projectid;
+        if (defined $pid) {
+          # Override the recipe?
+          if ( exists $DR_RECIPES{$pid} ) {
+            $current{drparams} = $DR_RECIPES{$pid};
+          }
 
-                # We use this for all modes since the parameter file is relevant
-                # for both night and project processing.
-                $current{recpars} = "recpars-$pid.ini";
-            }
+          # We use this for all modes since the parameter file is relevant
+          # for both night and project processing.
+          $current{recpars} = "recpars-$pid.ini";
         }
+
 
         my @subsystems = $obs->subsystems;
 
