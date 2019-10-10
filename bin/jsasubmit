@@ -233,15 +233,23 @@ else {
         # now want to do this for all observations, including JCTMCAL
         # pointings and observations of standards.
         my $pid = $obs->projectid;
+        print "projectid is $pid\n";
         if (defined $pid) {
           # Override the recipe?
           if ( exists $DR_RECIPES{$pid} ) {
             $current{drparams} = $DR_RECIPES{$pid};
           }
 
+          # For historical use: if the project is 'CAL' we still want
+          # to use 'JCMTCAL' as the recipe parameter file.
+          my $recparstring = "recpars-$pid.ini";
+
+          if ($pid eq 'CAL') {
+            $recparstring = "recpars-JCMTCAL.ini";
+          }
           # We use this for all modes since the parameter file is relevant
           # for both night and project processing.
-          $current{recpars} = "recpars-$pid.ini";
+          $current{recpars} = $recparstring;
         }
 
 
