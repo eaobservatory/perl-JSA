@@ -29,6 +29,14 @@ Print help information.
 
 Update existing jobs without observation information.
 
+=item B<--allow-update>
+
+Allow updating of jobs rather than only creating new jobs.
+
+=item B<--jp-logging>
+
+Set a Python logging level (e.g. INFO or DEBUG) for logging from the JSA Proc system.
+
 =item B<-man>
 
 Print full manual.
@@ -99,7 +107,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $noemail, $dry_run,
-    $queue, $only_info, $task);
+    $queue, $only_info, $task, $allow_update, $jp_logging);
 my $status = GetOptions(
     "help"      => \$help,
     "man"       => \$man,
@@ -112,6 +120,8 @@ my $status = GetOptions(
     "queue=s"   => \$queue,
     'task=s'    => \$task,
     'add-info'  => \$only_info,
+    'allow-update' => \$allow_update,
+    "jp-logging=s" => \$jp_logging,
 );
 
 pod2usage(1) if $help;
@@ -269,8 +279,18 @@ else {
                             undef, $task, create_obsinfo_hash($obs, $subsyshdr), 0, undef );
         }
     }
-
-    add_jsa_proc_jobs(\%groups, $mode, $priority, $only_info, $dry_run);
+    my %options;
+    if (defined $allow_update) {
+        $options{'allow_update'} = 1;
+        if (defined $dry_run) {
+            $options{'jsa_proc_dry_run'} = 1;
+            $dry_run = undef;
+        }
+    }
+    if (defined $jp_logging) {
+        $options{'jsa_proc_logging'} = $jp_logging;
+    }
+    add_jsa_proc_jobs(\%groups, $mode, $priority, $only_info, $dry_run, %options);
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $dry_run;
