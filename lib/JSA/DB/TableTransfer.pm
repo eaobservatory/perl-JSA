@@ -453,11 +453,15 @@ sub put_state {
 
     my @alt = map {_fix_file_name($_)} sort @{$files};
 
+    # Ensure comment is not too long to store in the database, e.g. if it
+    # was captured from an error message.
+    my $comment = substr $args{'comment'}, 0, 240;
+
     $db->update_or_insert(
         table   => $_state_table,
         keys    => ['file_id'],
         columns => ['file_id', $state_col, 'comment'],
-        values  => [map {[$_, $state, $args{'comment'}]} @alt],
+        values  => [map {[$_, $state, $comment]} @alt],
         dry_run => $dry_run);
 }
 
