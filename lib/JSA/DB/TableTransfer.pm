@@ -455,7 +455,9 @@ sub put_state {
 
     # Ensure comment is not too long to store in the database, e.g. if it
     # was captured from an error message.
-    my $comment = substr $args{'comment'}, 0, 240;
+    my $comment = (defined $args{'comment'})
+        ? (substr $args{'comment'}, 0, 240)
+        : undef;
 
     $db->update_or_insert(
         table   => $_state_table,
