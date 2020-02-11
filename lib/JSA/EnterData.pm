@@ -805,19 +805,29 @@ sub _get_observations {
 
     return unless scalar @headers;
 
-    # The headers will be passed to OMP::FileUtils->merge_dupes which
-    # in turn passes them to Astro::FITS::Header->new(Hash => ...).
-    # That constructor drops any null or empty string headers.  Since
-    # we need to see the INBEAM header for all files, replace blank
-    # values with a dummy placeholder first.  (See also
-    # munge_header_INBEAM where these placeholders are removed.)
     foreach my $entry (@headers) {
         my $header = $entry->{'header'};
+
+        # The headers will be passed to OMP::FileUtils->merge_dupes which
+        # in turn passes them to Astro::FITS::Header->new(Hash => ...).
+        # That constructor drops any null or empty string headers.  Since
+        # we need to see the INBEAM header for all files, replace blank
+        # values with a dummy placeholder first.  (See also
+        # munge_header_INBEAM where these placeholders are removed.)
         if (exists $header->{'INBEAM'}) {
             unless ((defined $header->{'INBEAM'})
                     and ($header->{'INBEAM'} ne '')) {
                 $header->{'INBEAM'} = 'NOTHING';
             }
+        }
+
+        # SCUBA-2 data can have the FOCAXIS=NONE for the first subscan
+        # (FLATFIELD) whereas undef would be more appropriate (see fault
+        # 20200207.001).
+        if ((exists $header->{'FOCAXIS'})
+                and (defined $header->{'FOCAXIS'})
+                and ($header->{'FOCAXIS'} eq 'NONE')) {
+            undef $header->{'FOCAXIS'};
         }
     }
 
