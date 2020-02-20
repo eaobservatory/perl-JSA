@@ -166,7 +166,8 @@ else {
 
 
         # Don't submit EC jobs for processing except for special calibration observation project EC05
-        if ($project =~ /EC/i and $project !~ /EC05/i) {
+        # TEMPORARY: also include EC36 to get namakanui commissioning.
+        if ($project =~ /EC/i and $project !~ /EC05/i and $project !~ /EC36/) {
             log_message(sprintf "Skipped observation with OBSID %s because it is from engineering/comissioning project %s.\n",
                                 $obs->obsid(), $project);
             next;
