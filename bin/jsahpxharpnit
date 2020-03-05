@@ -25,10 +25,6 @@ disables emailing.
 
 Print help information.
 
-=item B<--add-info>
-
-Update existing jobs without observation information.
-
 =item B<-man>
 
 Print full manual.
@@ -79,11 +75,11 @@ use JSA::Submission qw/
     %JUNK_OBSIDSS
     adjust_header adjust_header_freq assign_to_group
     determine_frame_class
-    echo_messages find_observations get_obsidss
+    echo_messages find_observations
     log_message
     prepare_archive_db send_log_email
     write_log_file/;
-use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
+use JSA::Proc qw/add_jsa_proc_jobs/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/:obs/;
@@ -95,7 +91,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $noemail, $dry_run,
-    $queue, $task, $only_info);
+    $queue, $task);
 my $status = GetOptions(
     "help"      => \$help,
     "man"       => \$man,
@@ -106,7 +102,6 @@ my $status = GetOptions(
     "dry-run"   => \$dry_run,
     "noemail"   => \$noemail,
     "queue=s"   => \$queue,
-    'add-info'  => \$only_info,
     'task=s'    => \$task,
 );
 
@@ -207,18 +202,17 @@ else {
 
             adjust_header_freq($subsyshdr);
 
-            my $obsinfo = create_obsinfo_hash($obs, $subsyshdr);
 
             # Override mode to "obs".  ORAC-DR will still be processing groups
             # of observations, but we only want jsawrapdr to save the obs products.
 
             assign_to_group($instrume, $subsys->obsid, $frameclass, undef,
                             $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
-                            'hpx-tmp', $task, $obsinfo, 1, 'obs');
+                            'hpx-tmp', $task, 1, 'obs', $obsidss);
         }
     }
 
-    add_jsa_proc_jobs(\%groups, 'obs', $priority, $only_info, $dry_run);
+    add_jsa_proc_jobs(\%groups, 'obs', $priority, $dry_run);
 }
 
 write_log_file('jsasubmit-hpx-harp-nit', $ut, $project) unless $dry_run;

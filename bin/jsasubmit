@@ -25,10 +25,6 @@ disables emailing.
 
 Print help information.
 
-=item B<--add-info>
-
-Update existing jobs without observation information.
-
 =item B<--allow-update>
 
 Allow updating of jobs rather than only creating new jobs.
@@ -91,11 +87,11 @@ use JSA::Submission qw/
     %DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
     adjust_header adjust_header_freq assign_to_group
     determine_frame_class
-    echo_messages find_observations get_obsidss
+    echo_messages find_observations
     log_message obs_is_fts2_or_pol2_RECIPE
     prepare_archive_db send_log_email
     write_log_file/;
-use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
+use JSA::Proc qw/add_jsa_proc_jobs/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/:obs/;
@@ -107,7 +103,8 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $noemail, $dry_run,
-    $queue, $only_info, $task, $allow_update, $jp_logging);
+    $queue, $task, $allow_update, $jp_logging);
+
 my $status = GetOptions(
     "help"      => \$help,
     "man"       => \$man,
@@ -119,7 +116,6 @@ my $status = GetOptions(
     "noemail"   => \$noemail,
     "queue=s"   => \$queue,
     'task=s'    => \$task,
-    'add-info'  => \$only_info,
     'allow-update' => \$allow_update,
     "jp-logging=s" => \$jp_logging,
 );
@@ -285,9 +281,10 @@ else {
 
             assign_to_group($instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
                             $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
-                            undef, $task, create_obsinfo_hash($obs, $subsyshdr), 0, undef );
+                            undef, $task, 0, undef, $obsidss );
         }
     }
+
     my %options;
     if (defined $allow_update) {
         $options{'allow_update'} = 1;
@@ -299,7 +296,8 @@ else {
     if (defined $jp_logging) {
         $options{'jsa_proc_logging'} = $jp_logging;
     }
-    add_jsa_proc_jobs(\%groups, $mode, $priority, $only_info, $dry_run, %options);
+
+    add_jsa_proc_jobs(\%groups, $mode, $priority, $dry_run);
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $dry_run;

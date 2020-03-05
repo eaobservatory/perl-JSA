@@ -30,10 +30,6 @@ Filter to select.
 
 Print help information.
 
-=item B<--add-info>
-
-Update existing jobs without observation information.
-
 =item B<-man>
 
 Print full manual.
@@ -91,7 +87,7 @@ use JSA::Submission qw/
     echo_messages find_observations log_message
     prepare_archive_db send_log_email
     write_log_file/;
-use JSA::Proc qw/add_jsa_proc_jobs create_obsinfo_hash/;
+use JSA::Proc qw/add_jsa_proc_jobs/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/:obs/;
@@ -105,7 +101,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $noemail, $dry_run,
-    $queue, $filter, $only_info, $task,
+    $queue, $filter, $task,
     $not_moving_obsid_file);
 my $status = GetOptions(
     "help"      => \$help,
@@ -118,7 +114,6 @@ my $status = GetOptions(
     "noemail"   => \$noemail,
     'filter=s'  => \$filter,
     "queue=s"   => \$queue,
-    'add-info'  => \$only_info,
     'task=s'    => \$task,
     'not_moving_obsid=s' => \$not_moving_obsid_file,
 );
@@ -265,6 +260,7 @@ else {
                 mode => 'obs',
                 obsinfolist => [$obsinfo],
                 task => $task,
+                obsid_subsysnr_list=> @all_obsidss,
             );
 
             for my $k (qw/drparams recpars/) {
@@ -277,7 +273,7 @@ else {
     }
 
     # Add the jobs to the local JSA processing system.
-    add_jsa_proc_jobs(\%groups, $mode, $priority, $only_info, $dry_run);
+    add_jsa_proc_jobs(\%groups, $mode, $priority, $dry_run);
 }
 
 write_log_file('jsasubmit-hpx-scuba2', $ut, $project) unless $dry_run;

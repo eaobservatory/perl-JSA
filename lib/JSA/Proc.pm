@@ -21,7 +21,7 @@ our @EXPORT_OK = qw/add_jsa_proc_jobs create_obsinfo_hash/;
 
 =over 4
 
-=item add_jsa_proc_jobs(\%groups, $mode, $priority, $add_info_only, $dry_run, %options)
+=item add_jsa_proc_jobs(\%groups, $mode, $priority, $dry_run, %options)
 
 Adds processing jobs to the JSA local processing system.
 C<\%groups> is a reference to a hash holding groups and information about them.
@@ -46,19 +46,11 @@ Mode to use for processing.
 
 Recipe parameters file name.
 
-=item obsinfolist
-
-List of observation information hashes,
-e.g. created with C<create_obsinfo_hash>.
-
 =item task
 
 Processing task name.
 
 =back
-
-If the C<$add_info_only> option is set then instead of adding jobs, observation
-info is added to jobs which currently lack it.
 
 Options include:
 
@@ -82,7 +74,6 @@ B<Note:> probably only useful in conjunction with "allow_update".
 Enables dry-run mode in JSA Proc system.
 
 B<Note:> only applies when used in conjunction "allow_update"
-but not with C<$add_info_only>.
 
 =back
 
@@ -98,7 +89,6 @@ but not with C<$add_info_only>.
         my $groups = shift;
         my $mode = shift;
         my $priority = shift;
-        my $add_info_only = shift;
         my $dry_run = shift;
         my %options = @_;
 
@@ -107,7 +97,7 @@ but not with C<$add_info_only>.
         # Create Taco connection to Python unless we already have one.
         # Submission mode dry run does not require a connection, but
         # info adding dry run does.
-        unless (($dry_run and not $add_info_only) or defined $jsa_proc_db) {
+        unless (($dry_run) or defined $jsa_proc_db) {
             log_message("Opening connection to jsa_proc.\n");
             $taco = new Alien::Taco(lang => 'python');
             $taco->import_module('jsa_proc.config', args => ['get_database']);
@@ -137,162 +127,62 @@ but not with C<$add_info_only>.
             my @files = map {s/\.sdf$//; $_} @{$group->{'files'}};
 
 
-            unless ($add_info_only) {
-                # Job submission mode.
+            # Job submission mode.
 
-                # Prepare arguments for the jsa_proc database add_job method.
-                my @param = ();
-                push @param, '--recpars', $group->{'recpars'}
-                    if exists $group->{'recpars'};
-                push @param, $group->{'drparams'}
-                    if exists $group->{'drparams'};
+            # Prepare arguments for the jsa_proc database add_job method.
+            my @param = ();
+            push @param, '--recpars', $group->{'recpars'}
+                if exists $group->{'recpars'};
+            push @param, $group->{'drparams'}
+                if exists $group->{'drparams'};
 
-                my %args = (
-                    tag             => $tag,
-                    location        => $location,
-                    mode            => $group->{'mode'} // $mode,
-                    parameters      => join(' ', @param),
-                    input_file_names=> \@files,
-                    priority        => $priority,
-                    obsinfolist     => $group->{'obsinfolist'},
-                    task            => $group->{'task'},
+            my %args = (
+                tag             => $tag,
+                location        => $location,
+                mode            => $group->{'mode'} // $mode,
+                parameters      => join(' ', @param),
+                input_file_names=> \@files,
+                priority        => $priority,
+                obsidss         => \@{$group->{'obsid_subsysnr_list'}},
+                task            => $group->{'task'},
                 );
 
-                unless ($dry_run) {
-                    # In non-dry run mode, try calling the add_job method.
+            unless ($dry_run) {
+                # In non-dry run mode, try calling the add_job method.
 
-                    log_message("Adding job to jsa_proc database.\n");
-                    eval {
-                        my $job_id;
-                        unless ($options{'allow_update'}) {
-                            $job_id = $jsa_proc_db->call_method(
-                                'add_job', kwargs => \%args);
-                        }
-                        else {
-                            $args{'db'} = $jsa_proc_db;
-                            $args{'dry_run'} = $options{'jsa_proc_dry_run'};
-                            $job_id = $taco->call_function(
-                                'add_upd_del_job', kwargs => \%args);
-                        }
-                        log_message("Job added/updated with ID: $job_id\n");
-                    };
-                    if ($@) {
-                        log_message("ERROR: failed to add/update job:\n$@\n");
+                log_message("Adding job to jsa_proc database.\n");
+                eval {
+                    my $job_id;
+                    unless ($options{'allow_update'}) {
+                        $job_id = $jsa_proc_db->call_method(
+                            'add_job', kwargs => \%args);
                     }
-                }
-                else {
-                    # In dry run mode, print the arguments we would have given.
-
-                    log_message("Would have added the job: [DRY RUN MODE]\n");
-                    log_message(Data::Dumper->Dump([\%args], [qw/args/]));
+                    else {
+                        $args{'db'} = $jsa_proc_db;
+                        $args{'dry_run'} = $options{'jsa_proc_dry_run'};
+                        $job_id = $taco->call_function(
+                            'add_upd_del_job', kwargs => \%args);
+                    }
+                    log_message("Job added/updated with ID: $job_id\n");
+                };
+                if ($@) {
+                    log_message("ERROR: failed to add/update job:\n$@\n");
                 }
             }
             else {
-                # Info adding mode.
+                # In dry run mode, print the arguments we would have given.
 
-                # Find the jsa_proc job ID based on the tag.
-                my $job_id = eval {
-                    my @job = $jsa_proc_db->call_method(
-                        'get_job', kwargs => {tag => $tag});
-                    $job[0];
-                };
-                unless (defined $job_id) {
-                    log_message("WARNING: could not find job by tag '$tag'\n");
-                    next;
-                }
-                log_message("Found job ID: '$job_id'\n");
-
-                # See if the job already has obs info.
-                eval {
-                    my @existing_info = $jsa_proc_db->call_method(
-                        'get_obs_info', args => [$job_id]);
-
-                    if (@existing_info) {
-                        log_message("Job already has info\n");
-                        next;
-                    }
-
-                    log_message("Job needs info adding\n");
-                };
-                if ($@) {
-                    log_message("Failed to check if job already has info\n");
-                    next;
-                }
-
-                # Job did not have info: prepare to add it.
-                my %args = (
-                    job_id      => $job_id,
-                    obsinfolist => $group->{'obsinfolist'},
-                );
-
-                unless ($dry_run) {
-                    # Non-dry run mode: attempt to update the job info.
-
-                    log_message("Updating obs info in jsa_proc database.\n");
-                    eval {
-                        $jsa_proc_db->call_method(
-                                'set_obs_info', kwargs => \%args);
-                    };
-                    if ($@) {
-                        log_message("ERROR: failed to update obs info.\n");
-                    }
-                }
-                else {
-                    # Dry run mode: print the arguments we would have submitted.
-
-                    log_message("Would have updated the job: [DRY RUN MODE]\n");
-                    log_message(Data::Dumper->Dump([\%args], [qw/args/]));
-                }
+                log_message("Would have added the job: [DRY RUN MODE]\n");
+                log_message(Data::Dumper->Dump([\%args], [qw/args/]));
             }
+
         }
 
         log_message("\nDone adding jobs to local jsa_proc system.\n")
     }
 }
 
-=item create_obsinfo_hash($obs, \%subsyshdr)
 
-Creates an obsinfo hash and returns a reference to it.
-
-Does not include association.
-
-=cut
-
-sub create_obsinfo_hash {
-    my $obs = shift;
-    my $subsyshdr = shift;
-
-    my $subsys;
-
-    if ($subsyshdr->{'BACKEND'} eq 'SCUBA-2') {
-        $subsys = $subsyshdr->{'FILTER'};
-    }
-    elsif ($subsyshdr->{'BACKEND'} eq 'ACSIS') {
-        $subsys = $subsyshdr->{'SUBSYSNR'};
-    }
-    else {
-        die 'Do not know how to derive subsystem for backend: ' .
-            $subsyshdr->{'BACKEND'};
-    }
-
-    return {
-            obsid =>        $subsyshdr->{'OBSID'},
-            obsidss =>      $subsyshdr->{'OBSID_SUBSYSNR'},
-            date_obs =>     $obs->startobs()->strftime('%Y-%m-%d %H:%M:%S'),
-            utdate =>       $subsyshdr->{'UTDATE'},
-            obsnum =>       0 + $subsyshdr->{'OBSNUM'},
-            instrument =>   $subsyshdr->{'INSTRUME'},
-            backend =>      $subsyshdr->{'BACKEND'},
-            subsys =>       $subsys,
-            project =>      $subsyshdr->{'PROJECT'},
-            survey =>       $subsyshdr->{'SURVEY'},
-            scanmode =>     (($subsyshdr->{'SAM_MODE'} eq 'scan')
-                              ? $subsyshdr->{'SCAN_PAT'}
-                              : $subsyshdr->{'SAM_MODE'}),
-            sourcename =>   $subsyshdr->{'OBJECT'},
-            obstype =>      $subsyshdr->{'OBS_TYPE'},
-          }
-}
 
 =back
 

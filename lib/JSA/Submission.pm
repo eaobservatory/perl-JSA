@@ -199,9 +199,9 @@ sub assign_to_group {
     my $groups = shift;
     my $tagprefix = shift;
     my $task = shift;
-    my $obsinfo = shift;
     my $use_pub_asn = shift;
     my $mode_override = shift;
+    my $obsid_subsysnr = shift;
 
     # Deref some hashes and arrays
     my %current = %$curref;
@@ -224,38 +224,13 @@ sub assign_to_group {
     # grouping scheme. If it is false then we need to use the OBSIDSS
     my $group;
     if ($not_in_group) {
-        $group = get_obsidss($obsid, \%tmphdr);
+        $group = $obsid_subsysnr;
     }
     else {
         my $frm = new $frameclass;
         $frm->hdr(%tmphdr);
         $frm->findgroup;
         $group = $frm->asn_id;
-
-        # Add the (non-corrected) association identifier to the obsinfo unless
-        # it already contains an association.
-        unless (defined $obsinfo->{'association'}) {
-            unless ($use_pub_asn) {
-                $obsinfo->{'association'} = $group;
-            }
-            else {
-                # If a JSA public association identifier is requested, use
-                # it instead of the normal group string.  This method can
-                # return undef if it wants to reject a frame from JSA
-                # public processing.  Therefore also check whether this
-                # happens, and if so do not add to the group.
-                my $pub_asn = $frm->jsa_pub_asn_id();
-
-                unless (defined $pub_asn) {
-                    log_message('Rejecting observation ' .
-                                get_obsidss($obsid, \%tmphdr) .
-                                " because jsa_pub_asn_id returned undef\n");
-                    return;
-                }
-
-                $obsinfo->{'association'} = $pub_asn;
-            }
-        }
     }
 
     # Now correct for the association identifier
@@ -269,7 +244,7 @@ sub assign_to_group {
     $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
     $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
     $groups->{$group}{'task'} = $task;
-    push @{$groups->{$group}{'obsinfolist'}}, $obsinfo;
+    push @{$groups->{$group}{'obsid_subsysnr_list'}}, $obsid_subsysnr;
 
     return $group;
 }
