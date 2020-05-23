@@ -21,8 +21,9 @@ use warnings;
 use strict;
 
 use List::MoreUtils qw/any/;
-
-use JSA::Command qw/run_command/;
+use LWP::UserAgent;
+use URI::Escape;
+use Astro::VO::VOTable::Document;
 
 =head2 FUNCTIONS
 
@@ -89,6 +90,8 @@ of...
 ... and, wait time in seconds to wait between requests to CADC
 server with key of "wait".
 
+B<Note:> a valid proxy certificate must be present at C<~/.ssl/cadcproxy.pem>.
+
 =cut
 
 sub at_cadc {
@@ -126,8 +129,7 @@ sub _check_cadc {
     # Time to wait for a random, reasonable amount.
     $wait ||= 20;
 
-    my @curl = (qw[ curl --silent --location ]);
-    my $cadc_url = 'http://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/cadcbin/jcmtInfo?file=';
+    my $cadc_url = 'https://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/ad/sync';
 
     # To avoid hammering the server when run multiple times in a row.
     my $sleepy_time = scalar(@prefix) - 1;
@@ -136,13 +138,28 @@ sub _check_cadc {
     # our array.
     my @uploaded;
     foreach my $prefix (@prefix) {
-        # Try to use curl with a URL (which is what jcmtInfo does anyhow).  Use a
-        # sybase wildcard to get all matching files.
-        my $url = sprintf '%s%s%%', $cadc_url, $prefix;
+        my $query = sprintf "SELECT fileName FROM archive_files WHERE archiveName = 'JCMT' AND fileName LIKE '%s%%'", $prefix;
+        my $ua = new LWP::UserAgent(timeout => 60);
+        $ua->ssl_opts(
+            SSL_use_cert => 1,
+            SSL_cert_file => $ENV{'HOME'} . '/.ssl/cadcproxy.pem');
+        my $res = $ua->get($cadc_url . '?REQUEST=doQuery&LANG=ADQL&QUERY=' . uri_escape($query));
+        next unless $res->is_success;
 
-        my ($stdout, $stderr, $stat) = run_command(@curl, $url);
+        # VOTable-reading code based on that from Astro::Catalog::IO::VOTable.
+        my $doc = Astro::VO::VOTable::Document->new_from_string($res->content());
+        my $votable = ($doc->get_VOTABLE())[0];
+        my $resource = ($votable->get_RESOURCE())[0];
+        my $table = ($resource->get_TABLE())[0];
+        my $data = ($table->get_DATA())[0];
+        my $tabledata = ($data->get_TABLEDATA())[0];
+        my $nrows = $tabledata->get_num_rows();
+        next unless defined $nrows;
 
-        push @uploaded, _filter_curl_output($stdout, $stat);
+        foreach my $j (0 ... $nrows - 1) {
+            my @row = $tabledata->get_row($j);
+            push @uploaded, $row[0];
+        }
 
         $sleepy_time-- > 0 and sleep $wait;
     }
@@ -150,16 +167,6 @@ sub _check_cadc {
     my %at_cadc = map {chomp( $_ ); $_ => undef} @uploaded;
 
     return \%at_cadc;
-}
-
-sub _filter_curl_output {
-    my ($files, $stat) = @_;
-
-    return if $stat != 0;
-    return unless @{ $files };
-    return if $files->[0] =~ /No such file/;
-
-    return @{ $files };
 }
 
 1;
