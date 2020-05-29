@@ -41,7 +41,6 @@ use File::Basename qw/fileparse/;
 use DateTime;
 use DateTime::Duration;
 use Pod::Usage;
-use Getopt::Long qw/:config gnu_compat no_ignore_case no_debug/;
 use List::Util qw/min sum/;
 use List::MoreUtils qw/any/;
 use Log::Log4perl;
