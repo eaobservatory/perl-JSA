@@ -821,12 +821,12 @@ sub _get_observations {
             }
         }
 
-        # SCUBA-2 data can have the FOCAXIS=NONE for the first subscan
+        # SCUBA-2 data can have the FOCAXIS=NONE or undefined for the first subscan
         # (FLATFIELD) whereas undef would be more appropriate (see fault
         # 20200207.001).
         if ((exists $header->{'FOCAXIS'})
                 and (defined $header->{'FOCAXIS'})
-                and ($header->{'FOCAXIS'} eq 'NONE')) {
+                and (($header->{'FOCAXIS'} eq 'NONE') or ($header->{'FOCAXIS'} eq 'undefined'))) {
             undef $header->{'FOCAXIS'};
         }
     }
