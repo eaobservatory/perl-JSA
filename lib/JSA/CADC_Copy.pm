@@ -20,8 +20,10 @@ data files are at CADC.
 use warnings;
 use strict;
 
+use Config::IniFiles;
 use List::MoreUtils qw/any/;
 use LWP::UserAgent;
+use MIME::Base64;
 use URI::Escape;
 use Astro::VO::VOTable::Document;
 
@@ -90,7 +92,8 @@ of...
 ... and, wait time in seconds to wait between requests to CADC
 server with key of "wait".
 
-B<Note:> a valid proxy certificate must be present at C<~/.ssl/cadcproxy.pem>.
+B<Note:> a valid proxy certificate must be present at C<~/.ssl/cadcproxy.pem>
+or CADC account information in C<~/.tools4caom2/tools4caom2.config>.
 
 =cut
 
@@ -129,21 +132,35 @@ sub _check_cadc {
     # Time to wait for a random, reasonable amount.
     $wait //= 20;
 
-    my $cadc_url = 'https://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/ad/sync';
+    my $cadc_url = 'https://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/ad';
 
     # To avoid hammering the server when run multiple times in a row.
     my $sleepy_time = scalar(@prefix) - 1;
+
+    my $ua = new LWP::UserAgent(timeout => 60);
+    my %get_opt = ();
+    my $certfile = $ENV{'HOME'} . '/.ssl/cadcproxy.pem';
+    my $tools4caom2config = $ENV{'HOME'} . '/.tools4caom2/tools4caom2.config';
+    if (-e $certfile) {
+        $cadc_url .= '/sync';
+        $ua->ssl_opts(SSL_use_cert => 1, SSL_cert_file => $certfile);
+    }
+    elsif (-e $tools4caom2config) {
+        $cadc_url .= '/auth-sync';
+        my $cfg = new Config::IniFiles(-file => $tools4caom2config);
+        $get_opt{'Authorization'} = 'Basic ' . encode_base64(
+            (join ':', $cfg->val('cadc', 'cadc_id'), $cfg->val('cadc', 'cadc_key')), '');
+    }
+    else {
+        die 'No SSL certificate or tools4caom2 config file found';
+    }
 
     # Go through each instrument prefix and push the list of files onto
     # our array.
     my @uploaded;
     foreach my $prefix (@prefix) {
         my $query = sprintf "SELECT fileName FROM archive_files WHERE archiveName = 'JCMT' AND fileName LIKE '%s%%'", $prefix;
-        my $ua = new LWP::UserAgent(timeout => 60);
-        $ua->ssl_opts(
-            SSL_use_cert => 1,
-            SSL_cert_file => $ENV{'HOME'} . '/.ssl/cadcproxy.pem');
-        my $res = $ua->get($cadc_url . '?REQUEST=doQuery&LANG=ADQL&QUERY=' . uri_escape($query));
+        my $res = $ua->get($cadc_url . '?REQUEST=doQuery&LANG=ADQL&QUERY=' . uri_escape($query), %get_opt);
         next unless $res->is_success;
 
         # VOTable-reading code based on that from Astro::Catalog::IO::VOTable.
