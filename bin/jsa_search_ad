@@ -1,0 +1,58 @@
+#!/usr/bin/env perl
+
+=head1 NAME
+
+jsa_search_ad - Search for files in JCMT AD at CADC
+
+=head1 SYNOPSIS
+
+    jsa_search_ad --ut YYYYMMDD --prefix XXX
+
+=head1 DESCRIPTION
+
+This script allows the C<JSA::CADC_Copy::at_cadc> function
+to be tested.
+
+=cut
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Pod::Usage;
+
+use JSA::CADC_Copy;
+
+my ($ut, @prefix);
+GetOptions(
+    "ut=s"      => \$ut,
+    "prefix=s"  => \@prefix,
+) or pod2usage(-exitstatus => 1, -verbose => 0);
+
+
+my $result = JSA::CADC_Copy::at_cadc($ut, prefix => \@prefix, wait => 0);
+
+do {
+    local $\ = "\n";
+    print foreach sort keys %$result;
+};
+
+=head1 COPYRIGHT
+
+Copyright (C) 2020 East Asian Observatory
+All Rights Reserved.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 2 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful,but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program; if not, write to the Free Software Foundation, Inc.,51 Franklin
+Street, Fifth Floor, Boston, MA  02110-1301, USA
+
+=cut

@@ -127,7 +127,7 @@ sub _check_cadc {
     return unless scalar @prefix;
 
     # Time to wait for a random, reasonable amount.
-    $wait ||= 20;
+    $wait //= 20;
 
     my $cadc_url = 'https://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/ad/sync';
 
