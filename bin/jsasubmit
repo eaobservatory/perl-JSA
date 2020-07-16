@@ -297,7 +297,7 @@ else {
         $options{'jsa_proc_logging'} = $jp_logging;
     }
 
-    add_jsa_proc_jobs(\%groups, $mode, $priority, $dry_run);
+    add_jsa_proc_jobs(\%groups, $mode, $priority, $dry_run, %options);
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $dry_run;
