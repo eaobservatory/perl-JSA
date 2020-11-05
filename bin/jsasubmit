@@ -297,7 +297,7 @@ else {
         $options{'jsa_proc_logging'} = $jp_logging;
     }
 
-    break_multi_project_groups(\%groups);
+    break_multi_project_groups(\%groups, $options{'allow_update'});
 
     add_jsa_proc_jobs(\%groups, $mode, $priority, $dry_run, %options);
 }
@@ -312,6 +312,7 @@ exit;
 
 sub break_multi_project_groups {
     my $groups = shift;
+    my $allow_update = shift;
 
     my @tags = keys %$groups;
 
@@ -328,7 +329,13 @@ sub break_multi_project_groups {
         if (1 < scalar keys %projects) {
             # Group has multiple projects: replace it with its subgroups.
             $groups->{$_} = $subgroups->{$_} foreach keys %$subgroups;
-            delete $groups->{$tag};
+            if ($allow_update) {
+                $group->{'files'} = [];
+                delete $group->{'subgroups'};
+            }
+            else {
+                delete $groups->{$tag};
+            }
         }
         else {
             # Group has only one project: remove the subgroups.
