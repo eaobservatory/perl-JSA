@@ -239,12 +239,25 @@ sub assign_to_group {
 
     $group = $tagprefix . '-' . $group if defined $tagprefix;
 
+    my $mode = $mode_override // $current{mode};
+
     push @{$groups->{$group}{files}}, @files;
-    $groups->{$group}{mode} = $mode_override // $current{mode};
+    $groups->{$group}{mode} = $mode;
     $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
     $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
     $groups->{$group}{'task'} = $task;
+    $groups->{$group}{'project'} = uc($tmphdr{'PROJECT'} // 'NO PROJECT');
     push @{$groups->{$group}{'obsid_subsysnr_list'}}, $obsid_subsysnr;
+
+    unless ($not_in_group or ($mode ne 'night')) {
+        $groups->{$group}{'subgroups'} //= {};
+        my %current = %$curref;
+        $current{'mode'} = 'obs';
+        assign_to_group(
+            $instrume, $obsid, $frameclass, 1, $hdrref, \%current, $fileref,
+            $groups->{$group}{'subgroups'}, $tagprefix, $task, $use_pub_asn,
+            undef, $obsid_subsysnr);
+    }
 
     return $group;
 }

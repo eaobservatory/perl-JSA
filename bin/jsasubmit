@@ -297,6 +297,8 @@ else {
         $options{'jsa_proc_logging'} = $jp_logging;
     }
 
+    break_multi_project_groups(\%groups);
+
     add_jsa_proc_jobs(\%groups, $mode, $priority, $dry_run, %options);
 }
 
@@ -306,6 +308,34 @@ send_log_email('JSA Processing', $ut, $project)
     unless $noemail || $dry_run;
 
 exit;
+
+
+sub break_multi_project_groups {
+    my $groups = shift;
+
+    my @tags = keys %$groups;
+
+    foreach my $tag (@tags) {
+        my $group = $groups->{$tag};
+        my $subgroups = $group->{'subgroups'};
+        next unless $subgroups;
+
+        my %projects = ();
+        foreach my $subgroup (values %$subgroups) {
+            $projects{$subgroup->{'project'}} = 1;
+        }
+
+        if (1 < scalar keys %projects) {
+            # Group has multiple projects: replace it with its subgroups.
+            $groups->{$_} = $subgroups->{$_} foreach keys %$subgroups;
+            delete $groups->{$tag};
+        }
+        else {
+            # Group has only one project: remove the subgroups.
+            delete $group->{'subgroups'};
+        }
+    }
+}
 
 =head1 AUTHORS
 
