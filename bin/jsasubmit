@@ -322,8 +322,26 @@ sub break_multi_project_groups {
         next unless $subgroups;
 
         my %projects = ();
-        foreach my $subgroup (values %$subgroups) {
-            $projects{$subgroup->{'project'}} = 1;
+        foreach my $key (keys %$subgroups) {
+            my $subgroup = $subgroups->{$key};
+            my $project = $subgroup->{'project'};
+
+            if ($project =~ /EC/i) {
+                # This is an E&C project: break it out of the group.  (It
+                # would have been better not to have grouped E&C observations
+                # but doing it at this step allows existing processing jobs
+                # to be split.)
+
+                $groups->{$key} = $subgroup;
+                delete $subgroups->{$key};
+                for my $list ('files', 'obsid_subsysnr_list') {
+                    $group->{$list} = [grep {not $_ ~~ $subgroup->{$list}} @{$group->{$list}}];
+                }
+
+                next;
+            }
+
+            $projects{$project} = 1;
         }
 
         if (1 < scalar keys %projects) {
