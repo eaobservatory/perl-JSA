@@ -633,10 +633,14 @@ information, if available, and MD5 sums and file sizes.
         date => '20090609',
         dry_run => $dry_run,
         skip_state => $skip_state,
+        no_file_extra_info => 0,
     );
 
 Note: writes the file state in the transfer table unless the
 dry_run argument is given, or using data from MongoDB.
+
+With C<no_file_extra_info>, does not get MD5-sums and file sizes
+for files from disk.
 
 =cut
 
@@ -645,6 +649,7 @@ sub _get_observations {
     my $dry_run = $args{'dry_run'};
     my $skip_state = $args{'skip_state'};
     my $mdb = $args{'mongodb'};
+    my $no_file_extra = $args{'no_file_extra_info'};
 
     my $log = Log::Log4perl->get_logger('');
 
@@ -761,8 +766,11 @@ sub _get_observations {
 
             my $basename = _basename($filename);
             $wcs{$basename} = $ob->wcs() if $self->need_wcs();
-            $md5{$basename} = file_md5sum($filename);
-            $size{$basename} = [stat $filename]->[7];
+
+            unless ($no_file_extra) {
+                $md5{$basename} = file_md5sum($filename);
+                $size{$basename} = [stat $filename]->[7];
+            }
 
             push @headers, {
                 filename => $filename,
@@ -2430,6 +2438,7 @@ sub calcbounds_update_bound_cols {
             dry_run => $dry_run,
             skip_state => ($skip_state or $skip_state_found),
             monbodb => undef,
+            no_file_extra_info => 1,
             %obs_args);
 
     unless ($obs_list and (ref $obs_list) and (scalar @$obs_list)) {
