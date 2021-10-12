@@ -132,7 +132,7 @@ sub _check_cadc {
     # Time to wait for a random, reasonable amount.
     $wait //= 20;
 
-    my $cadc_url = 'https://www.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/ad';
+    my $cadc_url = 'https://ws.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/ad';
 
     # To avoid hammering the server when run multiple times in a row.
     my $sleepy_time = scalar(@prefix) - 1;
