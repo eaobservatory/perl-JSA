@@ -82,7 +82,6 @@ use JAC::Setup qw/omp/;
 use strict;
 use warnings;
 
-use JSA::CADC_Copy;
 use JSA::Submission qw/
     %DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
     adjust_header adjust_header_freq assign_to_group
