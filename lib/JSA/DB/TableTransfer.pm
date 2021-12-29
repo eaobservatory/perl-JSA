@@ -388,6 +388,7 @@ sub _translate_instrument {
     return '' unless $instr;
     return 's' if $instr =~ /^scuba-?2\b/i;
     return 'a' if $instr =~ /^acsis\b/i;
+    return 'rxh3-' if $instr =~ /^rxh3\b/i;
 
     return lc "s${1}" if $instr =~ /^s?([48][a-d])\b/i;
 
