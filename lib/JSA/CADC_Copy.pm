@@ -58,7 +58,8 @@ The instrument prefixes are ...
   s8a,
   s8b,
   s8c,
-  s8d
+  s8d,
+  rxh3-
 
 
 If no list is given, all of the above prefixes are used.
@@ -87,7 +88,8 @@ of...
   s8a,
   s8b,
   s8c,
-  s8d
+  s8d,
+  rxh3-
 
 ... and, wait time in seconds to wait between requests to CADC
 server with key of "wait".
@@ -102,7 +104,7 @@ sub at_cadc {
 
     return if defined $ut && $ut !~ /^\d{8}$/;
 
-    my @inst = qw/a s4a s4b s4c s4d s8a s8b s8c s8d/;
+    my @inst = qw/a s4a s4b s4c s4d s8a s8b s8c s8d rxh3-/;
 
     my @prefix =
       ($opt{'prefix'} && ref $opt{'prefix'} ? @{ $opt{'prefix'} } : ());
