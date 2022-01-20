@@ -23,7 +23,7 @@ our @EXPORT_OK = qw/prepare_environment
                     retrieve_data determine_instrument
                     run_pipeline capture_products
                     clean_directory_final clean_directory_pre_capture
-                    log_listing/;
+                    log_listing read_file_list/;
 
 our $VERSION = '0.03';
 
@@ -318,6 +318,40 @@ sub log_listing {
     log_message('DEBUG LISTING BEGIN: ' . $name);
     log_message($_) foreach `ls $directory`;
     log_message('DEBUG LISTING END');
+}
+
+=item read_file_list
+
+Read an ORAC-DR style file list.
+
+This can be used to read file lists written by Wesley.  Comments
+starting with # are ignored.  However no checks for duplicate files
+are performed.
+
+Returns a reference to an array of files, or undef if the listing
+could not be read.
+
+=cut
+
+sub read_file_list {
+    my $filename = shift;
+
+    my $fh = new IO::File($filename, 'r');
+    return undef unless defined $fh;
+
+    my @files = ();
+    foreach my $f (<$fh>) {
+        # Same filtering as ORAC::Core::orac_parse_files:
+        chomp $f;
+        $f =~ s/\#.*//;             # comments
+        $f =~ s/^\s+//;             # leading whitespace
+        $f =~ s/\s+$//;             # trailing whitespace
+        next unless $f =~ /\w/;
+        push @files, $f;
+    }
+
+    $fh->close();
+    return \@files;
 }
 
 1;
