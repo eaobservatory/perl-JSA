@@ -184,6 +184,11 @@ using dpCapture, they are simply copied to the transfer directory
 When using a custom DR command, enable conversion of input files from
 FITS to SDF.  (Has no effect otherwise when this is always done.)
 
+=item B<--preprocess>
+
+Preprocessing (Wesley) recipe to run before ORAC-DR.  Can be passed
+as part of C<--drparameters>.
+
 =back
 
 =head1 QUESTIONS
@@ -241,7 +246,7 @@ print Dumper \%ENV;
 my ($cleanup, $drcommand, $drparameters, $help, $id, $indir, $inputs,
     $instrument, $log, $man, $mode, $specified_outdir, $parameters, $persist,
     $tmpdir, $transdir, $ut, $show_version, $version, $debugxfer,
-    $raw_output, $convert_input);
+    $raw_output, $convert_input, $preprocess_recipe);
 
 my $status = GetOptions(
     "cleanup=s"     => \$cleanup,
@@ -266,6 +271,7 @@ my $status = GetOptions(
     'fileversion:i' => \$version,
     'rawoutput'     => \$raw_output,
     'convertinput'  => \$convert_input,
+    'preprocess=s'  => \$preprocess_recipe,
 );
 
 pod2usage(1) if $help;
@@ -289,6 +295,24 @@ if (defined($parameters)) {
   print "Parsed --parameters to give:\n";
   print "mode = $mode\n";
   print "drparameters = $drparameters\n";
+}
+
+# Check for "preprocess" amongst "drparameters".
+if (defined $drparameters) {
+    # Set "pass_through" option so that --recpars is kept.
+    Getopt::Long::Configure('pass_through');
+
+    ($status, $drparameters) = GetOptionsFromString(
+        $drparameters,
+        'preprocess=s' => \$preprocess_recipe,
+    );
+
+    # Restore previous settings.
+    Getopt::Long::Configure('default');
+
+    # Reassemble drparameters.  Quoting is not considered
+    # as JSA::WrapDR::run_pipeline simply splits on whitespace.
+    $drparameters = join ' ', @$drparameters;
 }
 
 # Check the UT and instrument parameters. If one's defined but not the
@@ -329,13 +353,6 @@ prepare_environment();
 
 # We require that STARLINK_DIR and ORAC_DIR are set
 check_star_env( "ORAC" );
-
-# Check recipe parameters and strip any leading or trailing
-# whitespace.
-if (defined $drparameters) {
-    $drparameters =~ s/^\s+//;
-    $drparameters =~ s/\s+$//;
-}
 
 # Get the current working directory
 my $curdir = File::Spec->rel2abs(File::Spec->curdir);
@@ -574,14 +591,45 @@ else {
     $oracinst = $instrument;
 }
 
+my @pipeline_args = (
+    $useoracdr, $oracinst, $indir, $outdir);
+
+my $pipeline_files_or_ut = ($skipdp ? "$ut" : \@files);
+
 # Pass additional information to run_pipeline (e.g. id, version, ...)
 # in case we are running a custom DR command.  It may need this information
 # to convert and store its output files.
-run_pipeline($useoracdr, $oracinst, $indir, $outdir,
-             ($skipdp ? "$ut" : \@files), $drparameters,
-             {batch => 1, drcommand => $drcommand,
-              id => $id, version => $version,
-              persist => $persist, transdir => $transdir});
+my %pipeline_opts = (
+    batch => 1,
+    id => $id, version => $version,
+    persist => $persist, transdir => $transdir);
+
+# Apply reprocessing if desired.
+if (defined $preprocess_recipe) {
+    die 'Preprocessing requested but pipeline is not ORAC-DR'
+        unless $useoracdr;
+
+    my $preprocessed = run_pipeline(
+        @pipeline_args,
+        $pipeline_files_or_ut,
+        $preprocess_recipe,
+        {%pipeline_opts, preprocess => 1});
+
+    die 'Preprocessing output list could not be read'
+        unless defined $preprocessed;
+
+    # Use preprocssing output as future input.
+    $pipeline_files_or_ut = $preprocessed;
+
+    # Scan directory again.
+    %post_retrieve = scan_dir($scan_dir_pattern);
+}
+
+run_pipeline(
+    @pipeline_args,
+    $pipeline_files_or_ut,
+    $drparameters,
+    {%pipeline_opts, drcommand => $drcommand});
 
 # Assume that the custom command has converted and stored its outputs,
 # since we don't know what its naming conventions, etc. might be.
