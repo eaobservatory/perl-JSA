@@ -103,7 +103,7 @@ sub determine_instrument {
 Run the ORAC-DR or PICARD pipeline.
 
     run_pipeline($useoracdr, $oracinst, $indir,
-                 $outdir, $files_or_ut, $drparameters);
+                 $outdir, $files_or_ut, $drparameters, \%options);
 
 C<$files_or_ut> is either a reference to a list of files, or in
 dpRetrieve-skipping mode, a string containing the UT date.
@@ -132,6 +132,7 @@ sub run_pipeline {
     # Create $tmpfile in subroutine scope so that it is not automatically
     # cleared up before we get around to running the data reduction command.
     my $tmpfile;
+    my $preprocess_files = undef;
 
     my @drcommand;
     if (defined $options->{'drcommand'}) {
@@ -158,7 +159,15 @@ sub run_pipeline {
         push(@drcommand, split /\s+/, $drparameters) if defined $drparameters;
     }
     elsif ($useoracdr) {
-        log_message("Using ORAC-DR\n");
+        # Check for pre-processing mode.
+        my $pipename = 'ORAC-DR';
+        if (exists $options->{'preprocess'} and $options->{'preprocess'}) {
+            $preprocess_files = new File::Temp();
+            $preprocess_files->close();
+            $pipename = 'WESLEY';
+        }
+
+        log_message(sprintf "Using %s\n", $pipename);
 
         # Instrument
         $ENV{ORAC_INSTRUMENT} = $oracinst;
@@ -197,6 +206,12 @@ sub run_pipeline {
 
         # Add the DR parameters.
         push(@drcommand, split /\s+/, $drparameters) if defined $drparameters;
+
+        # Add Wesley options if preprocessing.
+        if (defined $preprocess_files) {
+            push @drcommand, '-preprocess',
+                '-recpars=WESLEY_FILE_LIST=' . $preprocess_files->filename();
+        }
     }
     else {
         # We are going to need a ^file option in PICARD
@@ -231,6 +246,11 @@ sub run_pipeline {
     log_message("\n*** All output from STDERR:\n");
     log_message(join "\n", @$drstderr);
     die "Non-zero pipeline exit status: $drstatus" if $drstatus;
+
+    # Read file list if preprocessing.
+    if (defined $preprocess_files) {
+        return read_file_list($preprocess_files->filename());
+    }
 }
 
 =item capture_products
