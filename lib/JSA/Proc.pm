@@ -15,7 +15,7 @@ use Data::Dumper; # For "dry run" mode output.
 
 use JSA::Submission qw/log_message/;
 
-our @EXPORT_OK = qw/add_jsa_proc_jobs create_obsinfo_hash/;
+our @EXPORT_OK = qw/add_jsa_proc_jobs get_obs_preproc_recipe/;
 
 =head1 SUBROUTINES
 
@@ -158,6 +158,16 @@ sub add_jsa_proc_jobs {
     }
 
     log_message("\nDone adding jobs to local jsa_proc system.\n")
+}
+
+sub get_obs_preproc_recipe {
+    my $obsid = shift;
+    my $options = shift;
+
+    my ($taco, $jsa_proc_db) = _get_taco_jsa_proc_db($options);
+    return $jsa_proc_db->call_method(
+        'get_obs_preproc_recipe',
+        args => [$obsid])
 }
 
 {
