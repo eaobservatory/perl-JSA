@@ -114,6 +114,8 @@ sub add_jsa_proc_jobs {
             if exists $group->{'recpars'};
         push @param, $group->{'drparams'}
             if exists $group->{'drparams'};
+        push @param, '--preprocess', $group->{'preproc'}
+            if exists $group->{'preproc'};
 
         my %args = (
             tag             => $tag,

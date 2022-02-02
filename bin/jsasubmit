@@ -90,7 +90,7 @@ use JSA::Submission qw/
     log_message obs_is_fts2_or_pol2_RECIPE
     prepare_archive_db send_log_email
     write_log_file/;
-use JSA::Proc qw/add_jsa_proc_jobs/;
+use JSA::Proc qw/add_jsa_proc_jobs get_obs_preproc_recipe/;
 
 use OMP::Info::Obs;
 use OMP::Constants qw/:obs/;
@@ -147,6 +147,18 @@ if (scalar(@{$grp->obs}) == 0) {
 }
 else {
     log_message(scalar(@{$grp->obs}) . " observations were retrieved from the database.\n\n");
+
+    my %options;
+    if (defined $allow_update) {
+        $options{'allow_update'} = 1;
+        if (defined $dry_run) {
+            $options{'jsa_proc_dry_run'} = 1;
+            $dry_run = undef;
+        }
+    }
+    if (defined $jp_logging) {
+        $options{'jsa_proc_logging'} = $jp_logging;
+    }
 
     # Group information hash for add_jsa_proc_jobs.
     my %groups;
@@ -248,6 +260,7 @@ else {
           $current{recpars} = $recparstring;
         }
 
+        $current{preproc} = get_obs_preproc_recipe($obs->obsid(), \%options);
 
         my @subsystems = $obs->subsystems;
 
@@ -282,18 +295,6 @@ else {
                             $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
                             undef, $task, 0, undef, $obsidss );
         }
-    }
-
-    my %options;
-    if (defined $allow_update) {
-        $options{'allow_update'} = 1;
-        if (defined $dry_run) {
-            $options{'jsa_proc_dry_run'} = 1;
-            $dry_run = undef;
-        }
-    }
-    if (defined $jp_logging) {
-        $options{'jsa_proc_logging'} = $jp_logging;
     }
 
     break_multi_project_groups(\%groups, $options{'allow_update'});

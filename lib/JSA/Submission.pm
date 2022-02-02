@@ -245,6 +245,7 @@ sub assign_to_group {
     $groups->{$group}{mode} = $mode;
     $groups->{$group}{drparams} = $current{drparams} if defined $current{drparams};
     $groups->{$group}{recpars} = $current{recpars} if defined $current{recpars};
+    $groups->{$group}{preproc} = $current{preproc} if defined $current{preproc};
     $groups->{$group}{'task'} = $task;
     $groups->{$group}{'project'} = uc($tmphdr{'PROJECT'} // 'NO PROJECT');
     push @{$groups->{$group}{'obsid_subsysnr_list'}}, $obsid_subsysnr;
