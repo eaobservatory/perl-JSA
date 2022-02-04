@@ -9,12 +9,13 @@ JSA::WrapDR - Data reduction wrapping subroutines
 use strict;
 use warnings;
 
+use File::Copy;
 use File::Spec;
-use File::Temp;
+use File::Temp qw/tempfile/;
 use FindBin;
 
 use JSA::Command qw/run_command/;
-use JSA::Files qw/scan_dir/;
+use JSA::Files qw/looks_like_cadcfile scan_dir/;
 use JSA::Headers qw/get_orac_instrument/;
 use JSA::Logging qw/log_message log_command/;
 
@@ -255,27 +256,73 @@ sub run_pipeline {
 
 =item capture_products
 
-Call dpCapture with the correct arguments.
+Capture products.
 
 =cut
 
 sub capture_products {
     my ($persist, $transdir, $show_output) = @_;
 
-    my @args;
+    log_message("*** capturing products");
+
+    if (defined $transdir) {
+        $transdir = File::Spec->rel2abs($transdir);
+    }
+    else {
+        die 'capture_products: transdir not specified';
+    }
+
+    # Regex
+    my $regexp = qr/^(?:jcmt.*\.fits|jcmt.*\.png)$/;
+
+    # Sort out output directory
     if ($persist) {
-        push @args, "--persist";
+        unless (-d $transdir) {
+            my $updir = _parentdir($transdir);
+            if (-d $updir) {
+                mkdir($transdir)
+                    or die "Could not create directory '$transdir' required to receive data files";
+            }
+            else {
+                die "$transdir does not exist and neither does its parent. Can not copy data";
+            }
+        }
     }
 
-    if (defined($transdir)) {
-        push @args, "--transdir", $transdir;
+    # Scan the directory for plausible fits or png files
+    my %files = scan_dir($regexp);
+
+    for my $f (sort keys %files) {
+        if (looks_like_cadcfile($f)) {
+            if ($persist) {
+                # Copy the file into a temporary file in the current directory,
+                # then rename it.
+                my ($fh, $filename) = tempfile();
+                copy($f, $filename) or die "copy from $f to $filename failed: $!";
+                move($filename, File::Spec->catfile($transdir, $f))
+                    or die "move from $filename to " . File::Spec->catfile($transdir, $f) . " failed: $!";
+
+                log_message("Copied $f to " . File::Spec->catfile($transdir, $f))
+                    if $show_output;
+
+            }
+            else {
+                log_message("Would persist file $f")
+                    if $show_output;
+            }
+        }
     }
+}
 
-    log_message("\n*** calling dpCapture " . ( join " ", @args ) . "\n");
+# Given a directory path, returns the path of the parent.
+#  $parent = _parentdir( $dir );
 
-    my ($dpcstdout, $dpcstderr, $dpcstatus) = run_command("dpCapture", @args);
-
-    log_command("dpCapture", $dpcstdout, $dpcstderr) if $show_output;
+sub _parentdir {
+    my $path = shift;
+    my @dirs = File::Spec->splitdir($path);
+    pop(@dirs);
+    my $updir = File::Spec->catdir(@dirs);
+    return $updir;
 }
 
 =item clean_directory_pre_capture
