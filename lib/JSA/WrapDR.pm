@@ -58,18 +58,125 @@ sub prepare_environment {
 
 =item retrieve_data
 
-Copy the files locally by calling the dpRetrieve command. We hope it is
-in the path.
+Copy the files locally.
 
 =cut
 
 sub retrieve_data {
-    my ($inputs, $show_output) = @_;
+    my ($inputs, $show_output, $outdir) = @_;
 
-    my ($dprstdout, $dprstderr, $extat) = run_command("dpRetrieve",
-                                                      "--inputs=$inputs");
+    # output directory defaulting
+    $outdir = File::Spec->curdir
+        unless defined $outdir;
 
-    log_command("dpRetrieve", $dprstdout, $dprstderr) if $show_output;
+    # absolute output directory name for error messages
+    my $absdir = File::Spec->rel2abs($outdir);
+
+    # open the file and read all the lines
+    my $file = $inputs;
+    die "retrieve_data: No file supplied so unable to retrieve any data files"
+        unless defined $file;
+
+    open (my $fh, "<", $file)
+        or die "Could not open supplied filename '$file': $!";
+
+    my @lines = <$fh>;
+
+    close($fh) or die "Could not close file '$file': $!";
+
+    for my $line (@lines) {
+        my $fullpath = _parse_retrieve_line($line);
+        next unless defined $fullpath;
+
+        # see if that path exists
+        if (-e $fullpath) {
+            # split into a directory and a filename
+            my ($vol, $dir, $file) = File::Spec->splitpath($fullpath);
+
+            # output location
+            $file = File::Spec->catdir($outdir, $file);
+
+            # see if it exists already in the current dir
+            if (-e $file) {
+                # We first have to decide whether it is the same
+                # file or note
+                my @statcurr = stat($file);
+                my @statnew  = stat($fullpath);
+
+                my $same = 1;
+                for my $i (0..$#statcurr) {
+                    if ($statcurr[$i] != $statnew[$i]) {
+                        $same = 0;
+                        last;
+                    }
+                }
+                if (!$same) {
+                    die "Unable to retrieve file '$fullpath' because a file named '$file' already exists in the retrieve directory ($absdir) and it is different";
+                }
+
+                # we know they are the same file
+                if (-l $file) {
+                    # remove the link and remake it
+                    if (unlink $file) {
+                        symlink $fullpath, $file
+                            or die "Could not make soft link to '$file' in retrieve directory ($absdir)";
+
+                        log_message("Re-making soft link for '$file'")
+                            if $show_output;
+                    }
+                }
+                else {
+                    # it is a real file locally and it is the same so we touch
+                    # it to allow the wrapper script to know that it is required
+                    my $atime = time;
+                    my $mtime = $atime;
+
+                    utime($atime, $mtime, $file)
+                        or die "Error touching file '$file' in current directory ($absdir)";
+
+                    log_message("Touching pre-existing file '$file'")
+                        if $show_output;
+                }
+            }
+            else {
+                # make a soft link
+                symlink $fullpath, $file
+                    or log_message("Could not make soft link to '$file' in current directory ($absdir)");
+                log_message("Making new soft link for file '$file'")
+                    if $show_output;
+            }
+        }
+        else {
+            log_message("File '$fullpath' does not seem to exist");
+        }
+    }
+}
+
+# Converts a line retrieved from an "inputs" file into a full path
+# Recognizes full path to file /xxx/yy
+# For path-less strings prepends $ORAC_DATA_IN or current dir if not set
+# Comments (# xxx) are removed
+
+sub _parse_retrieve_line {
+    my $path = shift;
+    chomp($path);
+    $path =~ s/\#.*//;
+    return unless $path =~ /\w/;
+
+    # see if we need to attach a directory. We do this if the
+    # file is relative.
+    unless (File::Spec->file_name_is_absolute($path)) {
+        # no directory so we guess ORAC_DATA_IN, else it will have
+        # to be current working directory. We check in ORAC_DATA_IN
+        if (exists $ENV{ORAC_DATA_IN} &&
+                defined $ENV{ORAC_DATA_IN} &&
+                -d $ENV{ORAC_DATA_IN}) {
+            my $newpath = File::Spec->catdir($ENV{ORAC_DATA_IN}, $path);
+            $path = $newpath if -e $newpath;
+        }
+    }
+
+    return $path;
 }
 
 =item determine_instrument
