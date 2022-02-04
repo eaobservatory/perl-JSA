@@ -394,13 +394,13 @@ sub delete_other_groups {
         my $supergroup = $group->{'supergroup'};
         next unless defined $supergroup;
 
-        $to_delete->{$supergroup} = 1 unless exists $group->{$supergroup};
+        $to_delete->{$supergroup} = 1 unless exists $groups->{$supergroup};
     }
 
     # For each group in deletion list, create a dummy group with an empty
     # file list to trigger job deletion.
     foreach my $tag (keys %$to_delete) {
-        die 'Group identified for deletion exists!' if exists $groups->{$tag};
+        die 'Group "' . $tag . '" identified for deletion exists!' if exists $groups->{$tag};
 
         $groups->{$tag} = {
             files => [],
