@@ -12,7 +12,6 @@ use warnings;
 use File::Copy;
 use File::Spec;
 use File::Temp qw/tempfile/;
-use FindBin;
 
 use JSA::Command qw/run_command/;
 use JSA::Files qw/looks_like_cadcfile scan_dir/;
@@ -34,23 +33,11 @@ our $VERSION = '0.03';
 
 =item prepare_environment
 
-Add the path for this routine to the full path. This will allow
-dpCapture and dpRetrieve to be found in emulation. Add to the end of
-path so that the real CADC versions will be found.
+Prepare environment for pipeline.
 
 =cut
 
 sub prepare_environment {
-    my $newpath = $FindBin::RealBin;
-    $newpath .= ":". $FindBin::Bin if $FindBin::Bin ne $FindBin::RealBin;
-
-    if (exists $ENV{PATH}) {
-        $ENV{PATH} = $ENV{PATH} . ":". $newpath;
-    }
-    else {
-        $ENV{PATH} = $newpath;
-    }
-
     # Set ADAM_USER to a temp directory
     my $adamuser = File::Temp->newdir();
     $ENV{ADAM_USER} = "$adamuser";
