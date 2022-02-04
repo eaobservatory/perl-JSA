@@ -202,6 +202,7 @@ sub assign_to_group {
     my $use_pub_asn = shift;
     my $mode_override = shift;
     my $obsid_subsysnr = shift;
+    my $supergroup_mode = shift;
 
     # Deref some hashes and arrays
     my %current = %$curref;
@@ -222,22 +223,20 @@ sub assign_to_group {
 
     # if not_in_group is false then we have to determine the
     # grouping scheme. If it is false then we need to use the OBSIDSS
-    my $group;
-    if ($not_in_group) {
-        $group = $obsid_subsysnr;
-    }
-    else {
+    my $group = undef;
+    my $supergroup = undef;
+    unless ($not_in_group and not defined $supergroup_mode) {
         my $frm = new $frameclass;
         $frm->hdr(%tmphdr);
         $frm->findgroup;
         $group = $frm->asn_id;
     }
+    if ($not_in_group) {
+        $supergroup = $group;
+        $group = $obsid_subsysnr;
+    }
 
-    # Now correct for the association identifier
-    $tmphdr{ASN_ID} = $group;
-    $group = correct_asn_id( $current{mode}, \%tmphdr );
-
-    $group = $tagprefix . '-' . $group if defined $tagprefix;
+    $group = _prepare_group_id($group, $current{'mode'}, $tagprefix, \%tmphdr);
 
     my $mode = $mode_override // $current{mode};
 
@@ -248,6 +247,9 @@ sub assign_to_group {
     $groups->{$group}{preproc} = $current{preproc} if defined $current{preproc};
     $groups->{$group}{'task'} = $task;
     $groups->{$group}{'project'} = uc($tmphdr{'PROJECT'} // 'NO PROJECT');
+    $groups->{$group}{'supergroup'} = _prepare_group_id(
+            $supergroup, $supergroup_mode, $tagprefix, \%tmphdr)
+        if defined $supergroup;
     push @{$groups->{$group}{'obsid_subsysnr_list'}}, $obsid_subsysnr;
 
     unless ($not_in_group or ($mode ne 'night')) {
@@ -257,8 +259,20 @@ sub assign_to_group {
         assign_to_group(
             $instrume, $obsid, $frameclass, 1, $hdrref, \%current, $fileref,
             $groups->{$group}{'subgroups'}, $tagprefix, $task, $use_pub_asn,
-            undef, $obsid_subsysnr);
+            undef, $obsid_subsysnr, undef);
     }
+
+    return $group;
+}
+
+sub _prepare_group_id {
+    my ($group, $mode, $tagprefix, $tmphdr) = @_;
+
+    # Now correct for the association identifier
+    $tmphdr->{'ASN_ID'} = $group;
+    $group = correct_asn_id($mode, $tmphdr);
+
+    $group = $tagprefix . '-' . $group if defined $tagprefix;
 
     return $group;
 }

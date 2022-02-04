@@ -72,6 +72,13 @@ Files to be processed are verified to be at CADC before a job will be submitted.
 
 Print version information.
 
+=item B<--delete-other>
+
+If in update mode (with C<--allow-update>) then try to delete non-grouped
+versions of grouped jobs and grouped versions of non-grouped jobs.  (Note
+that groups split due to containing multiple projects are automatically
+deleted regardless of this option in update mode.)
+
 =back
 
 =cut
@@ -102,7 +109,7 @@ prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $noemail, $dry_run,
-    $queue, $task, $allow_update, $jp_logging);
+    $queue, $task, $allow_update, $jp_logging, $delete_other);
 
 my $status = GetOptions(
     "help"      => \$help,
@@ -117,6 +124,7 @@ my $status = GetOptions(
     'task=s'    => \$task,
     'allow-update' => \$allow_update,
     "jp-logging=s" => \$jp_logging,
+    'delete-other' => \$delete_other,
 );
 
 pod2usage(1) if $help;
@@ -293,11 +301,20 @@ else {
 
             assign_to_group($instrume, $subsys->obsid, $frameclass, $obsidss_not_in_group,
                             $subsyshdr, \%obsidss_current, [$subsys->filename], \%groups,
-                            undef, $task, 0, undef, $obsidss );
+                            undef, $task, 0, undef, $obsidss, $mode );
         }
     }
 
-    break_multi_project_groups(\%groups, $options{'allow_update'});
+    my %to_delete = ();
+
+    break_multi_project_groups(\%groups, $options{'allow_update'}, \%to_delete);
+
+    if ($delete_other) {
+        die 'Cannot delete other groups without --allow-update'
+            unless $options{'allow_update'};
+
+        delete_other_groups(\%groups, \%to_delete);
+    }
 
     add_jsa_proc_jobs(\%groups, $mode, $priority, $dry_run, %options);
 }
@@ -313,6 +330,7 @@ exit;
 sub break_multi_project_groups {
     my $groups = shift;
     my $allow_update = shift;
+    my $to_delete = shift;
 
     my @tags = keys %$groups;
 
@@ -357,8 +375,39 @@ sub break_multi_project_groups {
         }
         else {
             # Group has only one project: remove the subgroups.
+            $to_delete->{$_} = 1 foreach keys %$subgroups;
             delete $group->{'subgroups'};
         }
+    }
+}
+
+sub delete_other_groups {
+    my $groups = shift;
+    my $to_delete = shift;
+
+    my @tags = keys %$groups;
+
+    # Add each group's supergroup to the delete list unless it exists.
+    foreach my $tag (@tags) {
+        my $group = $groups->{$tag};
+        next unless exists $group->{'supergroup'};
+        my $supergroup = $group->{'supergroup'};
+        next unless defined $supergroup;
+
+        $to_delete->{$supergroup} = 1 unless exists $group->{$supergroup};
+    }
+
+    # For each group in deletion list, create a dummy group with an empty
+    # file list to trigger job deletion.
+    foreach my $tag (keys %$to_delete) {
+        die 'Group identified for deletion exists!' if exists $groups->{$tag};
+
+        $groups->{$tag} = {
+            files => [],
+            obsid_subsysnr_list => [],
+            task => undef,
+            mode => undef,
+        };
     }
 }
 
