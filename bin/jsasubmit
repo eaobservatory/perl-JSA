@@ -334,6 +334,8 @@ send_log_email('JSA Processing', $ut, $project)
 exit;
 
 
+# Break groups with multiple incompatible elements:
+# different projects, or different recipes.
 sub break_multi_project_groups {
     my $groups = shift;
     my $allow_update = shift;
@@ -347,15 +349,17 @@ sub break_multi_project_groups {
         next unless $subgroups;
 
         my %projects = ();
+        my %recipes = ();
         foreach my $key (keys %$subgroups) {
             my $subgroup = $subgroups->{$key};
-            my $project = $subgroup->{'project'};
-
-            $projects{$project} = 1;
+            $projects{$subgroup->{'project'}} = 1;
+            $recipes{$subgroup->{'grouping_recipe'}} = 1;
         }
 
-        if (1 < scalar keys %projects) {
-            # Group has multiple projects: replace it with its subgroups.
+        if ((1 < scalar keys %projects) or
+                (1 < scalar keys %recipes)) {
+            # Group has multiple projects and/or recipes:
+            # replace it with its subgroups.
             $groups->{$_} = $subgroups->{$_} foreach keys %$subgroups;
             if ($allow_update) {
                 $group->{'files'} = [];

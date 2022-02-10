@@ -247,6 +247,7 @@ sub assign_to_group {
     $groups->{$group}{preproc} = $current{preproc} if defined $current{preproc};
     $groups->{$group}{'task'} = $task;
     $groups->{$group}{'project'} = uc($tmphdr{'PROJECT'} // 'NO PROJECT');
+    $groups->{$group}{'grouping_recipe'} = uc($tmphdr{'RECIPE'} // 'NO RECIPE');
     $groups->{$group}{'supergroup'} = _prepare_group_id(
             $supergroup, $supergroup_mode, $tagprefix, \%tmphdr)
         if defined $supergroup;
