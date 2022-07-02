@@ -491,8 +491,10 @@ unless ($skipdp) {
         }
     }
 
-    unless (defined $drcommand) {
-        # Decide on ORAC-DR vs PICARD
+    if ((not defined $drcommand) or (defined $preprocess_recipe)) {
+        # Decide on ORAC-DR vs PICARD: do this if a custom DR command has not
+        # been specified, unless we also need to preprocess, in which case we
+        # need to check that we can use ORAC-DR, and what the instrument is.
 
         # FITS headers, indexed by filename
         my %FITS = read_headers( @files );
