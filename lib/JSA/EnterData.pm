@@ -2576,8 +2576,22 @@ sub calculate_release_date {
                              minute => 59,
                              second => 59,
                              time_zone => 'UTC');
-
     }
+
+    elsif ( ($obs->projectid =~ /m21bf004/ || $obs->projectid =~ /m21bf005/)
+           && $obs->isScience) {
+
+        # Funded projects that were allowed to remain proprietary for one year
+        # after end of semester they are finished in.
+        return DateTime->new(month => 2,
+                             year => 2024,
+                             day => 1,
+                             hour => 23,
+                             minute => 59,
+                             minute=> 59,
+                             time_zone => 'UTC');
+    }
+
     elsif ($obs->projectid =~ /ec05$/i && $obs->isScience) {
         # EC05 is a public calibrator monitoring project
         return DateTime::Format::ISO8601->parse_datetime($obsdate);
