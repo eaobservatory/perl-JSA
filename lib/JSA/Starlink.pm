@@ -49,7 +49,6 @@ our @EXPORT_OK = qw/
 
 our $DEBUG = 0;
 
-our $PARGET = '/star/bin/kappa/parget';
 our %PARENT_PRODUCT_CACHE = ();
 
 =head1 FUNCTIONS
@@ -215,6 +214,12 @@ sub try_star_command {
     local $ENV{'ADAM_USER'} = "$adam_dir";
     $log->debug("# Using temporary ADAM directory: $adam_dir");
 
+    # Select suitable parget command.
+    my $kappa_dir = $ENV{'KAPPA_DIR'};
+    die 'KAPPA_DIR not set' unless defined $kappa_dir;
+    die 'KAPPA_DIR does not exist' unless -d $kappa_dir;
+    my $parget = File::Spec->catfile($kappa_dir, 'parget');
+
     my $rc;
     try {
         my ($stdout, $stderr);
@@ -260,7 +265,7 @@ sub try_star_command {
     for my $f (@values) {
         $log->debug("# Fetching value for $f");
 
-        my $v = `$PARGET $f $base`;
+        my $v = `$parget $f $base`;
 
         if ($?) {
             $log->warn("# Could not fetch value for $f");

@@ -74,9 +74,13 @@ check/find the bounds.
 sub get_bound_check_command {
     my ($self, $fh, $pos_angle) = @_;
 
+    my $smurf_dir = $ENV{'SMURF_DIR'};
+    die 'SMURF_DIR not set' unless defined $smurf_dir;
+    die 'SMURF_DIR does not exist' unless -d $smurf_dir;
+
     # Turn off autogrid; only rotate raster maps. Just need bounds.
     return (
-        '/star/bin/smurf/makemap',
+        File::Spec->catfile($smurf_dir, 'makemap'),
         "in=^$fh",
         'system=ICRS',
         'out=!',
