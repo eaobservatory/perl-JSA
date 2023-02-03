@@ -23,7 +23,7 @@ use strict;
 use Config::IniFiles;
 use List::MoreUtils qw/any/;
 use LWP::UserAgent;
-use MIME::Base64;
+use HTTP::Cookies;
 use URI::Escape;
 use Astro::VO::VOTable::Document;
 
@@ -134,7 +134,9 @@ sub _check_cadc {
     # Time to wait for a random, reasonable amount.
     $wait //= 20;
 
-    my $cadc_url = 'https://ws-cadc.canfar.net/luskan';
+    my $cadc_host = 'ws-cadc.canfar.net';
+    my $cadc_url = 'https://' . $cadc_host . '/luskan/sync';
+    my $login_url = 'https://' . $cadc_host . '/ac/login';
 
     # To avoid hammering the server when run multiple times in a row.
     my $sleepy_time = scalar(@prefix) - 1;
@@ -144,14 +146,21 @@ sub _check_cadc {
     my $certfile = $ENV{'HOME'} . '/.ssl/cadcproxy.pem';
     my $tools4caom2config = $ENV{'HOME'} . '/.tools4caom2/tools4caom2.config';
     if (-e $certfile) {
-        $cadc_url .= '/sync';
         $ua->ssl_opts(SSL_use_cert => 1, SSL_cert_file => $certfile);
     }
     elsif (-e $tools4caom2config) {
-        $cadc_url .= '/auth-sync';
         my $cfg = new Config::IniFiles(-file => $tools4caom2config);
-        $get_opt{'Authorization'} = 'Basic ' . encode_base64(
-            (join ':', $cfg->val('cadc', 'cadc_id'), $cfg->val('cadc', 'cadc_key')), '');
+        my $res = $ua->post($login_url, {
+            username => $cfg->val('cadc', 'cadc_id'),
+            password => $cfg->val('cadc', 'cadc_key'),
+        });
+        die 'CADC log in failed' unless $res->is_success;
+
+        my $cookies = HTTP::Cookies->new({});
+        $cookies->set_cookie(
+            0, CADC_SSO => $res->content(),
+            '/', $cadc_host, 443, '', '', 3600, 0);
+        $ua->cookie_jar($cookies);
     }
     else {
         die 'No SSL certificate or tools4caom2 config file found';
