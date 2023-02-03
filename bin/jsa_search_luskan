@@ -2,11 +2,11 @@
 
 =head1 NAME
 
-jsa_search_ad - Search for files in JCMT AD at CADC
+jsa_search_luskan - Search for JCMT files at CADC via luskan
 
 =head1 SYNOPSIS
 
-    jsa_search_ad --ut YYYYMMDD --prefix XXX
+    jsa_search_luskan --ut YYYYMMDD --prefix XXX
 
 =head1 DESCRIPTION
 
