@@ -134,7 +134,7 @@ sub _check_cadc {
     # Time to wait for a random, reasonable amount.
     $wait //= 20;
 
-    my $cadc_url = 'https://ws.cadc-ccda.hia-iha.nrc-cnrc.gc.ca/ad';
+    my $cadc_url = 'https://ws-cadc.canfar.net/luskan';
 
     # To avoid hammering the server when run multiple times in a row.
     my $sleepy_time = scalar(@prefix) - 1;
@@ -161,7 +161,7 @@ sub _check_cadc {
     # our array.
     my @uploaded;
     foreach my $prefix (@prefix) {
-        my $query = sprintf "SELECT fileName FROM archive_files WHERE archiveName = 'JCMT' AND fileName LIKE '%s%%'", $prefix;
+        my $query = sprintf "SELECT uri FROM inventory.Artifact WHERE uri LIKE 'cadc:JCMT/%s%%'", $prefix;
         my $res = $ua->get($cadc_url . '?REQUEST=doQuery&LANG=ADQL&QUERY=' . uri_escape($query), %get_opt);
         next unless $res->is_success;
 
@@ -177,7 +177,8 @@ sub _check_cadc {
 
         foreach my $j (0 ... $nrows - 1) {
             my @row = $tabledata->get_row($j);
-            push @uploaded, $row[0];
+            die 'Unexpected format URI' unless $row[0] =~ /^cadc:JCMT\/(\S*)$/;
+            push @uploaded, $1;
         }
 
         $sleepy_time-- > 0 and sleep $wait;
