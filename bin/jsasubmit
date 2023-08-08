@@ -256,7 +256,6 @@ else {
         # now want to do this for all observations, including JCTMCAL
         # pointings and observations of standards.
         my $pid = $obs->projectid;
-        print "projectid is $pid\n";
         if (defined $pid) {
           # Override the recipe?
           if ( exists $DR_RECIPES{$pid} ) {
