@@ -8,7 +8,6 @@ JSA::Submission - Common routines for DP job submission scripts.
 
 use File::Basename;
 use File::Spec;
-use Net::SMTP;
 
 use JAC::Setup qw/oracdr/;
 
@@ -32,7 +31,7 @@ our @EXPORT_OK = qw/%DR_RECIPES %BAD_OBSIDSS %JUNK_OBSIDSS
                     determine_frame_class
                     echo_messages find_observations
                     get_obsidss log_message obs_is_fts2_or_pol2_RECIPE
-                    prepare_archive_db send_log_email
+                    prepare_archive_db
                     write_log_file/;
 
 =head1 DATA
@@ -373,36 +372,6 @@ sub write_log_file {
             close $logfh;
         }
     }
-}
-
-=item send_log_email
-
-Send the email.
-
-=cut
-
-sub send_log_email {
-    my $title = shift;
-    my $ut = shift;
-    my $project = shift;
-
-    my $MAILHOST = 'malama.eao.hawaii.edu';
-    my $MAILTO = 'jcmt_archive@eao.hawaii.edu';
-    my $MAILFROM = 'jcmt_archive@eao.hawaii.edu';
-
-    my $smtp = Net::SMTP->new($MAILHOST);
-    $smtp->mail($MAILFROM);
-    $smtp->to($MAILTO);
-
-    $smtp->data();
-    $smtp->datasend("To: $MAILTO\n");
-    $smtp->datasend("Subject: " . $title . ' for' .
-        (defined($ut)      ? ' ' . $ut      : '') .
-        (defined($project) ? ' ' . $project : '') . "\n");
-    $smtp->datasend("\n");
-    $smtp->datasend(all_messages());
-
-    $smtp->quit;
 }
 
 =item find_observations($ut, $project, $priority, $title, %opt)

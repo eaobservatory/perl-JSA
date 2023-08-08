@@ -18,8 +18,7 @@ Submits a processing job to the CADC data processing system.
 
 =item B<-dry-run>
 
-Enable debug messages and do not actually submit a processing job. Also
-disables emailing.
+Enable debug messages and do not actually submit a processing job.
 
 =item B<-help>
 
@@ -28,11 +27,6 @@ Print help information.
 =item B<-man>
 
 Print full manual.
-
-=item B<-noemail>
-
-By default a mail message is sent with the job details. If this option is given
-the message will be printed to standard output instead.
 
 =item B<-priority>
 
@@ -77,7 +71,7 @@ use JSA::Submission qw/
     determine_frame_class
     echo_messages find_observations
     log_message
-    prepare_archive_db send_log_email
+    prepare_archive_db
     write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs/;
 
@@ -90,7 +84,7 @@ use Pod::Usage;
 prepare_archive_db();
 
 # Handle command-line options.
-my ($help, $man, $project, $ut, $version, $priority, $noemail, $dry_run,
+my ($help, $man, $project, $ut, $version, $priority, $dry_run,
     $queue, $task);
 my $status = GetOptions(
     "help"      => \$help,
@@ -100,7 +94,6 @@ my $status = GetOptions(
     "priority=i"=> \$priority,
     "version"   => \$version,
     "dry-run"   => \$dry_run,
-    "noemail"   => \$noemail,
     "queue=s"   => \$queue,
     'task=s'    => \$task,
 );
@@ -119,7 +112,7 @@ die 'Task name must be given' unless defined $task;
 die 'This script should not be used in project mode'
     unless defined $ut;
 
-echo_messages($noemail || $dry_run);
+echo_messages(1);
 
 $project = uc($project) if defined $project;
 my (undef, $grp) = find_observations($ut, $project, $priority, 'jsahpxharpnit');
@@ -216,9 +209,6 @@ else {
 }
 
 write_log_file('jsasubmit-hpx-harp-nit', $ut, $project) unless $dry_run;
-
-send_log_email('JSA HPX HARP Night Processing', $ut, $project)
-    unless $noemail || $dry_run;
 
 exit;
 

@@ -18,8 +18,7 @@ Submits a processing job to the CADC data processing system.
 
 =item B<--dry-run>
 
-Enable debug messages and do not actually submit a processing job. Also
-disables emailing.
+Enable debug messages and do not actually submit a processing job.
 
 =item B<-help>
 
@@ -36,11 +35,6 @@ Set a Python logging level (e.g. INFO or DEBUG) for logging from the JSA Proc sy
 =item B<-man>
 
 Print full manual.
-
-=item B<-noemail>
-
-By default a mail message is sent with the job details. If this option is given
-the message will be printed to standard output instead.
 
 =item B<-priority>
 
@@ -95,7 +89,7 @@ use JSA::Submission qw/
     determine_frame_class
     echo_messages find_observations
     log_message obs_is_fts2_or_pol2_RECIPE
-    prepare_archive_db send_log_email
+    prepare_archive_db
     write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs get_obs_preproc_recipe/;
 
@@ -108,7 +102,7 @@ use Pod::Usage;
 prepare_archive_db();
 
 # Handle command-line options.
-my ($help, $man, $project, $ut, $version, $priority, $noemail, $dry_run,
+my ($help, $man, $project, $ut, $version, $priority, $dry_run,
     $queue, $task, $allow_update, $jp_logging, $delete_other);
 
 my $status = GetOptions(
@@ -119,7 +113,6 @@ my $status = GetOptions(
     "priority=i"=> \$priority,
     "version"   => \$version,
     "dry-run"   => \$dry_run,
-    "noemail"   => \$noemail,
     "queue=s"   => \$queue,
     'task=s'    => \$task,
     'allow-update' => \$allow_update,
@@ -145,7 +138,7 @@ if (not defined $task) {
     }
 }
 
-echo_messages($noemail || $dry_run);
+echo_messages(1);
 
 $project = uc($project) if defined $project;
 my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsasubmit');
@@ -326,9 +319,6 @@ else {
 }
 
 write_log_file('jsasubmit', $ut, $project) unless $dry_run;
-
-send_log_email('JSA Processing', $ut, $project)
-    unless $noemail || $dry_run;
 
 exit;
 
