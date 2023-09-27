@@ -1,6 +1,6 @@
 use strict;
 
-my $n_test; BEGIN {$n_test = 1 + 30 + 3 + 2;}
+my $n_test; BEGIN {$n_test = 1 + 30 + 5 + 2;}
 use Test::More tests => $n_test;
 
 SKIP: {
@@ -100,6 +100,8 @@ SKIP: {
     ok(! $enter->skip_calc_radec(headers => {}));
     ok(! $enter->skip_calc_radec(headers => {OBS_TYPE => 'pointing'}));
     ok($enter->skip_calc_radec(headers => {OBS_TYPE => 'skydip'}));
+    ok(! $enter->skip_calc_radec(headers => {OBJECT => 'NMLCyg'}));
+    ok($enter->skip_calc_radec(headers => {OBJECT => 'SUN'}));
 
     # Test the "_expand_header_arrays" method.
     is_deeply(

@@ -1867,10 +1867,17 @@ sub skip_calc_radec {
     throw JSA::Error::BadArgs('No "headers" value given to check if to find bounding box.')
         unless defined $arg{'headers'};
 
-    return $self->_find_header(
+    return 1 if $self->_find_header(
         headers => $arg{'headers'},
         name    => 'OBS_TYPE',
-        value_regex => qr/\b skydips? \b/xi)
+        value_regex => qr/\b skydips? \b/xi);
+
+    return 1 if $self->_find_header(
+        headers => $arg{'headers'},
+        name    => 'OBJECT',
+        value_regex => qr/\b sun \b/xi);
+
+    return 0;
 }
 
 =item B<calc_radec>
