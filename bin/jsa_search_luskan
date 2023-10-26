@@ -34,7 +34,8 @@ my $result = JSA::CADC_Copy::at_cadc($ut, prefix => \@prefix, wait => 0);
 
 do {
     local $\ = "\n";
-    print foreach sort keys %$result;
+    local $, = ' ';
+    print $result->{$_}, $_ foreach sort keys %$result;
 };
 
 =head1 COPYRIGHT

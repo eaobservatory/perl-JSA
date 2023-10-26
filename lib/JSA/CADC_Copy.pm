@@ -74,7 +74,8 @@ If no list is given, all of the above prefixes are used.
 
 This function returns a hash reference, with keys being the files at CADC. If
 the UT date is in an incorrect format, this method returns undef. If no files
-are returned, this method returns an empty hash reference.
+are returned, this method returns an empty hash reference.  The corresponding
+hash values will be the MD5 sum reported by CADC's Luskan service.
 
 Accepts also an optional array reference of instrument prefixes with
 key of "prefix", out
@@ -168,9 +169,9 @@ sub _check_cadc {
 
     # Go through each instrument prefix and push the list of files onto
     # our array.
-    my @uploaded;
+    my %at_cadc;
     foreach my $prefix (@prefix) {
-        my $query = sprintf "SELECT uri FROM inventory.Artifact WHERE uri LIKE 'cadc:JCMT/%s%%'", $prefix;
+        my $query = sprintf "SELECT uri, contentChecksum FROM inventory.Artifact WHERE uri LIKE 'cadc:JCMT/%s%%'", $prefix;
         my $res = $ua->get($cadc_url . '?REQUEST=doQuery&LANG=ADQL&QUERY=' . uri_escape($query), %get_opt);
         next unless $res->is_success;
 
@@ -187,13 +188,16 @@ sub _check_cadc {
         foreach my $j (0 ... $nrows - 1) {
             my @row = $tabledata->get_row($j);
             die 'Unexpected format URI' unless $row[0] =~ /^cadc:JCMT\/(\S*)$/;
-            push @uploaded, $1;
+            my $file = $1;
+
+            die 'Unexpected format checksum' unless $row[1] =~ /^md5:(\w*)$/;
+            my $md5sum = $1;
+
+            $at_cadc{$file} = $md5sum;
         }
 
         $sleepy_time-- > 0 and sleep $wait;
     }
-
-    my %at_cadc = map {chomp( $_ ); $_ => undef} @uploaded;
 
     return \%at_cadc;
 }
