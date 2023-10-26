@@ -47,6 +47,7 @@ use Log::Log4perl;
 
 use JSA::Error qw/:try/;
 
+my $_files_table = 'FILES';
 my $_state_table = 'transfer';
 
 =head1 METHODS
@@ -342,8 +343,16 @@ sub get_files {
     my ($state, $date, $instr) = _extract_filter(%filter);
     my $jac = $filter{'keep_jac'};
 
+    my $table = $_state_table;
     my @select = qw/file_id comment/;
     push @select, 'location' if $state eq 'found';
+
+    if ($filter{'with_md5sum'}) {
+        @select = map {$_ ne 'file_id' ? $_ : sprintf '%s.%s AS %s', $_state_table, $_, $_} @select;
+        push @select, 'md5sum';
+        $table = sprintf '%s JOIN %s ON %s.file_id = %s.file_id',
+            $table, $_files_table, $table, $_files_table;
+    }
 
     (my $state_col, $state) = _alt_state($_state{$state});
 
@@ -351,7 +360,7 @@ sub get_files {
     $where{" $state_col = ?"} = $state;
 
     my $fragment = sprintf '%s%%', join '%', grep {$_} $instr, $date;
-    $where{' file_id like ?'} = $fragment if defined $fragment;
+    $where{sprintf ' %s.file_id like ?', $_state_table} = $fragment if defined $fragment;
 
     $where{' keep_jac = ? '} = $jac if defined $jac;
 
@@ -359,7 +368,7 @@ sub get_files {
 
     my $db = $self->_jdb();
     return $db->select_loop(
-        'table'   => $_state_table,
+        'table'   => $table,
         'columns' => [@select],
         'where'   => [keys %where],
         'values'  => [[values %where]]);
