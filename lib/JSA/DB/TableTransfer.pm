@@ -358,15 +358,11 @@ sub get_files {
     $log->info("Getting files from JAC database with state '${state}'");
 
     my $db = $self->_jdb();
-    my $out = $db->select_loop('table'   => $_state_table,
-                               'columns' => [@select],
-                               'where'   => [keys %where],
-                               'values'  => [[values %where]]);
-
-    return unless $out
-               && ref $out && scalar @{$out};
-
-    return $db->_simplify_arrayref_hashrefs($out);
+    return $db->select_loop(
+        'table'   => $_state_table,
+        'columns' => [@select],
+        'where'   => [keys %where],
+        'values'  => [[values %where]]);
 }
 
 sub _extract_filter {

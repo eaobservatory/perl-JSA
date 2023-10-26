@@ -295,12 +295,7 @@ sub select_loop {
         push @out, @{$tmp};
     }
 
-    return unless scalar @out;
-
-    return $out[0] if 1 == scalar @out
-                   && ref $out[0] eq 'ARRAY';
-
-    return [@out];
+    return \@out;
 }
 
 =item B<run_select_sql>
@@ -815,29 +810,6 @@ sub _to_string {
     return $in unless ref $in;
 
     return join $sep, @$in;
-}
-
-sub _simplify_arrayref_hashrefs {
-    my ($self, $in) = @_;
-
-    return $in
-        unless $in
-            && ref $in
-            && scalar @{$in};
-
-    my $ele = $in->[0];
-
-    return $in
-        unless defined $ele
-            && ref $ele eq 'HASH';
-
-    my @key = keys %{$ele};
-
-    return $in
-      if 1 != scalar @key;
-
-    return
-      [map {$_->{$key[0]}} @{$in}];
 }
 
 1;
