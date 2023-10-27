@@ -102,10 +102,6 @@ sub add_jsa_proc_jobs {
     while (my ($tag, $group) = each %$groups) {
         log_message("\nProcessing job with tag: $tag\n");
 
-        # Make list of plain file names with the extensions removed.
-        my @files = map {s/\.sdf$//; $_} @{$group->{'files'}};
-
-
         # Job submission mode.
 
         # Prepare arguments for the jsa_proc database add_job method.
@@ -122,7 +118,7 @@ sub add_jsa_proc_jobs {
             location        => $location,
             mode            => $group->{'mode'} // $mode,
             parameters      => join(' ', @param),
-            input_file_names=> \@files,
+            input_file_names=> $group->{'files'},
             priority        => $priority,
             obsidss         => \@{$group->{'obsid_subsysnr_list'}},
             task            => $group->{'task'},
