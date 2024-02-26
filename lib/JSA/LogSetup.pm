@@ -109,7 +109,7 @@ Some of the configuration defaults are ...
     file       - /jac_logs/jsa/default.log.<host>.<user>.<yyyy:mm:dd>
                  (appended, not overwritten)
 
-    log format - %H %p %P %d{yyyyMMdd-hhmm:ss} %F %L %M%n  %m%n, or ...
+    log format - %H %p %P %d{yyyyMMdd-hh:mm:ss} %F %L %M%n  %m%n, or ...
                    %H : host
                    %p : log level
                    %P : process-id
@@ -129,13 +129,13 @@ sub get_config {
 =item B<set_default_format>
 
 Sets the default, verbose format to
-C<%H %p %P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n>.
+C<%H %p %P %d{yyyyMMdd-HH:mm:ss} %F %L %M%n  %m%n>.
 
 =cut
 
 sub set_default_format {
     $_config{$_log_fmt_key} =
-        '%H %5p %6P %d{yyyyMMdd-HHmm:ss} %F %L %M%n  %m%n';
+        '%H %5p %6P %d{yyyyMMdd-HH:mm:ss} %F %L %M%n  %m%n';
 
     return;
 }
@@ -149,7 +149,7 @@ C<%d{yyyyMMdd-hhmm:ss}%n  %m%n>.
 
 sub set_message_format {
     $_config{$_log_fmt_key} =
-        '%d{yyyyMMdd-hhmm:ss}%n  %m%n';
+        '%d{yyyyMMdd-hh:mm:ss}%n  %m%n';
 
     return;
 }
