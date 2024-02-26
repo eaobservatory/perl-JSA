@@ -225,7 +225,7 @@ When given basename contains the directory separator, C</>, it is
 returned as is.
 
 Given optional base name for log file, and optional parameters hash,
-returns a file path based on current date (in UTC -10 time zone).
+returns a file path based on current date (in UTC time zone).
 
 When possible, I<the log directory and log file are made group
 writable>.
@@ -303,7 +303,7 @@ Do not create sub directories in format C<yyyymm/dd> by default.
         return $made{$track}
             if $made{$track} && ! $opt{'force-new'};
 
-        my $date = DateTime->now('time_zone' => '-1000');
+        my $date = DateTime->now('time_zone' => 'UTC');
 
         $base = join '.', $base, _make_base_parts($date, $dir, %opt);
 
