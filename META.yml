@@ -111,9 +111,6 @@ provides:
   JSA::Headers::Starlink:
     file: lib/JSA/Headers/Starlink.pm
     version: 0
-  JSA::LogInitialize:
-    file: lib/JSA/LogInitialize.pm
-    version: 0
   JSA::LogSetup:
     file: lib/JSA/LogSetup.pm
     version: 0
