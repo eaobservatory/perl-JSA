@@ -87,9 +87,6 @@ provides:
   JSA::Headers::Starlink:
     file: lib/JSA/Headers/Starlink.pm
     version: 0
-  JSA::LogSetup:
-    file: lib/JSA/LogSetup.pm
-    version: 0
   JSA::Logging:
     file: lib/JSA/Logging.pm
     version: 0
