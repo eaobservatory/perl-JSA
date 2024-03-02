@@ -8,10 +8,6 @@ lib/JSA/CADC_Copy.pm
 lib/JSA/Command.pm
 lib/JSA/Convert.pm
 lib/JSA/Datetime.pm
-lib/JSA/DB.pm
-lib/JSA/DB/MySQL.pm
-lib/JSA/DB/TableCOMMON.pm
-lib/JSA/DB/TableTransfer.pm
 lib/JSA/Error.pm
 lib/JSA/Files.pm
 lib/JSA/Headers.pm

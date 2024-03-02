@@ -64,22 +64,6 @@
          "file" : "lib/JSA/Convert.pm",
          "version" : 0
       },
-      "JSA::DB" : {
-         "file" : "lib/JSA/DB.pm",
-         "version" : 0
-      },
-      "JSA::DB::MySQL" : {
-         "file" : "lib/JSA/DB/MySQL.pm",
-         "version" : 0
-      },
-      "JSA::DB::TableCOMMON" : {
-         "file" : "lib/JSA/DB/TableCOMMON.pm",
-         "version" : 0
-      },
-      "JSA::DB::TableTransfer" : {
-         "file" : "lib/JSA/DB/TableTransfer.pm",
-         "version" : 0
-      },
       "JSA::Datetime" : {
          "file" : "lib/JSA/Datetime.pm",
          "version" : 0
