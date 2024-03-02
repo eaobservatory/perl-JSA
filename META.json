@@ -84,22 +84,6 @@
          "file" : "lib/JSA/Datetime.pm",
          "version" : 0
       },
-      "JSA::EnterData" : {
-         "file" : "lib/JSA/EnterData.pm",
-         "version" : 0
-      },
-      "JSA::EnterData::ACSIS" : {
-         "file" : "lib/JSA/EnterData/ACSIS.pm",
-         "version" : 0
-      },
-      "JSA::EnterData::DAS" : {
-         "file" : "lib/JSA/EnterData/DAS.pm",
-         "version" : 0
-      },
-      "JSA::EnterData::SCUBA2" : {
-         "file" : "lib/JSA/EnterData/SCUBA2.pm",
-         "version" : 0
-      },
       "JSA::Error" : {
          "file" : "lib/JSA/Error.pm",
          "version" : 0

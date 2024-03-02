@@ -12,10 +12,6 @@ lib/JSA/DB.pm
 lib/JSA/DB/MySQL.pm
 lib/JSA/DB/TableCOMMON.pm
 lib/JSA/DB/TableTransfer.pm
-lib/JSA/EnterData.pm
-lib/JSA/EnterData/ACSIS.pm
-lib/JSA/EnterData/DAS.pm
-lib/JSA/EnterData/SCUBA2.pm
 lib/JSA/Error.pm
 lib/JSA/Files.pm
 lib/JSA/Headers.pm
@@ -38,7 +34,6 @@ t/1_compile.t
 t/dpretrieve.t
 t/jsa-files.t
 t/qa.t
-t/release_date.t
 testdata/a20080217_00006_01_0001.sdf
 testdata/a20080217_00006_01_rsp.sdf
 testdata/a20080217_00058_01_0001.sdf
