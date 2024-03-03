@@ -92,23 +92,11 @@
          "file" : "lib/JSA/Error.pm",
          "version" : 0
       },
-      "JSA::Error::CADCDB" : {
-         "file" : "lib/JSA/Error.pm",
-         "version" : 0
-      },
       "JSA::Error::Conversion" : {
          "file" : "lib/JSA/Error.pm",
          "version" : 0
       },
-      "JSA::Error::DBError" : {
-         "file" : "lib/JSA/Error.pm",
-         "version" : 0
-      },
       "JSA::Error::DataRead" : {
-         "file" : "lib/JSA/Error.pm",
-         "version" : 0
-      },
-      "JSA::Error::DirectoryNotFound" : {
          "file" : "lib/JSA/Error.pm",
          "version" : 0
       },

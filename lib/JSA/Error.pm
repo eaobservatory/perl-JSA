@@ -208,10 +208,6 @@ File name does not match support format.
 
 A missing or unsupported value in a FITS header.
 
-=item B<JSA::Error::CADCDB>
-
-Errors involving CADC database connectivity.
-
 =item B<JSA::Error::Conversion>
 
 Error converting FITS to NDF or vice versa.
@@ -219,10 +215,6 @@ Error converting FITS to NDF or vice versa.
 =item B<JSA::Error::DataRead>
 
 Unable to read data file off disk or unable to read the header.
-
-=item B<JSA::Error::DirectoryNotFound>
-
-The requested directory could not be found.
 
 =item B<JSA::Error::FatalError>
 
@@ -303,22 +295,13 @@ use base qw/JSA::Error/;
 package JSA::Error::BadFITSHeader;
 use base qw/JSA::Error/;
 
-package JSA::Error::CADCDB;
-use base qw/JSA::Error/;
-
 package JSA::Error::Conversion;
 use base qw/JSA::Error/;
 
 package JSA::Error::DataRead;
 use base qw/JSA::Error/;
 
-package JSA::Error::DirectoryNotFound;
-use base qw/JSA::Error/;
-
 package JSA::Error::FatalError;
-use base qw/JSA::Error/;
-
-package JSA::Error::DBError;
 use base qw/JSA::Error/;
 
 package JSA::Error::Starlink;
