@@ -36,7 +36,7 @@ my $build = Module::Build->new(
     dist_version => '0.03',
     meta_merge => {
         resources =>  {
-            repository => "git://github.com/eaobservatory/perl-JSA.git",
+            repository => "https://github.com/eaobservatory/perl-JSA.git",
         },
     },
     requires => {
