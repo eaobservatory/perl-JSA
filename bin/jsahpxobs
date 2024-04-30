@@ -83,6 +83,7 @@ use JSA::Submission qw/
     write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs/;
 
+use OMP::DB::Backend;
 use OMP::Info::Obs;
 use OMP::Constants qw/:obs/;
 
@@ -91,7 +92,8 @@ use Pod::Usage;
 use File::Basename;
 use IO::File;
 
-prepare_archive_db();
+my $db = OMP::DB::Backend->new();
+my $arcdb = prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $dry_run,
@@ -137,7 +139,7 @@ echo_messages(1);
 # All observations are submitted regardless of status except for JUNK.
 # A standard recipe is used.
 $project = uc($project) if defined $project;
-my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsahpxobs');
+my ($mode, $grp) = find_observations($arcdb, $ut, $project, $priority, 'jsahpxobs', DB => $db);
 
 if (scalar(@{$grp->obs}) == 0) {
     log_message("No observations were retrieved from the database.\n");

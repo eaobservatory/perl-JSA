@@ -93,13 +93,15 @@ use JSA::Submission qw/
     write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs get_obs_preproc_recipe/;
 
+use OMP::DB::Backend;
 use OMP::Info::Obs;
 use OMP::Constants qw/:obs/;
 
 use Getopt::Long;
 use Pod::Usage;
 
-prepare_archive_db();
+my $db = OMP::DB::Backend->new();
+my $arcdb = prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $dry_run,
@@ -141,7 +143,7 @@ if (not defined $task) {
 echo_messages(1);
 
 $project = uc($project) if defined $project;
-my ($mode, $grp) = find_observations($ut, $project, $priority, 'jsasubmit');
+my ($mode, $grp) = find_observations($arcdb, $ut, $project, $priority, 'jsasubmit', DB => $db);
 
 if (scalar(@{$grp->obs}) == 0) {
     log_message("No observations were retrieved from the database.\n");

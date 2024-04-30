@@ -75,13 +75,15 @@ use JSA::Submission qw/
     write_log_file/;
 use JSA::Proc qw/add_jsa_proc_jobs/;
 
+use OMP::DB::Backend;
 use OMP::Info::Obs;
 use OMP::Constants qw/:obs/;
 
 use Getopt::Long;
 use Pod::Usage;
 
-prepare_archive_db();
+my $db = OMP::DB::Backend->new();
+my $arcdb = prepare_archive_db();
 
 # Handle command-line options.
 my ($help, $man, $project, $ut, $version, $priority, $dry_run,
@@ -115,7 +117,7 @@ die 'This script should not be used in project mode'
 echo_messages(1);
 
 $project = uc($project) if defined $project;
-my (undef, $grp) = find_observations($ut, $project, $priority, 'jsahpxharpnit');
+my (undef, $grp) = find_observations($arcdb, $ut, $project, $priority, 'jsahpxharpnit', DB => $db);
 
 if (scalar(@{$grp->obs}) == 0) {
     log_message("No observations were retrieved from the database.\n");

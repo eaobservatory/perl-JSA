@@ -11,10 +11,10 @@ use File::Spec;
 
 use JAC::Setup qw/oracdr/;
 
-use OMP::ArcQuery;
-use OMP::ArchiveDB;
+use OMP::DB::Archive;
+use OMP::DB::Backend::Archive;
+use OMP::DB::Project;
 use OMP::Info::ObsGroup;
-use OMP::ProjServer;
 use ORAC::Inst::Defn qw/orac_determine_inst_classes/;
 
 use JSA::Error qw/:try/;
@@ -127,17 +127,19 @@ Configure the archive database for querying.
 =cut
 
 sub prepare_archive_db {
+    my $arcdb = OMP::DB::Archive->new(DB => OMP::DB::Backend::Archive->new);
+
     # Use new JCMT database for DAS data in ACSIS format.
-    $OMP::ArcQuery::GSD_FROM_JCMT_INSTEAD = 1;
+    $arcdb->gsdFromJCMT(1);
 
     # Don't fall back to files.
-    $OMP::ArchiveDB::FallbackToFiles = 0;
-
     # Use DB for any date.
-    $OMP::ArchiveDB::AnyDate = 1;
+    $arcdb->search_only_db();
 
     # Fix search criteria to avoid being reset just before querying for data.
-    OMP::ArchiveDB->use_existing_criteria(1);
+    $arcdb->use_existing_criteria(1);
+
+    return $arcdb;
 }
 
 =item get_obsidss
@@ -374,19 +376,23 @@ sub write_log_file {
     }
 }
 
-=item find_observations($ut, $project, $priority, $title, %opt)
+=item find_observations($arcdb, $ut, $project, $priority, $title, %opt)
 
 Determines the mode of operation and retieves the observation group.
 
-    ($mode, $grp) = find_observations($ut, $project, $priority, $title, %opt);
+    ($mode, $grp) = find_observations($arcdb, $ut, $project, $priority, $title, %opt);
 
 The project should already be in upper case.  Additional options:
 
-    no_verify_project - skip OMP::ProjServer->verifyProject step.
+    no_verify_project - skip OMP::DB::Project->verifyProject step.
 
 =cut
 
 sub find_observations {
+    my $arcdb = shift;
+    die 'find_observations: first argument should be an OMP::DB::Archive'
+        unless eval {$arcdb->isa('OMP::DB::Archive')};
+
     my $ut = shift;
     my $project = shift;
     my $priority = shift;
@@ -414,10 +420,15 @@ sub find_observations {
         log_message("Running $title for project $project $pristring.\n");
     }
 
-    die "Project '$project' does not seem to exist in the database.\n"
-        if (defined $project)
-        && (! $opt{'no_verify_project'})
-        && (! OMP::ProjServer->verifyProject($project));
+    if ((defined $project) && (! $opt{'no_verify_project'})) {
+        die 'find_observations: DB option required to verify project'
+            unless exists $opt{'DB'}
+            and eval {$opt{'DB'}->isa('OMP::DB::Backend')};
+        die "Project '$project' does not seem to exist in the database.\n"
+            unless OMP::DB::Project->new(
+                DB => $opt{'DB'}, ProjectID => $project,
+            )->verifyProject();
+    }
 
     my %query = (
                   nocomments => 0,
@@ -437,7 +448,9 @@ sub find_observations {
         }
     }
 
-    $grp = new OMP::Info::ObsGroup(%query);
+    $grp = OMP::Info::ObsGroup->new(
+        ADB => $arcdb,
+        %query);
 
     return ($mode, $grp);
 }
