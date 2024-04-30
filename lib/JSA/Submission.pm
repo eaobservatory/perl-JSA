@@ -139,6 +139,11 @@ sub prepare_archive_db {
     # Fix search criteria to avoid being reset just before querying for data.
     $arcdb->use_existing_criteria(1);
 
+    # Disable caching -- since we require headers we don't want
+    # to retreive results cached without specifying retainhdr.
+    $arcdb->skip_cache_query();
+    $arcdb->skip_cache_making();
+
     return $arcdb;
 }
 
