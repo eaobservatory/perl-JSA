@@ -404,6 +404,10 @@ sub find_observations {
     my $title = shift;
     my %opt = @_;
 
+    die 'find_observations: DB option should be an OMP::DB::Backend'
+        unless exists $opt{'DB'}
+        and eval {$opt{'DB'}->isa('OMP::DB::Backend')};
+
     my ($mode, $grp);
 
     # Make sure the UT or Project parameter is defined.
@@ -426,9 +430,6 @@ sub find_observations {
     }
 
     if ((defined $project) && (! $opt{'no_verify_project'})) {
-        die 'find_observations: DB option required to verify project'
-            unless exists $opt{'DB'}
-            and eval {$opt{'DB'}->isa('OMP::DB::Backend')};
         die "Project '$project' does not seem to exist in the database.\n"
             unless OMP::DB::Project->new(
                 DB => $opt{'DB'}, ProjectID => $project,
@@ -455,6 +456,7 @@ sub find_observations {
 
     $grp = OMP::Info::ObsGroup->new(
         ADB => $arcdb,
+        DB => $opt{'DB'},
         %query);
 
     return ($mode, $grp);
