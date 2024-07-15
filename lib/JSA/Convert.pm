@@ -609,13 +609,20 @@ sub _prov_check_file {
         if (can_send_to_cadc_guess($path)) {
             print "Can possibly send $path\n" if $DEBUG;
 
+            # Check the file exists before trying to read its header.
+            unless (-e $path) {
+                print "File does not exist: $path\n" if $DEBUG;
+                return 0;
+            }
+
             # Open up the header, send it to can_send_to_cadc() to find
             # out if this file is a suitable one to send to CADC.
             my $hdr = read_header($path);
-            die "Unable to read FITS header from $path"
-              unless (defined $hdr);
-
-            if (can_send_to_cadc(undef, $hdr)) {
+            unless (defined $hdr) {
+                print "Unable to read FITS header from $path\n" if $DEBUG;
+                return 0;
+            }
+            elsif (can_send_to_cadc(undef, $hdr)) {
                 # we are good
                 print "Product match\n" if $DEBUG;
                 return 1;
