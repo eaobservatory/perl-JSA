@@ -291,7 +291,7 @@ filenaming convention rather than the CADC naming scheme.
 
     prov_update_parent_path($file, \&is_dr_file, \&is_archive_file,
                             \&check_file, \&convert_filename,
-                            $strict_check );
+                            %options );
 
 Note that this command only works if the parent file actually exists,
 since in many cases the ASN_TYPE header is required to determine the
@@ -337,8 +337,20 @@ storage in the provenance.
 
 =back
 
-If the C<$strict_check> argument isn't given then provenance
+Options include:
+
+=over 4
+
+=item strict_check
+
+If not given then provenance
 entries which don't have any valid parents are retained.
+
+=item dry_run
+
+Do not actually store modified provenance to file.
+
+=back
 
 =cut
 
@@ -349,7 +361,10 @@ sub prov_update_parent_path {
     my $is_archive_file = shift;
     my $check_file = shift;
     my $convert_filename = shift;
-    my $strict_check = shift;
+
+    my %opts = @_;
+    my $strict_check = $opts{'strict_check'};
+    my $dry_run = $opts{'dry_run'};
 
     # first see if this is a valid NDF
     $is_dr_file->($file)
@@ -366,7 +381,7 @@ sub prov_update_parent_path {
     # open the file
     err_begin($status);
     ndf_begin();
-    ndf_open(&NDF::DAT__ROOT(), $file, "UPDATE", "OLD", my $indf, my $place,$status);
+    ndf_open(&NDF::DAT__ROOT(), $file, ($dry_run ? "READ" : "UPDATE"), "OLD", my $indf, my $place,$status);
 
     # Read the provenance from the file
     my $prov = ndgReadProv($indf, "", $status);
@@ -436,7 +451,8 @@ sub prov_update_parent_path {
         } # foreach @parind
 
         # write out the updated provenance structure
-        $prov->WriteProv($indf, 0, $status);
+        $prov->WriteProv($indf, 0, $status)
+            unless $dry_run;
 
     } # status not ok
 

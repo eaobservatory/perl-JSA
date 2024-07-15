@@ -199,15 +199,6 @@ sub convert_dr_files {
             if (can_send_to_cadc($mode, $href->{$file}) && want_to_send_to_cadc($mode, header => $href->{$file})) {
                 print "Converting file $file\n" if $DEBUG;
 
-                if ($dry_run) {
-                    my $assoc = $href->{$file}->value("ASN_TYPE");
-                    $conversion{$file} = drfilename_to_cadc(
-                        $file,
-                        ASN_TYPE => (($assoc eq 'obs') ? $assoc : $mode),
-                        VERSION => (($mode eq 'public') ? $version : undef));
-                    next;
-                }
-
                 # is exportable so first fix up provenance
                 my $skip = 0;
                 try {
@@ -216,16 +207,26 @@ sub convert_dr_files {
                                             \&looks_like_cadcfile,
                                             \&_prov_check_file,
                                             _prov_convert_filename($version),
-                                            0);
+                                            strict_check => 0,
+                                            dry_run => $dry_run);
                 }
                 catch JSA::Error with {
                     # Just skip this file for now.
                     my $E = shift;
                     chomp($E);
-                    print "$E\n --- skipping\n";
+                    print "$E\n --- skipping file $file\n";
                     $skip = 1;
                 };
                 next if $skip;
+
+                if ($dry_run) {
+                    my $assoc = $href->{$file}->value("ASN_TYPE");
+                    $conversion{$file} = drfilename_to_cadc(
+                        $file,
+                        ASN_TYPE => (($assoc eq 'obs') ? $assoc : $mode),
+                        VERSION => (($mode eq 'public') ? $version : undef));
+                    next;
+                }
 
                 # Modify the WCS attributes so that we generate the correct FITS
                 # headers regardless of how the pipeline was configured.
