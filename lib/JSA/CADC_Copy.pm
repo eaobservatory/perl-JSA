@@ -130,7 +130,16 @@ sub at_cadc {
 sub _check_cadc {
     my ($wait, @prefix) = @_;
 
-    return unless scalar @prefix;
+    return query_cadc_patterns($wait, map {
+        sprintf '%s%%', $_
+    } @prefix);
+}
+
+
+sub query_cadc_patterns {
+    my ($wait, @patterns) = @_;
+
+    return unless scalar @patterns;
 
     # Time to wait for a random, reasonable amount.
     $wait //= 20;
@@ -140,7 +149,7 @@ sub _check_cadc {
     my $login_url = 'https://' . $cadc_host . '/ac/login';
 
     # To avoid hammering the server when run multiple times in a row.
-    my $sleepy_time = scalar(@prefix) - 1;
+    my $sleepy_time = scalar(@patterns) - 1;
 
     my $ua = new LWP::UserAgent(timeout => 60);
     my %get_opt = ();
@@ -167,11 +176,11 @@ sub _check_cadc {
         die 'No SSL certificate or tools4caom2 config file found';
     }
 
-    # Go through each instrument prefix and push the list of files onto
-    # our array.
+    # Go through each pattern and add the list of files into
+    # our hash.
     my %at_cadc;
-    foreach my $prefix (@prefix) {
-        my $query = sprintf "SELECT uri, contentChecksum FROM inventory.Artifact WHERE uri LIKE 'cadc:JCMT/%s%%'", $prefix;
+    foreach my $pattern (@patterns) {
+        my $query = sprintf "SELECT uri, contentChecksum FROM inventory.Artifact WHERE uri LIKE 'cadc:JCMT/%s'", $pattern;
         my $res = $ua->get($cadc_url . '?REQUEST=doQuery&LANG=ADQL&QUERY=' . uri_escape($query), %get_opt);
         next unless $res->is_success;
 
