@@ -71,7 +71,7 @@ Print version information.
 =cut
 
 
-use JAC::Setup qw/omp/;
+use JAC::Setup qw/omp hdrtrans/;
 
 use strict;
 use warnings;
