@@ -227,6 +227,11 @@ else {
         # We do not process bad observations in PROJECT mode since we assume they have
         # already been done in NIGHT mode
 
+        if (defined $obs->ingestion_errors) {
+            log_message("Observation has ingestion errors and so will not be processed at all\n");
+            next;
+        }
+
         if ($obs->status != OMP__OBS_GOOD) {
             # Do not care about group so add a disambiguater based on obsid
             log_message( "Observation with OBSID ". $obs->obsid ." is not good so will not be included in a group\n" );
