@@ -85,7 +85,6 @@ use JSA::Proc qw/add_jsa_proc_jobs/;
 
 use OMP::DB::Backend;
 use OMP::Info::Obs;
-use OMP::Constants qw/:obs/;
 
 use Getopt::Long;
 use Pod::Usage;
@@ -206,7 +205,7 @@ else {
 
         # if the data are truly JUNK we do not want to ask CADC to process the data at
         # all since the chances are excellent that the pipeline will fail
-        if ($obs->status == OMP__OBS_JUNK) {
+        if ($obs->statusIsJunk) {
             log_message("Observation is junk and so will not be processed at all\n");
             next;
         }
