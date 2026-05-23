@@ -246,15 +246,11 @@ else {
 
             my $group = "hpx-" . $subsys->obsid . "-" . $ss_asn_id;
 
-            my $obsinfo = create_obsinfo_hash($obs, $subsyshdr);
-            $obsinfo->{'association'} = $subsyshdr->{'FILTER'};
-
             my %group = (
                 files => \@files,
                 mode => 'obs',
-                obsinfolist => [$obsinfo],
                 task => $task,
-                obsid_subsysnr_list=> @all_obsidss,
+                obsid_subsysnr_list => \@all_obsidss,
             );
 
             for my $k (qw/drparams recpars/) {
