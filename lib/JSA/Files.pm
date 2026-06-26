@@ -38,7 +38,7 @@ our @EXPORT_OK = qw/drfilename_to_cadc
                     can_send_to_cadc can_send_to_cadc_guess
                     looks_like_drthumb merge_pngs want_to_send_to_cadc/;
 
-our $DEBUG = 0;
+our $DEBUG = 1;
 
 # List of support product types as found in ASN_TYPE FITS header
 # along with corresponding names found in filenames.
@@ -201,12 +201,21 @@ Group observations that look like DR files are always assumed to be
 
 sub can_send_to_cadc_guess {
     my $file = shift;
-
+    print "Guessing if can send $file to cadc\n" if $DEBUG;
     my ($product, $asntype);
     if (looks_like_drfile($file)) {
+	print "Looks like a DRFILE in cadc guessing ($file)\n" if $DEBUG;
         my @parts = dissect_drfile( $file );
         $product = $parts[5];
+	print "Product is  $product\n";
         $asntype = ($parts[0] ? "night" : "obs" );
+	print "ASNTYPE is $asntype\n";
+
+	if ($product =~ /healpix/  && $file =~ /_cal.sdf/) {
+	    print " ot sending _cal files for $file\n";
+	    $product = '';
+	    $asntype = '';
+	}
     }
     elsif (looks_like_cadcfile($file)) {
         # do not simply assume that a cadc file can be sent to cadc(!!!)
@@ -550,7 +559,7 @@ sub looks_like_cadcfile {
       return 1; # ACSIS co-added JSA tile
   }
 
-  print "Failed looks_like_cadcfile\n" if $DEBUG;
+  print "$filename Failed looks_like_cadcfile\n" if $DEBUG;
   return 0;
 }
 
@@ -575,10 +584,12 @@ product.
 sub dissect_drfile {
     my $drfile = shift;
     my $original = $drfile;
+    print "Running dissect_drfile of $drfile\n";
     return () unless (looks_like_drfile($drfile) ||
                       looks_like_fits_drfile($drfile) ||
                       looks_like_drthumb($drfile));
     $drfile = _strip_path($drfile);
+
 
     my $isgroup = ($drfile =~ s/^g//);
     my ($prefix, $utdate, $obsnum, $subsys, $product, $prodcount,
@@ -586,6 +597,9 @@ sub dissect_drfile {
     my $asn_id = undef;
 
     if ($drfile =~ /^(g?[ahs])(\d{8})_(\d{1,5})_(\d{1,3})_([a-z]+)(\d*)(?:_(\d{2,4}))?\.(sdf|png)$/) {
+	# SCUBA-2 _cal files from hpx coadds where you have to
+	# calibrate each obs individually before coadding.
+	# e.g s20130815_00018_850_healpix000180_cal.sdf
         $prefix = $1;
         $utdate = $2;
         $obsnum = $3;
@@ -595,6 +609,18 @@ sub dissect_drfile {
         $prodcount = undef if (defined $prodcount && $prodcount eq '');
         $resolution = $7;
         $suffix = $8;
+    }
+    elsif ($drfile =~/^(g?[ahs])(\d{8})_(\d{1,5})_(\d{1,3})_([a-z]+)(\d*)(?:_(\d{2,4}))?_cal\.(sdf|png)$/) {
+	$prefix = $1;
+	$utdate = $2;
+	$obsnum = $3;
+	$subsys = $4;
+        $product= $5;
+        $prodcount = $6;
+        $prodcount = undef if (defined $prodcount && $prodcount eq '');
+        $resolution = "$7_cal";
+        $suffix = $8;
+	
     }
     elsif ($drfile =~ /^(\d{1,8})_(\d{4})_(resw|flat)\.sdf$/) {
         # SCUBA reduce switch or flatfield
@@ -651,6 +677,7 @@ sub dissect_drfile {
         $suffix = $6;
     }
     else {
+	print "DR file $original failed and threw and error\n!";
         JSA::Error::FatalError->throw("DR file '$original' looked okay but failed pattern match");
     }
 
@@ -1174,6 +1201,7 @@ rules.
 sub _can_send_to_cadc_quick {
     my $assoc = shift;
     my $product = shift;
+    print "In _can_send_to_cadc_quick: Assoc is $assoc, product is $product\n" if $DEBUG;
     return 0 if (! defined $assoc || ! defined $product);
     return 1 if exists $PRODS{$assoc}{$product};
     return 0;

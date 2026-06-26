@@ -8,7 +8,7 @@ JSA::Convert - Helper routines for converting FITS/NDF files for JSA
 
     use JSA::Convert;
 
-    $fits = convert_to_fits( $ndf );
+    $fits = convert__fits( $ndf );
     $ndf = convert_to_ndf( $fits );
 
 =head1 DESCRIPTION
@@ -52,7 +52,7 @@ our @EXPORT_OK = qw/convert_to_fits convert_to_ndf
                     convert_dr_files list_convert_plan
                     ndf2fits write_dpinfo_png/;
 
-our $DEBUG = 0;
+our $DEBUG = 1;
 
 =head1 FUNCTIONS
 
@@ -79,7 +79,7 @@ may be automatically called by this routine.
 sub convert_to_fits {
     my $ndf = shift;
     my $version = shift;
-
+    print "Attempting to convert $ndf to fits\n" if $DEBUG;
     # Do a quick check before we read the header
     return unless looks_like_drfile($ndf);
 
@@ -211,12 +211,15 @@ sub convert_dr_files {
                 # is exportable so first fix up provenance
                 my $skip = 0;
                 try {
+		    #Try uncommenting this again after updating convert
+		    print "About to attempt prov_update_parent_paths for $file\n";
                     prov_update_parent_path($file,
                                             \&looks_like_drfile,
                                             \&looks_like_cadcfile,
                                             \&_prov_check_file,
                                             _prov_convert_filename($version),
                                             0);
+		    print "Attempted prov_update_parent_paths for $file\n";
                 }
                 catch JSA::Error with {
                     # Just skip this file for now.
@@ -227,6 +230,7 @@ sub convert_dr_files {
                 };
                 next if $skip;
 
+		print "Continuing past prov with $file\n" if $DEBUG;
                 # Modify the WCS attributes so that we generate the correct FITS
                 # headers regardless of how the pipeline was configured.
                 set_wcs_attribs($file);
@@ -529,14 +533,14 @@ sub ndf2fits {
         "COMP=$comp",
     );
 
+    # Try uncommenting this again after updating convert
     push @args, 'PROPROV=NO' if $opt{'no_provenance'};
 
     print join(" ",@args)."\n" if $DEBUG;
 
     # consider catching the BadExec error
     run_star_command(@args);
-    return 1;
-}
+    return 1;}
 
 =back
 
@@ -620,6 +624,9 @@ sub _prov_check_file {
                 return 1;
             }
         }
+	else { 
+	    print "Can not send $path to CADC\n" if $DEBUG;
+	}
     }
     elsif (looks_like_rawfile($path)) {
         print "Looks like raw\n" if $DEBUG;

@@ -47,7 +47,7 @@ our @EXPORT_OK = qw/
     get_ndf_bb
 /;
 
-our $DEBUG = 0;
+our $DEBUG = 1;
 
 our $PARGET = '/star/bin/kappa/parget';
 our %PARENT_PRODUCT_CACHE = ();
