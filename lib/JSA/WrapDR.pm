@@ -195,13 +195,13 @@ sub run_pipeline {
         }
         else {
             # We now have to write the files to a text file suitable for
-            # ORAC-DR to read with the -file option
+            # ORAC-DR to read with the -files option
             $tmpfile = File::Temp->new()
                 or die "Could not create a temporary file";
-            print $tmpfile "$_\n" for @$files_or_ut;
+            print $tmpfile "$_\n" foreach @$files_or_ut;
             close($tmpfile) or die "Error closing temp file handle";
 
-            push @drcommand, "-loop", "file", "-file", "$tmpfile"
+            push @drcommand, "-loop", "file", "-files", "$tmpfile";
         }
 
         # Add the DR parameters.
@@ -214,21 +214,26 @@ sub run_pipeline {
         }
     }
     else {
-        # We are going to need a ^file option in PICARD
         log_message("Using PICARD\n");
 
         # PICARD needs a recipe name so we need to abort if we do not have one
         die "Processing reduced data requires the use of the -drparameters option\n"
             unless (defined $drparameters);
 
+        $tmpfile = File::Temp->new()
+            or die "Could not create a temporary file";
+        print $tmpfile "$_\n" foreach @$files_or_ut;
+        close($tmpfile) or die "Error closing temp file handle";
+
         # PICARD only uses a recipe name from drparameters
         @drcommand = ($^X,
                       File::Spec->catfile($ENV{ORAC_DIR}, "bin", "picard"),
                       "-nodisplay",
-                      "-log","hs",
+                      "-log", "hs",
                       "-verbose",
+                      "-files", "$tmpfile",
                       (split /\s+/, $drparameters),
-                      @$files_or_ut);
+                     );
 
     }
 
