@@ -241,8 +241,13 @@ else {
 
             # The grouping key is really OBSID+ASN_ID
             # where ASN_ID is the subsystem-specific grouping string
-            my $ss_asn_id = (exists $subsyshdr->{ASN_ID} ? $subsyshdr->{ASN_ID}
-                             : $subsyshdr->{FILTER} ); # SCUBA-2 hack until we get ASN_ID
+            # my $ss_asn_id = (exists $subsyshdr->{ASN_ID} ? $subsyshdr->{ASN_ID}
+            #                 : $subsyshdr->{FILTER} ); # SCUBA-2 hack until we get ASN_ID
+
+            # Always use FILTER for ASN_ID as most DB records do not have ASN_ID,
+            # they are not consistent (e.g. "850" vs "850um") and this script
+            # is currently only used for SCUBA-2.
+            my $ss_asn_id = $subsyshdr->{'FILTER'};
 
             my $group = "hpx-" . $subsys->obsid . "-" . $ss_asn_id;
 
