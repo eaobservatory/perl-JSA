@@ -166,7 +166,7 @@ sub query_cadc_patterns {
         });
         die 'CADC log in failed' unless $res->is_success;
 
-        my $cookies = HTTP::Cookies->new({});
+        my $cookies = HTTP::Cookies->new();
         $cookies->set_cookie(
             0, CADC_SSO => $res->content(),
             '/', $cadc_host, 443, '', '', 3600, 0);
